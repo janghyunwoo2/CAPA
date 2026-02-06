@@ -1,0 +1,10 @@
+[project]
+name = "log-generator"
+version = "0.1.0"
+description = "Log Generator Simulator"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[tool.uv]
+python-preference = "only-managed"
