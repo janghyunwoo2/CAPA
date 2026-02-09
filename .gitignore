@@ -209,3 +209,25 @@ __marimo__/
 
 # 아카이브 폴더
 .archive/
+
+# Spec Kit (github/spec-kit)
+# agents 폴더는 인증 정보가 저장될 수 있어 제외
+.specify/memory/
+.github/agents/
+# .github/prompts/   # 팀 공유하려면 주석 유지
+
+.vscode
+
+# Terraform 상태 파일 (로컬만)
+# 프로덕션에서는 S3 백엔드 사용 권장
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.hcl
+.terraform/
+.terraform.lock.hcl
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# prompts는 팀 공유 시 주석 해제
