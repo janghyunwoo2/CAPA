@@ -1,6 +1,9 @@
 # 문서 폴더 제외
 docs/
 
+# 환경 변수 파일 제외 (민감 정보)
+.env
+
 # Python 캐시 제외
 __pycache__/
 *.py[cod]
