@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAPA - 프로젝트 컨셉</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .presentation {
+            width: 100%;
+            height: 100vh;
+            position: relative;
+        }
+
+        .slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 5vw;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.5s ease-in-out;
+        }
+
+        .slide.active {
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        .slide.prev {
+            transform: translateX(-100%);
+        }
+
+        h1 {
+            font-size: clamp(2rem, 5vw, 4rem);
+            margin-bottom: 1rem;
+            text-align: center;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        h2 {
+            font-size: clamp(1.5rem, 3.5vw, 2.5rem);
+            margin-bottom: 2rem;
+            color: #00d9ff;
+            text-align: center;
+        }
+
+        h3 {
+            font-size: clamp(1.2rem, 2.5vw, 1.8rem);
+            margin-bottom: 1rem;
+            color: #00ff88;
+        }
+
+        .subtitle {
+            font-size: clamp(1rem, 2vw, 1.5rem);
+            color: #aaa;
+            text-align: center;
+            max-width: 80%;
+        }
+
+        .quote {
+            font-size: clamp(1.2rem, 2.5vw, 1.8rem);
+            font-style: italic;
+            text-align: center;
+            max-width: 80%;
+            line-height: 1.6;
+            color: #e0e0e0;
+            border-left: 4px solid #00d9ff;
+            padding-left: 2rem;
+            margin: 2rem 0;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            width: 100%;
+            max-width: 1200px;
+            margin-top: 2rem;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 217, 255, 0.2);
+        }
+
+        .feature-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            color: #00ff88;
+        }
+
+        .feature-desc {
+            color: #bbb;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .comparison-table {
+            width: 100%;
+            max-width: 1000px;
+            border-collapse: collapse;
+            margin-top: 2rem;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .comparison-table th {
+            background: rgba(0, 217, 255, 0.2);
+            color: #00d9ff;
+            font-size: clamp(0.9rem, 1.5vw, 1.1rem);
+        }
+
+        .comparison-table td {
+            font-size: clamp(0.85rem, 1.3vw, 1rem);
+        }
+
+        .comparison-table .before {
+            color: #ff6b6b;
+        }
+
+        .comparison-table .after {
+            color: #00ff88;
+        }
+
+        .stat-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 2rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            margin: 1rem;
+        }
+
+        .stat-number {
+            font-size: clamp(3rem, 8vw, 6rem);
+            font-weight: bold;
+            background: linear-gradient(90deg, #ff6b6b, #ffa500);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: clamp(1rem, 2vw, 1.3rem);
+            color: #aaa;
+            text-align: center;
+        }
+
+        .problems {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+            width: 100%;
+            max-width: 1000px;
+            margin-top: 2rem;
+        }
+
+        .problem-card {
+            background: rgba(255, 107, 107, 0.1);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .problem-card .icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .problem-card .title {
+            color: #ff6b6b;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .problem-card .desc {
+            color: #bbb;
+            font-size: 0.9rem;
+        }
+
+        .tech-stack {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            width: 100%;
+            max-width: 1100px;
+            margin-top: 2rem;
+        }
+
+        .tech-category {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .tech-category h4 {
+            color: #00d9ff;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+
+        .tech-category ul {
+            list-style: none;
+        }
+
+        .tech-category li {
+            padding: 0.5rem 0;
+            color: #ccc;
+            font-size: 0.95rem;
+        }
+
+        .tech-category li::before {
+            content: "→ ";
+            color: #00ff88;
+        }
+
+        .architecture-img {
+            width: 100%;
+            max-width: 900px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-top: 1rem;
+        }
+
+        .demo-box {
+            background: #0d1117;
+            border-radius: 12px;
+            padding: 1.5rem;
+            width: 100%;
+            max-width: 700px;
+            font-family: 'Consolas', monospace;
+            font-size: clamp(0.8rem, 1.2vw, 1rem);
+            margin-top: 1rem;
+            border: 1px solid #30363d;
+        }
+
+        .demo-user {
+            color: #58a6ff;
+        }
+
+        .demo-bot {
+            color: #00ff88;
+            margin-top: 1rem;
+        }
+
+        .demo-table {
+            margin: 1rem 0;
+            color: #e6edf3;
+        }
+
+        .elevator-pitch {
+            font-size: clamp(1.1rem, 2vw, 1.5rem);
+            text-align: center;
+            max-width: 80%;
+            line-height: 1.8;
+            padding: 2rem;
+            background: rgba(0, 217, 255, 0.1);
+            border-radius: 16px;
+            border: 1px solid rgba(0, 217, 255, 0.3);
+        }
+
+        .navigation {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 1rem;
+            z-index: 100;
+        }
+
+        .nav-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            padding: 0.8rem 1.5rem;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+
+        .nav-btn:hover {
+            background: rgba(0, 217, 255, 0.3);
+            border-color: #00d9ff;
+        }
+
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            transition: width 0.3s;
+            z-index: 100;
+        }
+
+        .slide-counter {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            font-size: 1rem;
+            color: #666;
+        }
+
+        .highlight {
+            color: #00ff88;
+            font-weight: bold;
+        }
+
+        .emoji-large {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .slide {
+                padding: 2rem;
+            }
+
+            .features,
+            .problems,
+            .tech-stack {
+                grid-template-columns: 1fr;
+            }
+
+            .comparison-table {
+                font-size: 0.8rem;
+            }
+
+            .comparison-table th,
+            .comparison-table td {
+                padding: 0.5rem;
+            }
+
+            .navigation {
+                bottom: 1rem;
+            }
+
+            .nav-btn {
+                padding: 0.6rem 1rem;
+                font-size: 0.9rem;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="progress-bar" id="progress"></div>
+
+    <div class="presentation">
+        <!-- Slide 1: Title -->
+        <div class="slide active">
+            <div class="emoji-large">🚀</div>
+            <h1>CAPA</h1>
+            <p class="subtitle">Cloud-native AI Pipeline for Ad-logs</p>
+            <div class="quote" style="margin-top: 3rem;">
+                광고 비즈니스의 비개발자가 자연어로 데이터와 대화하고,<br>
+                AI가 이상을 먼저 알려주며, 리포트를 자동으로 생성하는 분석 플랫폼
+            </div>
+        </div>
+
+        <!-- Slide 2: Problem - Statistics -->
+        <div class="slide">
+            <h2>🔍 문제 정의</h2>
+            <div class="stat-box">
+                <div class="stat-number">75%</div>
+                <div class="stat-label">마케터가 현재 측정 시스템에 불만족</div>
+            </div>
+            <p class="subtitle" style="margin-top: 2rem;">
+                - IAB & BWG, "State of Data 2026" 보고서
+            </p>
+        </div>
+
+        <!-- Slide 3: Problems Detail -->
+        <div class="slide">
+            <h2>😫 마케터가 겪는 문제</h2>
+            <div class="problems">
+                <div class="problem-card">
+                    <div class="icon">📊</div>
+                    <div class="title">데이터 접근성 부족</div>
+                    <div class="desc">데이터는 넘쳐나는데<br>인사이트는 부족</div>
+                </div>
+                <div class="problem-card">
+                    <div class="icon">🔧</div>
+                    <div class="title">분석 도구 진입장벽</div>
+                    <div class="desc">도구는 있는데<br>쓸 줄 아는 사람이 적음</div>
+                </div>
+                <div class="problem-card">
+                    <div class="icon">📝</div>
+                    <div class="title">리포트 생산성 저하</div>
+                    <div class="desc">리포트 필요한데<br>만드는 데 반나절</div>
+                </div>
+                <div class="problem-card">
+                    <div class="icon">⏰</div>
+                    <div class="title">사후 대응</div>
+                    <div class="desc">문제 발생 후<br>다음날에야 인지</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 4: Solution Overview -->
+        <div class="slide">
+            <h2>💡 솔루션: CAPA 핵심 기능</h2>
+            <div class="features">
+                <div class="feature-card">
+                    <div class="feature-icon">🗣️</div>
+                    <div class="feature-title">Ask</div>
+                    <div class="feature-desc">자연어로 질문하면<br>AI가 SQL로 답변</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔔</div>
+                    <div class="feature-title">Alert</div>
+                    <div class="feature-desc">이상 탐지 +<br>즉시 알림</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📝</div>
+                    <div class="feature-title">Report</div>
+                    <div class="feature-desc">주간/월간 리포트<br>자동 생성</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💬</div>
+                    <div class="feature-title">Chat</div>
+                    <div class="feature-desc">슬랙에서<br>바로 분석</div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <div class="feature-title">Dashboard</div>
+                    <div class="feature-desc">KPI 대시보드<br>(Redash)</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 5: Before/After -->
+        <div class="slide">
+            <h2>⚡ Before vs After</h2>
+            <table class="comparison-table">
+                <tr>
+                    <th>항목</th>
+                    <th>Before</th>
+                    <th>After</th>
+                </tr>
+                <tr>
+                    <td>데이터 조회</td>
+                    <td class="before">데이터팀 요청 → 3시간~3일 대기</td>
+                    <td class="after">@capa-bot → 1분 내 답변</td>
+                </tr>
+                <tr>
+                    <td>주간 리포트</td>
+                    <td class="before">데이터 수집 + 정리 + 작성 = 4시간</td>
+                    <td class="after">"리포트 만들어줘" → 1분 내 생성</td>
+                </tr>
+                <tr>
+                    <td>이상 감지</td>
+                    <td class="before">다음날 리포트에서 뒤늦게 인지</td>
+                    <td class="after">이상 패턴 감지 → 즉시 알림</td>
+                </tr>
+                <tr>
+                    <td>KPI 확인</td>
+                    <td class="before">SQL 몰라서 데이터팀 요청</td>
+                    <td class="after">Redash 대시보드에서 직접 확인</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- Slide 6: Demo - Ask -->
+        <div class="slide">
+            <h2>🗣️ Demo: Ask - 자연어 데이터 조회</h2>
+            <div class="demo-box">
+                <div class="demo-user">User: @capa-bot 어제 캠페인별 CTR top 5 알려줘</div>
+                <div class="demo-bot">
+                    CAPA: 📊 어제(2026-02-08) 캠페인별 CTR Top 5입니다.
+                    <div class="demo-table">
+                        <pre>
+| 순위 | 캠페인      | 노출수      | CTR   |
+|------|-------------|-------------|-------|
+| 1    | 설날_프로모 | 1,234,567   | 3.24% |
+| 2    | 신규가입    |   987,654   | 2.87% |
+| 3    | 브랜드_A    |   856,321   | 2.45% |
+| ...  | ...         | ...         | ...   |
+                        </pre>
+                    </div>
+                    🔗 Redash에서 자세히 보기
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 7: Demo - Alert -->
+        <div class="slide">
+            <h2>🔔 Demo: Alert - 이상 탐지 알림</h2>
+            <div class="demo-box" style="background: #1a1a1a; border-color: #ff6b6b;">
+                <div style="color: #ff6b6b; font-size: 1.2rem; margin-bottom: 1rem;">🚨 CAPA Alert</div>
+                <div style="color: #e6edf3;">
+                    로그 유입량이 비정상적으로 감소했습니다.<br><br>
+                    • 현재 유입량: <span style="color: #ff6b6b;">45건/분</span> (최근 10분 평균: 1,500건/분)<br>
+                    • 감소율: <span style="color: #ff6b6b;">97%</span><br>
+                    • 감지 시각: 14:32<br>
+                    • 예상 원인: 파이프라인 장애 또는 광고 시스템 오류<br><br>
+                    <span style="color: #58a6ff;">[파이프라인 상태 확인]</span>
+                    <span style="color: #58a6ff;">[광고 플랫폼 확인]</span>
+                    <span style="color: #666;">[무시하기]</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 8: Demo - Report -->
+        <div class="slide">
+            <h2>📝 Demo: Report - 자동 리포트 생성</h2>
+            <div class="demo-box">
+                <div class="demo-user">User: @capa-bot 지난주 성과 리포트 만들어줘</div>
+                <div class="demo-bot">
+                    CAPA: 📄 2026년 2월 1주차 광고 성과 리포트<br><br>
+                    <span style="color: #00d9ff;">📈 주요 지표 요약</span><br>
+                    • 총 노출: 12.3M <span style="color: #00ff88;">(+8% WoW)</span><br>
+                    • 평균 CTR: 2.4% <span style="color: #00ff88;">(+0.3%p)</span><br>
+                    • 전환율: 1.8% <span style="color: #ff6b6b;">(-0.2%p)</span><br>
+                    • ROAS: 320% <span style="color: #00ff88;">(+15%p)</span><br><br>
+                    🏆 Top 캠페인: 설날_프로모 (CTR 3.2%, 전환 2.1%)<br>
+                    ⚠️ 개선 필요: 신규가입_B안 (CTR 0.8%)<br><br>
+                    <span style="color: #58a6ff;">[PDF 다운로드]</span>
+                    <span style="color: #58a6ff;">[슬라이드로 보기]</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 9: Tech Stack -->
+        <div class="slide">
+            <h2>🛠️ 기술 스택</h2>
+            <div class="tech-stack">
+                <div class="tech-category">
+                    <h4>📦 Data Pipeline</h4>
+                    <ul>
+                        <li>Kinesis Data Stream</li>
+                        <li>Kinesis Firehose</li>
+                        <li>S3 (Parquet)</li>
+                        <li>Glue Catalog</li>
+                        <li>Athena</li>
+                    </ul>
+                </div>
+                <div class="tech-category">
+                    <h4>🤖 AI/ML</h4>
+                    <ul>
+                        <li>Vanna AI (Text-to-SQL)</li>
+                        <li>ChromaDB (Vector DB)</li>
+                        <li>OpenAI GPT-4 / Claude</li>
+                        <li>Lambda (이상 탐지)</li>
+                    </ul>
+                </div>
+                <div class="tech-category">
+                    <h4>🏗️ Infrastructure</h4>
+                    <ul>
+                        <li>Terraform (IaC)</li>
+                        <li>Amazon EKS</li>
+                        <li>Apache Airflow</li>
+                    </ul>
+                </div>
+                <div class="tech-category">
+                    <h4>👥 Interface</h4>
+                    <ul>
+                        <li>Slack Bolt</li>
+                        <li>FastAPI</li>
+                        <li>Redash</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 10: Architecture -->
+        <div class="slide">
+            <h2>🏛️ 아키텍처</h2>
+            <div class="architecture-img">
+                <pre style="color: #333; font-size: clamp(0.6rem, 1vw, 0.85rem); line-height: 1.4;">
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                              CAPA Architecture                                   │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                 │
+│   📱 Log Generator                                                               │
+│         │                                                                       │
+│         ▼                                                                       │
+│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                        │
+│   │  Kinesis    │───▶│  Firehose   │───▶│  S3         │                        │
+│   │  Stream     │    │             │    │  (Parquet)  │                        │
+│   └──────┬──────┘    └─────────────┘    └──────┬──────┘                        │
+│          │                                      │                               │
+│          │                                      ▼                               │
+│          │                              ┌─────────────┐    ┌─────────────┐     │
+│          │                              │  Glue       │───▶│  Athena     │     │
+│          │                              │  Catalog    │    │             │     │
+│          │                              └─────────────┘    └──────┬──────┘     │
+│          │                                                        │            │
+│          │    ┌─────────────────────────────────────────────────┐ │            │
+│          │    │              🤖 AI Layer                        │ │            │
+│          │    │  ┌─────────┐  ┌─────────┐  ┌─────────┐         │◀┘            │
+│          │    │  │ Vanna   │  │ChromaDB │  │ LLM     │         │              │
+│          │    │  │ AI      │◀─│ (RAG)   │  │ GPT/    │         │              │
+│          │    │  │         │  │         │  │ Claude  │         │              │
+│          │    │  └────┬────┘  └─────────┘  └─────────┘         │              │
+│          │    └───────┼────────────────────────────────────────┘              │
+│          │            │                                                        │
+│          ▼            ▼                                                        │
+│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐          │
+│   │  Lambda     │  │  Slack Bot  │  │  Report     │  │  Redash     │          │
+│   │  (Alert)    │  │  (Chat)     │  │  Generator  │  │  Dashboard  │          │
+│   └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └─────────────┘          │
+│          │                │                │                                   │
+│          └────────────────┴────────────────┘                                   │
+│                           │                                                    │
+│                           ▼                                                    │
+│                    ┌─────────────┐                                             │
+│                    │   Slack     │  ← 👥 마케터                                │
+│                    └─────────────┘                                             │
+│                                                                                 │
+└─────────────────────────────────────────────────────────────────────────────────┘
+                </pre>
+            </div>
+        </div>
+
+        <!-- Slide 11: Expected Impact -->
+        <div class="slide">
+            <h2>📈 기대 효과</h2>
+            <div class="features" style="max-width: 800px;">
+                <div class="feature-card" style="text-align: center;">
+                    <div class="stat-number" style="font-size: 3rem;">99%</div>
+                    <div class="feature-title">데이터 조회 시간 단축</div>
+                    <div class="feature-desc">3시간 → 1분</div>
+                </div>
+                <div class="feature-card" style="text-align: center;">
+                    <div class="stat-number" style="font-size: 3rem;">99%</div>
+                    <div class="feature-title">리포트 작성 시간 단축</div>
+                    <div class="feature-desc">4시간 → 1분</div>
+                </div>
+                <div class="feature-card" style="text-align: center;">
+                    <div class="stat-number" style="font-size: 3rem;">24h</div>
+                    <div class="feature-title">이상 감지 시간 단축</div>
+                    <div class="feature-desc">D+1 → 실시간</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 12: Elevator Pitch -->
+        <div class="slide">
+            <div class="emoji-large">🎯</div>
+            <h2>Elevator Pitch</h2>
+            <div class="elevator-pitch">
+                <strong>"CAPA는 광고 마케터가 자연어로 데이터와 대화하고,<br>
+                    AI가 먼저 이상을 알려주며,<br>
+                    리포트를 자동으로 만들어주는<br>
+                    클라우드 네이티브 분석 플랫폼입니다."</strong>
+            </div>
+        </div>
+
+        <!-- Slide 13: Thank You -->
+        <div class="slide">
+            <div class="emoji-large">🙏</div>
+            <h1>Thank You</h1>
+            <p class="subtitle" style="margin-top: 2rem;">
+                CAPA는 마케터에게 데이터 팀을 선물합니다.<br>
+                24시간 대기하고, 절대 지치지 않는 AI 데이터 팀을.
+            </p>
+        </div>
+    </div>
+
+    <div class="navigation">
+        <button class="nav-btn" onclick="prevSlide()">← 이전</button>
+        <button class="nav-btn" onclick="nextSlide()">다음 →</button>
+    </div>
+
+    <div class="slide-counter" id="counter">1 / 13</div>
+
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const totalSlides = slides.length;
+        const progress = document.getElementById('progress');
+        const counter = document.getElementById('counter');
+
+        function updateSlide() {
+            slides.forEach((slide, index) => {
+                slide.classList.remove('active', 'prev');
+                if (index === currentSlide) {
+                    slide.classList.add('active');
+                } else if (index < currentSlide) {
+                    slide.classList.add('prev');
+                }
+            });
+
+            progress.style.width = ((currentSlide + 1) / totalSlides * 100) + '%';
+            counter.textContent = (currentSlide + 1) + ' / ' + totalSlides;
+        }
+
+        function nextSlide() {
+            if (currentSlide < totalSlides - 1) {
+                currentSlide++;
+                updateSlide();
+            }
+        }
+
+        function prevSlide() {
+            if (currentSlide > 0) {
+                currentSlide--;
+                updateSlide();
+            }
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevSlide();
+            }
+        });
+
+        // Touch/Click navigation
+        let touchStartX = 0;
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+        });
+
+        document.addEventListener('touchend', (e) => {
+            const touchEndX = e.changedTouches[0].clientX;
+            const diff = touchStartX - touchEndX;
+
+            if (Math.abs(diff) > 50) {
+                if (diff > 0) {
+                    nextSlide();
+                } else {
+                    prevSlide();
+                }
+            }
+        });
+
+        // Initialize
+        updateSlide();
+    </script>
+</body>
+
+</html>
