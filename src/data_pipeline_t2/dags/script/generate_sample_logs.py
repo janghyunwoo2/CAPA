@@ -8,6 +8,8 @@ from __future__ import annotations
 import os
 import uuid
 from datetime import datetime, timedelta
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
@@ -18,10 +20,15 @@ class AdLogGenerator:
     로컬에서 빠르게 데이터 파이프라인을 검증할 수 있도록 Parquet 파일을 생성합니다.
     """
 
-    def __init__(self, out_path: str = "data/raw/logs.parquet") -> None:
+    def __init__(self, out_path: str = "/opt/airflow/data/raw/logs.parquet") -> None:
         self.out_path = out_path
 
     def _simulate_event(self) -> dict:
+        """단일 광고 이벤트를 시뮬레이션한다.
+        
+        Returns:
+            dict: 이벤트 정보 (event_id, timestamp, event_type, ad_id 등)
+        """
         now = datetime.utcnow()
         # 이벤트 타입 가중치: impression > click > conversion
         event_type = np.random.choice(
@@ -58,8 +65,16 @@ class AdLogGenerator:
         }
 
     def generate(self, n: int = 10000) -> None:
-        """n개의 이벤트를 생성하여 Parquet로 저장한다."""
-        records: List[dict] = [self._simulate_event() for _ in range(n)]
+        """n개의 이벤트를 생성하여 Parquet로 저장한다.
+        
+        Args:
+            n: 생성할 이벤트 개수 (기본값: 10000)
+        
+        Returns:
+            None (부작용: Parquet 파일 생성)
+        """
+        # n개의 이벤트를 생성
+        records: list[dict[str, Any]] = [self._simulate_event() for _ in range(n)]
         df = pd.DataFrame.from_records(records)
 
         # timestamp 컬럼을 분리해 날짜 파티셔닝에 용이하게 한다.
@@ -73,6 +88,7 @@ class AdLogGenerator:
 
 
 if __name__ == "__main__":
-    gen = AdLogGenerator()
-    gen.generate(20000)
-    print("샘플 로그 생성 완료 -> data/raw/logs.parquet")
+    # 샘플 로그 생성 (로컬 테스트용)
+    gen = AdLogGenerator(out_path="/opt/airflow/data/raw/logs.parquet")
+    gen.generate(n=20000)  # 20,000개의 이벤트 생성
+    print("샘플 로그 생성 완료 -> /opt/airflow/data/raw/logs.parquet")

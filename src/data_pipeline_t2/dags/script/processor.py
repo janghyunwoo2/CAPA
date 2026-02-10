@@ -8,20 +8,34 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 import pandas as pd
 
 
 @dataclass
 class AdDataProcessor:
-    """원시 로그를 읽어 일별/광고별 메트릭으로 집계한다."""
+    """원시 로그를 읽어 일별/광고별 메트릭으로 집계한다.
+    
+    Parquet → Parquet 변환 (로컬용)
+    실제 프로덕션에서는 AWS Glue Job으로 대체됩니다.
+    """
 
-    raw_path: str = "data/raw/logs.parquet"
-    out_path: str = "data/processed/metrics.parquet"
+    raw_path: str = "/opt/airflow/data/raw/logs.parquet"
+    out_path: str = "/opt/airflow/data/processed/metrics.parquet"
 
     def process(self) -> None:
-        # 로컬 파일에서 읽기
+        """원시 이벤트 로그를 집계 메트릭으로 변환한다.
+        
+        다음 작업을 수행합니다:
+        1. raw 로그 읽기 (Parquet)
+        2. 일별·광고별 집계 (impression, click, conversion 카운트)
+        3. 평균 비용 계산 (avg_bid_price, avg_cpc)
+        4. 파생 지표 계산 (ctr, conversion_rate)
+        5. 메트릭 저장 (Parquet)
+        
+        Returns:
+            None (부작용: metrics.parquet 생성)
+        """
         df = pd.read_parquet(self.raw_path)
 
         # 시간과 날짜 컬럼 정리
