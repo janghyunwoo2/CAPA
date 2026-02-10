@@ -1,0 +1,35 @@
+# 문서 폴더 제외
+docs/
+
+# Python 캐시 제외
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 가상환경 제외
+.venv/
+venv/
+ENV/
+env/
+
+# uv 관련
+.uv/
+
+# 로그 파일
+*.log
+
+# 테스트 출력
+logs.json
+*.json
+
+# IDE 설정
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS 파일
+.DS_Store
+Thumbs.db
