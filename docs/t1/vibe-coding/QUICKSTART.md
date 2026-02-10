@@ -1,192 +1,289 @@
-# 🚀 바이브 코딩 Quick Start Guide
+# 🚀 바이브 코딩 Quick Start
 
-> CAPA 프로젝트에서 바이브 코딩 방법론을 바로 시작하는 가이드
+> PHASE별로 독립된 폴더에서 작업 → 결과물을 다음 PHASE로 복사
 
 ---
 
-## 📋 5분 안에 시작하기
+## 📋 전체 흐름 (5단계)
 
-### Step 1: 새 스프린트 디렉토리 생성
+```
+01-phase1-planning
+    ↓ (output → input)
+02-phase2-validation
+    ↓ (output → input)
+03-phase3-refinement
+    ↓ (output → input)
+04-phase4-architecture
+    ↓ (output → input)
+05-phase5-execution
+```
 
+---
+
+## 🎯 PHASE 1: 계획서 생성
+
+### 작업 폴더
 ```powershell
-# 새 스프린트 디렉토리 생성
-mkdir docs/vibe-coding/02-plans/sprint-NNN
-mkdir docs/vibe-coding/03-tasks/sprint-NNN
+cd docs/vibe-coding/01-phase1-planning
 ```
 
-### Step 2: 계획서 초안 작성 (3개 페르소나 활용)
+### 작업 순서
+1. **personas/ 폴더에 페르소나 파일 넣기**
+   - conservative.md (보수적)
+   - progressive.md (진보적)
+   - moderate.md (중도)
 
-Copilot 채팅에서 다음과 같이 진행:
+2. **work/ 폴더에서 3가지 관점 초안 작성**
+   ```
+   Copilot에 요청:
+   - personas/conservative.md로 draft-conservative.md 작성
+   - personas/progressive.md로 draft-progressive.md 작성
+   - personas/moderate.md로 draft-moderate.md 작성
+   ```
 
-```
-1. 보수적 페르소나 프롬프트 복사 (01-personas/planner/conservative.md)
-2. Copilot에 붙여넣기 + 요구사항 전달
-3. 결과를 "plan-conservative.md"로 임시 저장
+3. **output/ 폴더에 최종 초안 저장**
+   ```
+   3개 초안을 종합하여 plan-draft.md 작성
+   → output/plan-draft.md 저장
+   ```
 
-4. 진보적 페르소나 프롬프트 복사 (01-personas/planner/progressive.md)
-5. 동일 요구사항으로 결과 생성
-6. 결과를 "plan-progressive.md"로 임시 저장
+### 다음 단계로 이동
+```powershell
+# output을 PHASE 2의 input으로 복사
+cp output/plan-draft.md ../02-phase2-validation/input/
 
-7. 중도 페르소나 프롬프트 복사 (01-personas/planner/moderate.md)
-8. 세 관점을 종합하여 "plan-draft.md" 생성
-```
-
-### Step 3: 검증
-
-```
-1. 검증 페르소나 프롬프트 복사 (01-personas/validator/critic.md)
-2. plan-draft.md 내용 전달
-3. 검증 결과를 "validation.md"로 저장
-4. Critical/Major 이슈 수정
-```
-
-### Step 4: 역할별 고도화
-
-```
-1. 범용 개발자 프롬프트 (01-personas/developers/base-developer.md)로 역할 식별
-2. 필요한 역할별 페르소나로 추가 검토
-   - Data Engineer: developers/data-engineer.md
-   - DevOps: developers/devops.md
-   - Backend: developers/backend.md
-   - ML Engineer: developers/ml-engineer.md
-3. 피드백 반영하여 "plan-final.md" 완성
-```
-
-### Step 5: 작업 분할 및 실행
-
-```
-1. plan-final.md 기반으로 task-XXX-역할.md 생성
-2. 각 task.md를 Copilot에 전달하여 실행
-3. 결과를 task-XXX-역할-result.md로 저장
-4. 만족 → 다음 task / 불만족 → task.md 수정 후 재실행
+cd ../02-phase2-validation
 ```
 
 ---
 
-## 🎯 실전 예시: Kinesis 파이프라인 구축
+## 🔍 PHASE 2: 검증
 
-### 요구사항
-```
-"광고 로그(impression, click, conversion)를 Kinesis로 수집하고 
-S3에 Parquet 포맷으로 적재하는 파이프라인 구축"
-```
-
-### Copilot 대화 예시
-
-#### 1단계: 계획서 생성
-
-```markdown
-@workspace 
-
-다음 페르소나 프롬프트를 적용해주세요:
-[01-personas/planner/moderate.md 내용 붙여넣기]
-
-요구사항:
-- Kinesis Data Stream으로 광고 로그 수집
-- Firehose로 S3에 Parquet 포맷 적재
-- event_type/year/month/day 파티셔닝
-- Glue 테이블 정의
-- Athena 쿼리 가능하게
-
-계획서를 00-templates/plan-template.md 형식으로 작성해주세요.
+### 작업 폴더
+```powershell
+cd docs/vibe-coding/02-phase2-validation
 ```
 
-#### 2단계: 검증
+### 작업 순서
+1. **input/ 폴더에서 PHASE 1 결과 확인**
+   ```
+   input/plan-draft.md 확인
+   ```
 
-```markdown
-@workspace
+2. **personas/critic.md로 검증 작업**
+   ```
+   Copilot에 요청:
+   - personas/critic.md + input/plan-draft.md
+   - 검증 결과를 work/validation-notes.md에 저장
+   ```
 
-다음 검증 페르소나로 계획서를 검토해주세요:
-[01-personas/validator/critic.md 내용 붙여넣기]
+3. **output/ 폴더에 검증 보고서 저장**
+   ```
+   - output/plan-draft.md (원본 복사)
+   - output/validation.md (검증 보고서)
+   ```
 
-검토 대상:
-[plan-draft.md 내용 붙여넣기]
-```
+### 다음 단계로 이동
+```powershell
+# output을 PHASE 3의 input으로 복사
+cp output/* ../03-phase3-refinement/input/
 
-#### 3단계: 작업 실행
-
-```markdown
-@workspace
-
-다음 Data Engineer 페르소나로 작업을 수행해주세요:
-[01-personas/developers/data-engineer.md 내용 붙여넣기]
-
-작업 지시:
-[task-001-data-glue-table.md 내용 붙여넣기]
+cd ../03-phase3-refinement
 ```
 
 ---
 
-## 📂 디렉토리 구조 요약
+## 👥 PHASE 3: 역할별 고도화
 
-```
-docs/vibe-coding/
-├── README.md              # 전체 방법론 설명
-├── QUICKSTART.md          # 본 가이드 (빠른 시작)
-│
-├── 00-templates/          # 템플릿
-│   ├── plan-template.md
-│   ├── validation-template.md
-│   ├── task-template.md
-│   └── result-template.md
-│
-├── 01-personas/           # 페르소나 프롬프트
-│   ├── planner/           # 계획 페르소나
-│   │   ├── conservative.md
-│   │   ├── progressive.md
-│   │   └── moderate.md
-│   ├── validator/         # 검증 페르소나
-│   │   └── critic.md
-│   └── developers/        # 개발자 페르소나
-│       ├── base-developer.md
-│       ├── data-engineer.md
-│       ├── devops.md
-│       ├── backend.md
-│       └── ml-engineer.md
-│
-├── 02-plans/              # 스프린트별 계획서
-│   └── sprint-001/
-│       ├── plan-draft.md
-│       ├── validation.md
-│       ├── plan-final.md
-│       └── architecture.md
-│
-└── 03-tasks/              # 스프린트별 작업
-    └── sprint-001/
-        ├── task-001-xxx.md
-        ├── task-001-xxx-result.md
-        └── ...
+### 작업 폴더
+```powershell
+cd docs/vibe-coding/03-phase3-refinement
 ```
 
----
+### 작업 순서
+1. **input/ 폴더 확인**
+   ```
+   - input/plan-draft.md
+   - input/validation.md
+   ```
 
-## ⚡ 핵심 팁
+2. **필요한 역할 식별**
+   ```
+   Copilot에 요청:
+   - personas/base-developer.md로 필요 역할 파악
+   예: Data Engineer, DevOps, Backend
+   ```
 
-### 1. 페르소나 선택
-| 상황 | 권장 페르소나 |
-|------|--------------|
-| 미션 크리티컬 | 보수적 → 검증 |
-| 신기술 도입 | 진보적 → 검증 → 보수적 검토 |
-| 일반 작업 | 중도 → 검증 |
+3. **역할별 피드백 수집**
+   ```
+   각 역할의 페르소나로 검토:
+   - personas/data-engineer.md
+     → work/feedback-data-engineer.md
+   - personas/devops.md
+     → work/feedback-devops.md
+   - personas/backend.md
+     → work/feedback-backend.md
+   ```
 
-### 2. 반복 규칙
-```
-계획서 불만족 → 페르소나 피드백 → 수정 → 재검증
-작업 결과 불만족 → task.md 수정 → 재실행
-```
+4. **output/ 폴더에 최종 계획서 저장**
+   ```
+   모든 피드백 반영하여
+   output/plan-final.md 작성
+   ```
 
-### 3. 버전 관리
-```
-- 모든 md 파일은 Git으로 버전 관리
-- 주요 변경 시 변경 이력 섹션 업데이트
-- 폐기된 계획은 _archive/ 로 이동
+### 다음 단계로 이동
+```powershell
+# output을 PHASE 4의 input으로 복사
+cp output/plan-final.md ../04-phase4-architecture/input/
+
+cd ../04-phase4-architecture
 ```
 
 ---
 
-## 🔗 관련 문서
+## 🏗️ PHASE 4: 아키텍처 설계
 
-- [전체 방법론 가이드](./README.md)
-- [계획서 템플릿](./00-templates/plan-template.md)
-- [Sprint 001 예시](./02-plans/sprint-001/plan-draft.md)
-- [CAPA 프로젝트 컨셉](../t1/project_concept_v3.md)
+### 작업 폴더
+```powershell
+cd docs/vibe-coding/04-phase4-architecture
+```
+
+### 작업 순서
+1. **input/plan-final.md 확인**
+
+2. **work/ 폴더에서 아키텍처 설계**
+   ```
+   Copilot에 요청:
+   "plan-final.md를 기반으로 시스템 아키텍처를
+   ASCII 다이어그램으로 그려주세요"
+   
+   → work/diagram-draft.md
+   → work/component-specs.md
+   ```
+
+3. **output/ 폴더에 아키텍처 문서 저장**
+   ```
+   output/architecture.md 작성
+   ```
+
+### 다음 단계로 이동
+```powershell
+# output을 PHASE 5의 input으로 복사
+cp output/architecture.md ../05-phase5-execution/input/
+cp ../03-phase3-refinement/output/plan-final.md ../05-phase5-execution/input/
+
+cd ../05-phase5-execution
+```
+
+---
+
+## ⚙️ PHASE 5: 작업 분할 및 실행
+
+### 작업 폴더
+```powershell
+cd docs/vibe-coding/05-phase5-execution
+```
+
+### 작업 순서
+1. **input/ 폴더 확인**
+   ```
+   - input/plan-final.md
+   - input/architecture.md
+   ```
+
+2. **작업 분할**
+   ```
+   architecture.md를 보고 작업 단위로 분할:
+   - task-001: Glue 테이블 정의
+   - task-002: Kinesis Stream Terraform
+   - task-003: Firehose 설정
+   ...
+   ```
+
+3. **작업 실행 루프**
+   ```
+   각 작업마다:
+   
+   ┌─────────────────────────────────────┐
+   │ 1. tasks/task-001-xxx.md 작성        │
+   │    (요구사항, 구현 가이드)            │
+   │         ↓                            │
+   │ 2. Copilot에 실행 요청               │
+   │    (personas/역할.md + task.md)      │
+   │         ↓                            │
+   │ 3. tasks/task-001-xxx-result.md 저장 │
+   │         ↓                            │
+   │ 4. 만족도 평가                       │
+   │    ├─ 만족 → task-002로             │
+   │    └─ 불만족 → task-001 수정 재실행  │
+   └─────────────────────────────────────┘
+   ```
+
+---
+
+## 💡 핵심 포인트
+
+### 1. 각 PHASE는 독립된 작업 공간
+```
+- PHASE 1에서 작업 → output/ 저장
+- output/을 다음 PHASE의 input/으로 복사
+- 다음 PHASE에서 독립적으로 작업
+```
+
+### 2. 파일 이동 규칙
+```powershell
+# PHASE N 완료 후 항상:
+cp output/* ../PHASE-N+1/input/
+```
+
+### 3. work/ 폴더는 자유롭게 사용
+```
+- 초안, 노트, 임시 파일 등
+- 정리해서 output/으로 최종 산출물만 저장
+```
+
+### 4. 결과물 명명 규칙
+```
+PHASE 1: plan-draft.md
+PHASE 2: validation.md
+PHASE 3: plan-final.md
+PHASE 4: architecture.md
+PHASE 5: task-NNN-역할-작업명.md
+```
+
+---
+
+## 📁 폴더 구조 요약
+
+```
+01-phase1-planning/
+├── personas/     ← 페르소나 넣기
+├── templates/    ← 템플릿 넣기
+├── work/         ← 작업 공간
+└── output/       ← 결과물 저장 → PHASE 2로
+
+02-phase2-validation/
+├── input/        ← PHASE 1 결과 복사
+├── work/         ← 검증 작업
+└── output/       ← 결과물 저장 → PHASE 3으로
+
+03-phase3-refinement/
+├── input/        ← PHASE 2 결과 복사
+├── work/         ← 역할별 피드백
+└── output/       ← 결과물 저장 → PHASE 4로
+
+04-phase4-architecture/
+├── input/        ← PHASE 3 결과 복사
+├── work/         ← 아키텍처 작업
+└── output/       ← 결과물 저장 → PHASE 5로
+
+05-phase5-execution/
+├── input/        ← PHASE 4 결과 복사
+└── tasks/        ← 작업 + 결과 저장
+```
+
+---
+
+## 🎉 완료!
+
+모든 PHASE를 거쳐 tasks/의 모든 작업이 완료되면 Sprint 종료!
