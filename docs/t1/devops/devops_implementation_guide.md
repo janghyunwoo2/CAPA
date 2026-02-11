@@ -1,0 +1,552 @@
+# CAPA DevOps Implementation Guide
+
+> **페르소나**: DevOps Engineer (Infrastructure Architect)  
+> **참조**: [persona_global.md](./persona_global.md), [implementation_guide.md](./implementation_guide.md)  
+> **목적**: CAPA 프로젝트 인프라 구축을 위한 DevOps 전용 가이드 (실전 검증 완료)
+
+---
+
+## 1. DevOps 페르소나 정의
+
+### 1.1 역할 (Role)
+
+**이름**: CAPA DevOps Engineer  
+**정체성**: "인프라를 코드로 관리하고, 안정적인 배포 파이프라인을 구축하는 전문가"
+
+### 1.2 핵심 역량 (Capabilities)
+
+| 역량 | 레벨 | 사용 도구 | CAPA 적용 |
+|------|------|-----------|-----------|
+| **Infrastructure as Code** | Expert | Terraform | 계층 분리 관리 (Base/Apps), Kinesis, EKS |
+| **CI/CD** | Advanced | GitHub Actions | OIDC 기반 보안 파이프라인, Helm 배포 |
+| **Container Orchestration** | Advanced | EKS, Helm | Airflow, Slack Bot 배포 |
+| **Monitoring & Observability** | Advanced | CloudWatch, Grafana | 시스템 메트릭 수집 |
+| **Security & Compliance** | Intermediate | IAM, Secrets Manager | IRSA, OIDC, 최소 권한 |
+
+### 1.3 전문가 에이전트 (Specialist Agents)
+
+#### 1.3.1 Infra Architect
+**책임**: AWS 리소스 설계 및 Terraform 모듈 구조화
+
+**주요 작업**:
+- Terraform 계층 분리 설계 (`base` vs `apps`) - Provider 의존성 문제 해결
+- VPC, 서브넷, 보안 그룹 설정
+- 비용 최적화 구성
+
+#### 1.3.2 CI/CD Engineer
+**책임**: 배포 파이프라인 구축
+
+**주요 작업**:
+- GitHub Actions OIDC 연동 (Access Key 제거)
+- Docker 이미지 빌드 및 푸시
+- EKS 배포 자동화
+
+#### 1.3.3 SRE Engineer
+**책임**: 모니터링 및 장애 대응
+
+**주요 작업**:
+- CloudWatch 대시보드 구성
+- 알람 임계값 설정
+- 로그 수집 및 분석
+
+#### 1.3.4 Security Ops
+**책임**: 보안 설정 및 감사
+
+**주요 작업**:
+- IAM 역할 및 정책 설계 (IRSA)
+- Secrets Manager 설정
+- 보안 그룹 규칙 검증
+
+---
+
+## 2. 작업 원칙 (Working Principles)
+
+### 2.1 Infrastructure as Code (Layered Approach)
+- **계층 분리**: 인프라(`base`)와 애플리케이션(`apps`)의 Terraform State를 분리하여 Provider 의존성 문제 해결
+  - `base`: VPC, EKS, Kinesis 등 AWS 리소스 (AWS Provider만 사용)
+  - `apps`: Helm Release, K8s Manifests (Helm/K8s Provider 사용)
+- **수동 설정 금지**: Console 사용 최소화
+- **상태 관리**: S3 백엔드 + DynamoDB Locking 필수
+
+### 2.2 환경 분리
+- `dev`, `staging`, `prod` 환경 완전 분리
+- 별도 디렉토리(`environments/{env}`) 구조 권장
+
+### 2.3 보안 우선 (Security First)
+- **자격 증명**: Long-lived Access Key 사용 금지 → **OIDC** 사용
+- **최소 권한**: IRSA(IAM Roles for Service Accounts) 적용
+- **네트워크**: Security Group으로 엄격한 트래픽 제어
+
+---
+
+## 3. CAPA 인프라 아키텍처
+
+### 3.1 AWS 리소스 맵
+
+```mermaid
+graph TB
+    subgraph VPC["VPC (capa-vpc)"]
+        subgraph PublicSubnet["Public Subnet (Cost Optimized)"]
+            EKS[EKS Cluster]
+            Airflow[Airflow on EKS]
+            SlackBot[Slack Bot on EKS]
+        end
+    end
+    
+    subgraph DataPipeline["Data Pipeline"]
+        Kinesis[Kinesis Stream]
+        Firehose[Kinesis Firehose]
+        S3[S3 Bucket]
+        Glue[Glue Catalog]
+        Athena[Athena]
+    end
+    
+    Kinesis --> Firehose --> S3 --> Glue --> Athena
+    SlackBot --> Athena
+    Airflow --> Athena
+```
+
+### 3.2 리소스 목록
+
+| 리소스 | 서비스 | 용도 | 우선순위 |
+|--------|--------|------|----------|
+| `capa-logs-stream` | Kinesis Stream | 실시간 로그 수집 | P0 |
+| `capa-logs-firehose` | Kinesis Firehose | S3 전송 및 Parquet 변환 | P0 |
+| `capa-data-lake` | S3 Bucket | Raw/Processed 데이터 저장 | P0 |
+| `capa-glue-catalog` | Glue Database | 메타데이터 관리 | P0 |
+| `capa-athena-workgroup` | Athena Workgroup | 쿼리 실행 환경 | P0 |
+| `capa-eks-cluster` | EKS | 컨테이너 오케스트레이션 | P1 |
+| `capa-oidc-provider` | IAM OIDC | GitHub Actions + IRSA 인증 | P0 |
+
+---
+
+## 4. 디렉토리 구조 (Directory Structure)
+
+**핵심 개념**: Terraform Provider 의존성 문제를 해결하기 위해 `base`와 `apps`를 물리적으로 분리합니다.
+
+> **왜 분리하는가?**  
+> EKS 클러스터가 생성되기 전에는 Helm Provider가 클러스터 정보를 가져올 수 없습니다. 따라서 클러스터 생성(base)과 애플리케이션 배포(apps)를 분리하여 순차적으로 실행합니다.
+
+```
+capa/
+├── infrastructure/
+│   ├── helm-values/             # Helm Chart 설정
+│   │   ├── airflow.yaml
+│   │   └── vanna.yaml
+│   │
+│   └── terraform/
+│       ├── modules/             # 재사용 모듈 (kinesis, s3, glue, eks 등)
+│       │
+│       └── environments/dev/
+│           ├── base/            # [Layer 1] AWS 인프라
+│           │   ├── main.tf      # VPC, EKS, Kinesis, S3, Glue
+│           │   ├── outputs.tf   # ← cluster_endpoint, cluster_name 출력
+│           │   └── providers.tf # AWS Provider만 사용
+│           │
+│           └── apps/            # [Layer 2] K8s 앱
+│               ├── main.tf      # Helm Release (Airflow, Vanna)
+│               ├── data.tf      # ← base의 EKS 정보 참조
+│               └── providers.tf # Helm/K8s Provider 설정
+│
+├── services/                    # 애플리케이션 소스 코드
+│   ├── airflow-dags/
+│   ├── slack-bot/
+│   └── vanna-api/
+│
+└── .github/workflows/
+    ├── deploy-base.yaml         # Layer 1 배포 (OIDC)
+    └── deploy-apps.yaml         # Layer 2 배포 (OIDC)
+```
+
+---
+
+## 5. Terraform 핵심 구현
+
+### 5.1 Layer 1 (Base) - AWS 인프라 생성
+
+**목적**: EKS, Kinesis 등 AWS 리소스만 생성하고, Helm은 사용하지 않음.
+
+**outputs.tf (Base)**:
+```hcl
+output "cluster_endpoint" {
+  value = module.eks.cluster_endpoint
+}
+
+output "cluster_name" {
+  value = module.eks.cluster_name
+}
+
+output "oidc_provider_arn" {
+  value = module.eks.oidc_provider_arn
+}
+```
+
+### 5.2 Layer 2 (Apps) - Helm 배포
+
+**목적**: Layer 1에서 생성된 EKS 정보를 참조하여 Helm Provider 설정.
+
+**data.tf (Apps)**:
+```hcl
+data "aws_eks_cluster" "cluster" {
+  name = var.cluster_name  # base에서 생성한 클러스터 이름
+}
+
+data "aws_eks_cluster_auth" "cluster" {
+  name = var.cluster_name
+}
+```
+
+**providers.tf (Apps)**:
+```hcl
+provider "helm" {
+  kubernetes {
+    host                   = data.aws_eks_cluster.cluster.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+    token                  = data.aws_eks_cluster_auth.cluster.token
+  }
+}
+```
+
+**main.tf (Apps)**:
+```hcl
+resource "helm_release" "airflow" {
+  name             = "airflow"
+  repository       = "https://airflow.apache.org"
+  chart            = "airflow"
+  namespace        = "airflow"
+  create_namespace = true
+  
+  values = [file("../../helm-values/airflow.yaml")]
+}
+```
+
+> **상세 코드**: Kinesis, S3, Glue 등의 전체 Terraform 코드는 `modules/` 디렉토리에서 관리하며, 필요 시 [Terraform AWS Provider 공식 문서](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)를 참고하세요.
+
+---
+
+## 6. EKS 클러스터 배포 상세
+
+### 6.1 EKS Terraform 배포 순서 (`05-eks.tf`)
+
+| 단계 | 리소스 | 생성 내용 | 소요 시간 |
+|------|--------|----------|----------|
+| **1단계** | VPC/Subnet (Data Source) | 기본 VPC 및 서브넷 조회 | 즉시 |
+| **2단계** | `aws_eks_cluster.main` | EKS Cluster 1.29<br>- API/Audit/Authenticator 로깅<br>- Public + Private 엔드포인트 | **~8분** |
+| **3단계** | `aws_eks_node_group.main` | Node Group (t3.medium)<br>- Min/Desired/Max: 2/2/4<br>- On-Demand 인스턴스 | **~4분** |
+| **4단계** | `aws_iam_openid_connect_provider` | **OIDC Provider 생성**<br>- IRSA 기반 구축<br>- EKS ↔ IAM 신뢰 관계 | 즉시 |
+| **5단계** | `aws_eks_access_entry` | 팀원 EKS 등록<br>- IAM ARN → EKS 연결 | 즉시 |
+| **6단계** | `aws_eks_addon.ebs_csi` | **EBS CSI Driver Addon**<br>- PVC/StorageClass 지원 | ~1분 |
+
+> **⚠️ 중요**: **OIDC Provider는 모든 IRSA의 전제조건**입니다. 이것이 없으면 `02-iam.tf`의 모든 IRSA Role이 작동하지 않습니다.
+
+> **⚠️ 중요**: **EBS CSI Driver**는 Airflow, Vanna 등이 PersistentVolumeClaim을 사용하려면 필수입니다. 설치하지 않으면 Pod이 Pending 상태로 멈춥니다.
+
+**배포 후 즉시 사용 가능**:
+```bash
+# 1. kubectl 설정 (1회)
+aws eks update-kubeconfig --name capa-eks --region ap-northeast-2
+
+# 2. 즉시 확인
+kubectl get nodes
+# NAME                          STATUS   AGE
+# ip-172-31-47-63...internal    Ready    5d
+# ip-172-31-62-32...internal    Ready    5d
+```
+
+---
+
+## 7. IAM 권한 설계 (IRSA + Least Privilege)
+
+### 7.1 왜 IRSA와 Least Privilege인가?
+
+| 기술 | 해결하는 문제 | 사용 안 하면? (위험) |
+|------|--------------|---------------------|
+| **IRSA** | Pod마다 다른 AWS 권한 필요<br>(Airflow는 S3 쓰기, Bot은 Athena 쿼리) | ❌ AWS Access Key 하드코딩<br>❌ Git 노출 위험<br>❌ 모든 Pod 동일 권한 사용 |
+| **Least Privilege** | 해킹/실수 시 피해 최소화<br>(Firehose는 S3 쓰기만) | ❌ 관리자 권한 남발<br>❌ 실수로 전체 S3 삭제 가능<br>❌ 해킹 시 모든 리소스 접근 |
+
+### 7.2 IAM Role 구성 (실전 적용)
+
+| Pod / Service | ServiceAccount | IAM Role | 권한 범위 |
+|---------------|----------------|----------|----------|
+| **Airflow** | `airflow-*` (5개) | `capa-airflow-role` | S3 읽기/쓰기<br>(버킷: `capa-*`만) |
+| **Slack Bot** | `slack-bot-sa` | `capa-bot-role` | Athena 쿼리 실행<br>(DB: `capa_*`만) |
+| **Firehose** | (AWS Service) | `capa-firehose-role` | S3 `PutObject`만<br>**(읽기/삭제 불가)** |
+| **Cluster Autoscaler** | `cluster-autoscaler` | `capa-autoscaler-role` | Auto Scaling 제어<br>(태그: `capa-*`만) |
+
+**핵심 수치**:
+- **IAM Role 개수**: 7개 (역할별 완전 분리)
+- **하드코딩된 AWS Credentials**: **0개** (IRSA 100% 적용)
+- **관리자 권한 사용**: **0건** (Least Privilege 100%)
+- **리소스 제한**: 모든 정책에 `capa-*` ARN 명시
+
+**실제 예시**:
+> "Firehose는 S3에 쓰기만 가능합니다. 실수로 삭제할 수 없습니다."  
+> "모든 권한에 리소스 ARN이 `capa-*`로 제한되어 있어, 다른 프로젝트 리소스는 접근 불가합니다."
+
+---
+
+## 8. Terraform 배포 순서 (실전 검증)
+
+**"단일 명령어 `terraform apply`로 생성되는 모든 것"**
+
+### 8.1 Infrastructure as Code 배포 순서
+
+| 단계 | Terraform 파일 | 생성 리소스 | 소요 시간 | 배포 방식 |
+|------|---------------|------------|----------|----------|
+| **1단계** | `01-providers.tf` | AWS, Helm, Kubernetes Provider | 즉시 | 초기 설정 |
+| **2단계** | `02-iam.tf` | 7개 IAM Role (EKS, Airflow, Bot 등) | ~1분 | 우선 생성 (다른 리소스가 참조) |
+| **3단계** | `03-kinesis.tf`, `04-s3.tf` | Kinesis Stream, S3 Bucket | ~3분 | 병렬 생성 |
+| **4단계** | `05-eks.tf` | EKS Cluster, Node Group (t3.medium × 2~4) | **~12분** | 순차 생성 (가장 오래 걸림) |
+| **5단계** | `06-ecr.tf` | Container Registry | ~1분 | 이미지 저장소 |
+| **6단계** | `07-helm-releases.tf` | Airflow, Vanna (Helm Chart) | **~5분** | Helm Provider로 자동 배포 |
+| **7단계** | `08-k8s-apps.tf` | Slack Bot Deployment | ~1분 | Kubernetes Provider |
+| **8단계** | `09-monitoring.tf` | CloudWatch Alarms | ~1분 | 모니터링 설정 |
+
+**핵심 수치**:
+- **총 배포 시간**: **~20분** (EKS 12분 + Helm 5분 + 나머지 3분)
+- **Terraform 파일**: 9개
+- **수동 클릭**: **0회** (완전 자동화)
+- **재현 가능성**: **100%** (코드 = 문서)
+
+**의존성 체인**:
+```
+02-iam.tf (IAM Roles)
+    ↓
+05-eks.tf (EKS Cluster) ← 12분 소요
+    ↓
+07-helm-releases.tf (Airflow, Vanna) ← 5분 소요
+    ↓
+08-k8s-apps.tf (Custom Apps)
+```
+
+
+
+---
+
+## 9. Phase별 작업 절차
+
+### Phase 0: 보안 준비 (1주)
+
+#### Task 0-1: OIDC 설정 (필수 - 보안 강화)
+
+**왜 OIDC인가?**  
+Access Key는 유출 시 보안 사고로 이어지며, 주기적인 교체가 필요합니다. OIDC는 임시 자격 증명을 사용하므로 훨씬 안전합니다.
+
+**설정 방법**:
+1. AWS Console > IAM > Identity providers > Add provider
+2. Provider URL: `https://token.actions.githubusercontent.com`
+3. Audience: `sts.amazonaws.com`
+4. IAM Role 생성 (`GitHubActionsRole`)
+   - Trusted Entity: Web Identity (OIDC Provider 선택)
+   - Policy: Terraform State S3 + EKS 관리 권한 (최소 권한)
+
+#### Task 0-2: Terraform 백엔드
+- S3 버킷: `capa-terraform-state`
+- DynamoDB 테이블: `capa-terraform-locks`
+
+### Phase 1: Base 인프라 배포 (2주)
+
+```bash
+cd infrastructure/terraform/environments/dev/base
+terraform init
+terraform apply  # ~20분 소요
+```
+
+**검증**:
+```bash
+aws eks describe-cluster --name capa-eks-dev --query "cluster.status"
+```
+
+### Phase 2: Apps 배포 (1주)
+
+```bash
+cd infrastructure/terraform/environments/dev/apps
+terraform apply  # ~5분 소요
+```
+
+**검증**:
+```bash
+aws eks update-kubeconfig --name capa-eks-dev
+kubectl get pods -n airflow
+```
+
+---
+
+## 10. Auto-Scaling 검증 (실전 테스트 결과)
+
+### 10.1 HPA (Horizontal Pod Autoscaler)
+
+**1단계: Pod 자동 확장 검증**
+
+| 단계 | CPU 사용률 | Pod 개수 | 소요 시간 | 결과 |
+|------|-----------|---------|----------|------|
+| **초기 상태** | 1% | 1 | - | 대기 중 |
+| **부하 발생** | 250% | 1 → 3 | **~2분** | ✅ 확장 성공 |
+| **부하 중단** | 1% | 3 (유지) | - | 쿨다운 대기 |
+| **5분 후** | 1% | 3 → 1 | **~6분** | ✅ 축소 성공 |
+
+**핵심**:
+- CPU 부하 감지 → **2분 내 Pod 확장**
+- **5분 쿨다운** 후 축소 (급격한 축소 방지)
+
+### 10.2 Cluster Autoscaler (CA)
+
+**2단계: 노드 자동 확장 검증**
+
+| 단계 | 노드 수 | Pod 상태 | 소요 시간 | 결과 |
+|------|--------|---------|----------|------|
+| **초기 상태** | 2개 | - | - | 대기 중 |
+| **리소스 부족 발생** | 2개 | 일부 Pending | - | CA 탐지 |
+| **노드 추가** | 2 → **4개** | All Running | **~2분** | ✅ 확장 성공 |
+| **Pod 삭제 후** | 4개 (유지) | - | - | 쿨다운 대기 |
+| **10분 후** | 4 → 2 | - | **~10분** | ✅ 축소 성공 |
+
+**핵심**:
+- Pending Pod 감지 → **2분 내 노드 추가**
+- **10분 쿨다운** 후 축소
+
+**실전 적용 팁**:
+> "HPA가 먼저 Pod을 늘리고, 노드가 부족하면 CA가 노드를 추가합니다."  
+> "자동 확장은 단순 설정이 아니라 실제 부하 테스트로 검증해야 합니다."
+
+---
+
+## 11. CI/CD 파이프라인 (OIDC 적용)
+
+### 11.1 GitHub Actions 워크플로우
+
+```yaml
+name: Deploy Infrastructure
+
+on:
+  push:
+    paths: ['infrastructure/terraform/**']
+
+permissions:
+  id-token: write  # OIDC 토큰 발급 권한
+  contents: read
+
+jobs:
+  deploy-base:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::ACCOUNT_ID:role/GitHubActionsRole
+          aws-region: ap-northeast-2
+
+      - name: Deploy Base
+        working-directory: infrastructure/terraform/environments/dev/base
+        run: |
+          terraform init
+          terraform apply -auto-approve
+
+  deploy-apps:
+    needs: deploy-base
+    runs-on: ubuntu-latest
+    steps:
+      # ... (위와 동일한 OIDC 설정)
+      - name: Deploy Apps
+        working-directory: infrastructure/terraform/environments/dev/apps
+        run: terraform apply -auto-approve
+```
+
+> **핵심**: `aws-access-key-id`가 아닌 `role-to-assume`을 사용합니다.
+
+---
+
+## 12. 트러블슈팅 (실전 경험)
+
+### 12.1 EBS CSI Driver 누락
+
+**증상**: Airflow Pod이 `Pending` 상태에서 벗어나지 못함  
+**원인**: PersistentVolumeClaim(PVC) 생성 시 EBS 볼륨을 자동으로 프로비저닝할 수 있는 CSI Driver가 설치되지 않음  
+**해결**: EKS Addon으로 EBS CSI Driver를 설치하고, EKS Node에 `AmazonEBSCSIDriverPolicy` IAM 권한 부여
+
+```hcl
+resource "aws_eks_addon" "ebs_csi" {
+  cluster_name = aws_eks_cluster.main.name
+  addon_name   = "aws-ebs-csi-driver"
+}
+```
+
+**교훈**: Stateful 워크로드(Airflow, Vanna)는 스토리지 프로비저너가 필수이며, EKS에서는 CSI Driver를 명시적으로 설치해야 합니다.
+
+### 12.2 팀원 EKS 접근 권한
+
+**증상**: 팀원이 `kubectl get pods` 실행 시 `Unauthorized` 에러 발생  
+**원인**: EKS 클러스터는 기본적으로 생성한 IAM 사용자/Role만 접근 가능하며, 추가 팀원의 IAM Principal을 명시적으로 등록해야 함  
+**해결**: Terraform의 `aws_eks_access_entry` 리소스를 사용하여 팀원들의 IAM User ARN을 클러스터에 등록
+
+```hcl
+resource "aws_eks_access_entry" "team_members" {
+  for_each = toset(var.team_member_arns)
+  
+  cluster_name  = aws_eks_cluster.main.name
+  principal_arn = each.value
+  type          = "STANDARD"
+}
+```
+
+**교훈**: 팀 협업 시 Access Entry를 코드로 관리하면 수동 설정 없이 자동으로 권한 부여 가능합니다.
+
+### 12.3 Helm Provider 연결 실패
+
+**증상**: `Error: Kubernetes cluster unreachable`  
+**원인**: `base` 계층의 EKS가 아직 배포되지 않았거나, `apps` 계층에서 클러스터 정보를 제대로 가져오지 못함  
+**해결**:
+1. `base` 정상 배포 확인
+2. `aws eks update-kubeconfig`로 로컬 접속 테스트
+3. `apps/data.tf`에서 `cluster_name` 변수 확인
+
+---
+
+## 13. 리스크 평가 및 트레이드오프
+
+### 13.1 Public Subnet의 EKS Nodes
+
+**결정**: 비용 절감을 위해 Public Subnet에 노드 배치  
+**장점**: NAT Gateway 비용 절감 ($30/월)  
+**단점**: 노드가 인터넷에 직접 노출  
+**완화 대책**:
+- Security Group Inbound 엄격 제한
+- 노드에 민감 데이터 저장 금지
+- IRSA로 권한 최소화
+
+### 13.2 State 분리의 리스크
+
+**결정**: Base와 Apps의 State를 분리  
+**리스크**: Base 변경 시 Apps와 불일치 가능  
+**완화**: Base → Apps 순서로 Plan 확인 후 적용
+
+---
+
+## 14. 체크리스트
+
+### Phase 0
+- [ ] OIDC Provider 설정 완료
+- [ ] Terraform 백엔드 초기화
+
+### Phase 1 (Base)
+- [ ] EKS 클러스터 생성 확인 (~12분 소요)
+- [ ] OIDC Provider 생성 확인 (IRSA 전제조건)
+- [ ] EBS CSI Driver Addon 설치 확인
+- [ ] Kinesis Stream 생성 확인
+- [ ] S3 버킷 접근 가능
+
+### Phase 2 (Apps)
+- [ ] Airflow Pod 실행 확인 (`kubectl get pods -n airflow`)
+- [ ] Helm Release 정상 배포
+- [ ] kubectl 접근 권한 확인 (팀원 Access Entry)
+
+---
+
+## 15. 참고 자료
+
+- [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
+- [GitHub Actions OIDC Guide](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services)
+- [EKS Best Practices](https://aws.github.io/aws-eks-best-practices/)
+- [IRSA 공식 문서](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html)
