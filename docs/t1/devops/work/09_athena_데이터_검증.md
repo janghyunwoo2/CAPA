@@ -157,6 +157,7 @@ SHOW PARTITIONS ad_events_raw;
 | `Zero records returned` | S3파일 없음 or Partition 문제 | `MSCK REPAIR TABLE` 실행 |
 | `HIVE_PARTITION_SCHEMA_MISMATCH` | 스키마 불일치 | Glue Table DDL 확인 |
 | `Access Denied (S3)` | Athena IAM 권한 부족 | S3 읽기 권한 추가 |
+| `Format-Conversion-Failed` (S3 errors/) | 과거 데이터 잔존 | Timestamp 포맷 수정 전 데이터인지 확인 (Residual) |
 
 ---
 

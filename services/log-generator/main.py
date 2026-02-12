@@ -2,11 +2,23 @@ import time
 import json
 import random
 import uuid
+import boto3
+import os
 from datetime import datetime
 from faker import Faker
 
 # faker 초기화
 fake = Faker()
+
+# Kinesis 설정
+STREAM_NAME = os.getenv("STREAM_NAME", "capa-stream")
+REGION = os.getenv("AWS_REGION", "ap-northeast-2")
+
+try:
+    kinesis_client = boto3.client("kinesis", region_name=REGION)
+except Exception as e:
+    print(f"Failed to create Kinesis client: {e}")
+    kinesis_client = None
 
 
 class AdLogGenerator:
@@ -14,99 +26,107 @@ class AdLogGenerator:
         self.users = [str(uuid.uuid4()) for _ in range(100)]  # 100명의 가상 유저
         self.shops = [str(uuid.uuid4()) for _ in range(20)]  # 20개의 가상 가게
         self.placements = ["main_banner", "search_top", "list_middle", "sidebar"]
+        self.fake = Faker()  # Initialize Faker as an instance variable
 
-    def generate_impression(self) -> dict:
-        """광고 노출 로그 생성"""
-        impression_id = str(uuid.uuid4())
-        user_id = random.choice(self.users)
-        shop_id = random.choice(self.shops)
+    def generate_impression(self):
+        user_id = self.fake.uuid4()
+        campaign_id = self.fake.uuid4()
 
-        log = {
+        # 1. Device Type (Platform)
+        device_type = random.choice(["iOS", "Android", "Web"])
+
+        # 2. Bid Price
+        bid_price = round(random.uniform(10.0, 2000.0), 2)
+
+        # 3. Timestamp (BigInt, milliseconds)
+        timestamp = int(datetime.now().timestamp() * 1000)
+
+        # 4. Construct Payload (Strictly matching Glue Schema)
+        impression = {
+            "event_id": self.fake.uuid4(),
             "event_type": "impression",
-            "event_id": impression_id,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": timestamp,
+            "campaign_id": campaign_id,
             "user_id": user_id,
-            "ad_id": str(uuid.uuid4()),  # Creative ID
-            "campaign_id": str(uuid.uuid4()),
-            "shop_id": shop_id,
-            "placement": random.choice(self.placements),
-            "platform": random.choice(["Android", "iOS", "Web"]),
-            "bid_price": round(random.uniform(100, 2000), 2),
+            "device_type": device_type,
+            "bid_price": bid_price,
         }
-        return log
+        return impression
 
-    def generate_click(self, impression_log: dict) -> dict:
-        """노출 로그 기반 클릭 로그 생성"""
-        log = {
+    def generate_click(self, impression):
+        # Derive from impression to maintain consistency (where possible)
+        # But strictly follow Glue Schema
+        timestamp = int(datetime.now().timestamp() * 1000)
+
+        click = {
+            "event_id": self.fake.uuid4(),
             "event_type": "click",
-            "event_id": str(uuid.uuid4()),
-            "timestamp": datetime.now().isoformat(),
-            "user_id": impression_log["user_id"],
-            "ad_id": impression_log["ad_id"],
-            "impression_id": impression_log["event_id"],
-            "shop_id": impression_log["shop_id"],
-            "clickspot_x": random.randint(0, 300),
-            "clickspot_y": random.randint(0, 100),
-            # Second Price Auction 등을 고려하여 입찰가보다 같거나 낮게 책정
-            "cpc_cost": round(
-                min(
-                    impression_log["bid_price"],
-                    random.uniform(
-                        impression_log["bid_price"] * 0.5, impression_log["bid_price"]
-                    ),
-                ),
-                2,
-            ),
+            "timestamp": timestamp,
+            "campaign_id": impression["campaign_id"],
+            "user_id": impression["user_id"],
+            "device_type": impression["device_type"],
+            "bid_price": impression["bid_price"],  # Pass through for schema consistency
         }
-        return log
+        return click
 
-    def generate_conversion(self, click_log: dict) -> dict:
-        """클릭 로그 기반 전환 로그 생성"""
-        action = random.choice(["view_menu", "add_to_cart", "order"])
+    def generate_conversion(self, click):
+        timestamp = int(datetime.now().timestamp() * 1000)
 
-        log = {
+        conversion = {
+            "event_id": self.fake.uuid4(),
             "event_type": "conversion",
-            "event_id": str(uuid.uuid4()),
-            "timestamp": datetime.now().isoformat(),
-            "user_id": click_log["user_id"],
-            "shop_id": click_log["shop_id"],
-            "click_id": click_log["event_id"],
-            "ad_id": click_log["ad_id"],
-            "action_type": action,
-            "item_count": random.randint(1, 5),
+            "timestamp": timestamp,
+            "campaign_id": click["campaign_id"],
+            "user_id": click["user_id"],
+            "device_type": click["device_type"],
+            "bid_price": click["bid_price"],  # Pass through
         }
+        return conversion
 
-        if action == "order":
-            log["total_amount"] = round(random.uniform(15000, 50000), 0)
+    def send_to_kinesis(self, record: dict):
+        if not kinesis_client:
+            print(json.dumps(record), flush=True)
+            return
 
-        return log
+        try:
+            response = kinesis_client.put_record(
+                StreamName=STREAM_NAME,
+                Data=json.dumps(record)
+                + "\n",  # Athena/Firehose often prefers newline delimited JSON
+                PartitionKey=record["user_id"],
+            )
+            print(
+                f"[OK] Sent: {record['event_type']} - Shard: {response['ShardId']}",
+                flush=True,
+            )
+        except Exception as e:
+            print(f"[ERROR] Error sending to Kinesis: {e}", flush=True)
 
     def run(self):
         print(
-            "Starting Ad Log Generator (Impression -> Click -> Conversion)...",
+            f"Starting Ad Log Generator (Target: {STREAM_NAME})...",
             flush=True,
         )
-        print("Logs will be printed in JSON format.", flush=True)
 
         while True:
             # 1. 노출 발생
             impr = self.generate_impression()
-            print(json.dumps(impr), flush=True)
+            self.send_to_kinesis(impr)
 
             # 2. 클릭 확률 (CTR: 10% 가정)
             if random.random() < 0.10:
                 time.sleep(random.uniform(0.5, 2.0))  # 클릭 딜레이
                 click = self.generate_click(impr)
-                print(json.dumps(click), flush=True)
+                self.send_to_kinesis(click)
 
                 # 3. 전환 확률 (CVR: 20% 가정)
                 if random.random() < 0.20:
                     time.sleep(random.uniform(1.0, 5.0))  # 전환 딜레이
                     conv = self.generate_conversion(click)
-                    print(json.dumps(conv), flush=True)
+                    self.send_to_kinesis(conv)
 
-            # 기본 대기 (너무 빠르지 않게)
-            time.sleep(random.uniform(0.1, 0.5))
+            # 기본 대기 (1초에 하나씩)
+            time.sleep(1.0)
 
 
 if __name__ == "__main__":

@@ -695,6 +695,51 @@ resource "aws_eks_access_entry" "team_members" {
 
 ---
 
+### 15. Testing & Development
+
+#### 15.1 Log Generator (`capa-log-generator`)
+
+**목적**: 실제 사용자가 없는 개발 초기 단계에서 데이터 파이프라인(Kinesis -> Athena)을 검증하기 위한 가상 로그 생성기.
+
+#### 15.2 데이터 스키마 설계 (Data Schema)
+
+**전략**: **Single Table Strategy (통합 테이블)**
+
+| 특징 | 설명 |
+|------|------|
+| **테이블명** | `ad_events_raw` (Glue Catalog) |
+| **파티션** | `year`, `month`, `day` (시간 기반) |
+| **포맷** | Parquet (Snappy 압축) |
+| **이벤트 구분** | `event_type` 컬럼 (`impression`, `click`, `conversion`) |
+
+**왜 통합 테이블인가?**
+1. **관리 효율성**: 초기 단계에서 테이블을 분리하지 않고 하나로 관리하여 파이프라인 복잡도 최소화
+2. **스키마 유사성**: 광고 이벤트 특성상 `user_id`, `campaign_id`, `device_type` 등 공통 필드가 80% 이상
+3. **유연성**: 추후 데이터량이 PB급으로 증가하거나 필드가 확연히 달라질 때 분리 고려 (Scaling Strategy)
+
+**데이터 예시 (JSON)**:
+> 모든 이벤트는 공통 필드를 가지며, `event_type`으로 구분됩니다.
+
+```json
+/* 1. Impression */
+{
+  "event_type": "impression",
+  "timestamp": 1707722401000,
+  "user_id": "user_123",
+  "campaign_id": "camp_5",
+  "device_type": "mobile",
+  "bid_price": 2.50
+}
+
+/* 2. Click (Impression과 동일 User/Campaign 유지) */
+{
+  "event_type": "click",
+  "timestamp": 1707722402000,
+  "user_id": "user_123",
+  ...
+}
+```
+
 ## 16. 리스크 평가 및 트레이드오프
 
 ### 16.1 Public Subnet의 EKS Nodes

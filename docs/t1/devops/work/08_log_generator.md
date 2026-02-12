@@ -30,12 +30,12 @@ def generate_ad_event():
     event_type = random.choice(['impression', 'click', 'conversion'])
     
     return {
-        'event_id': f"evt_{int(time.time() * 1000)}",
+        'event_id': str(uuid.uuid4()),
         'event_type': event_type,
-        'timestamp': int(time.time()),
+        'timestamp': int(datetime.now().timestamp() * 1000), # Glue BigInt 호환 (milliseconds)
         'campaign_id': f"camp_{random.randint(1,10)}",
         'user_id': f"user_{random.randint(1,1000)}",
-        'device_type': random.choice(['mobile', 'desktop', 'tablet']),
+        'device_type': random.choice(['mobile', 'desktop', 'tablet']), # Glue Schema: device_type
         'bid_price': round(random.uniform(0.1, 5.0), 2)
     }
 
@@ -150,9 +150,13 @@ aws s3 ls s3://capa-data-lake-<ACCOUNT_ID>/raw/ --recursive
 
 | 오류 | 원인 | 해결 방법 |
 |------|------|-----------|
+| 오류 | 원인 | 해결 방법 |
+|------|------|-----------|
 | `ResourceNotFoundException` | Kinesis Stream 없음 | 05_data_pipeline_기본.md 확인 |
 | `AccessDenied` | AWS 자격 증명 문제 | `aws configure` 확인 |
 | `ProvisionedThroughputExceededException` | 너무 빠른 전송 | `time.sleep()` 값 증가 |
+| `UnicodeEncodeError` | Windows 이모지 출력 문제 | 이모지 제거 또는 텍스트로 대체 |
+| `DataFormatConversion.MalformedData` | Firehose 스키마 불일치 | Timestamp(int), Field 이름(`device_type`) 수정 |
 
 ---
 
