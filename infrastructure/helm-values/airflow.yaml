@@ -1,0 +1,9 @@
+# Airflow Helm Values
+# 작업: 10_helm_values_준비.md (Phase 3)
+# 용도: Apache Airflow Chart 설정
+
+# TODO: Executor 설정 (LocalExecutor)
+# TODO: PostgreSQL 설정
+# TODO: Webserver 설정
+# TODO: IRSA ServiceAccount
+# TODO: DAG 저장소 설정

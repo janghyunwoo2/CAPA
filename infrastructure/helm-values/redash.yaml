@@ -1,0 +1,7 @@
+# Redash Helm Values
+# 작업: 10_helm_values_준비.md (Phase 3)
+# 용도: Redash Chart 설정
+
+# TODO: ServiceAccount (IRSA)
+# TODO: PostgreSQL 설정
+# TODO: Environment Variables (REDASH_COOKIE_SECRET 등)

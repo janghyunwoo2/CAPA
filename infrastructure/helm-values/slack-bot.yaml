@@ -1,0 +1,7 @@
+# Slack Bot Helm Values
+# 작업: 10_helm_values_준비.md (Phase 3)
+# 용도: Slack Bot Chart 설정
+
+# TODO: Image Repository (ECR)
+# TODO: Environment Variables (Slack Tokens - Secret)
+# TODO: ServiceAccount (IRSA)
