@@ -19,3 +19,9 @@ variable "environment" {
   type        = string
   default     = "dev"
 }
+
+variable "alert_email" {
+  description = "Email address for alert notifications"
+  type        = string
+  default     = "admin@example.com" # TODO: 실제 이메일 주소로 변경
+}
