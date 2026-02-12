@@ -33,6 +33,10 @@ EKS Pod들이 AWS 리소스에 안전하게 접근하도록 IRSA(IAM Roles for S
 | `capa-firehose-role` | Kinesis Firehose | S3 PutObject |
 | `capa-airflow-role` | Airflow Pod | S3 읽기/쓰기, Athena |
 | `capa-bot-role` | Slack Bot Pod | Athena 쿼리 |
+| `capa-redash-role` | Redash Pod | Athena 쿼리 |
+| `capa-vanna-role` | Vanna AI Pod | Athena 쿼리, S3 읽기 |
+| `capa-report-role` | Report Generator | Athena 쿼리, S3 쓰기 |
+| `capa-alarm-role` | CloudWatch Alarm | SNS Publish |
 | `capa-autoscaler-role` | Cluster Autoscaler | Auto Scaling |
 
 ---
@@ -140,11 +144,47 @@ resource "aws_iam_role_policy" "firehose_s3" {
 }
 
 # ============================================
-# 4. IRSA Roles (EKS OIDC 필요 - 05-eks.tf에서 생성)
+# 4. CloudWatch Alarm IAM Role (SNS Publish)
 # ============================================
-# Note: Airflow, Bot IRSA는 EKS OIDC Provider 생성 후 추가
-# 현재는 기본 AWS Service Roles만 생성
+resource "aws_iam_role" "cloudwatch_alarm" {
+  name = "capa-alarm-role"
+  
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "cloudwatch.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "alarm_policy" {
+  name = "alarm-sns-policy"
+  role = aws_iam_role.cloudwatch_alarm.id
+  
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = "sns:Publish"
+      Resource = "arn:aws:sns:*:*:capa-alerts"
+    }]
+  })
+}
 ```
+
+### 4.2 IRSA Roles (EKS OIDC 생성 후)
+
+> **Note**: 아래 Role들은 `base/02-iam.tf`가 아니라 `apps/02-irsa.tf` (가칭) 또는 각 Helm 배포 시 생성할 수 있습니다. 여기서는 목록만 정의합니다.
+
+- `capa-airflow-role`: `AmazonAthenaFullAccess` + `AmazonS3FullAccess` (배포 시 축소 권장)
+- `capa-redash-role`: `AmazonAthenaFullAccess`
+- `capa-vanna-role`: `AmazonAthenaFullAccess` + S3 Read
+- `capa-report-role`: `AmazonAthenaFullAccess` + S3 Write
+- `capa-bot-role`: `AmazonAthenaFullAccess`
 
 ### 4.2 Providers 설정
 
@@ -263,6 +303,7 @@ terraform output
 - [ ] `capa-eks-cluster-role` 생성됨
 - [ ] `capa-eks-node-role` 생성됨
 - [ ] `capa-firehose-role` 생성됨
+- [ ] `capa-alarm-role` 생성됨
 - [ ] 각 Role에 정책이 연결됨
 - [ ] `terraform apply` 오류 없이 완료
 
@@ -296,6 +337,7 @@ terraform output
 - [ ] capa-eks-cluster-role
 - [ ] capa-eks-node-role
 - [ ] capa-firehose-role
+- [ ] capa-alarm-role
 
 **메모**:
 ```

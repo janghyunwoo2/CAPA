@@ -3,7 +3,8 @@
 > **Phase**: 3 (EKS Apps Layer)  
 > **담당**: DevOps Engineer  
 > **예상 소요**: 15분  
-> **선행 작업**: 09_helm_values_준비.md
+>- **이전 단계**: [10_helm_values_준비.md](./10_helm_values_준비.md)
+>- **다음 단계**: [12_redash_배포.md](./12_redash_배포.md)
 
 ---
 

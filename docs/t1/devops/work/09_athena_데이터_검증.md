@@ -3,7 +3,8 @@
 > **Phase**: 2 (E2E 연결 테스트)  
 > **담당**: Data Engineer  
 > **예상 소요**: 10분  
-> **선행 작업**: 07_log_generator.md
+- **이전 단계**: [08_log_generator.md](./08_log_generator.md)
+- **다음 단계**: [10_helm_values_준비.md](./10_helm_values_준비.md)
 
 ---
 

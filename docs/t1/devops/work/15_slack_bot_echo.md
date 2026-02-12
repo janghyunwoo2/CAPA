@@ -3,7 +3,7 @@
 > **Phase**: 3 (EKS Apps Layer)  
 > **담당**: Backend Developer + DevOps  
 > **예상 소요**: 20분  
-> **선행 작업**: 10_airflow_배포.md
+> **선행 작업**: 14_vanna_ai_배포.md
 
 ---
 
@@ -215,7 +215,8 @@ kubectl logs -l app=slack-bot --tail=50
 
 ## 6. 다음 단계
 
-✅ **Slack Bot Echo 배포 및 응답 확인 완료** → `12_E2E_통합_검증.md`로 이동
+- **이전 단계**: [14_vanna_ai_배포.md](./14_vanna_ai_배포.md)
+- **다음 단계**: [16_E2E_통합_검증.md](./16_E2E_통합_검증.md)
 
 ---
 

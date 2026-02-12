@@ -3,7 +3,7 @@
 > **Phase**: 2 (E2E 연결 테스트)  
 > **담당**: Backend Developer  
 > **예상 소요**: 10분  
-> **선행 작업**: 06_eks_cluster.md
+> **선행 작업**: 07_alert_system.md
 
 ---
 
@@ -158,7 +158,8 @@ aws s3 ls s3://capa-data-lake-<ACCOUNT_ID>/raw/ --recursive
 
 ## 6. 다음 단계
 
-✅ **Log Generator 실행 및 Kinesis 전송 확인** → `08_athena_데이터_검증.md`로 이동
+✅- **이전 단계**: [07_alert_system.md](./07_alert_system.md)
+- **다음 단계**: [09_athena_데이터_검증.md](./09_athena_데이터_검증.md)`로 이동
 
 ---
 

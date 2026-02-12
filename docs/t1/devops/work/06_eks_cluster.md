@@ -252,7 +252,7 @@ resource "aws_eks_access_policy_association" "admin" {
 
 ## 7. 다음 단계
 
-✅ **EKS 클러스터 구축 완료** → `07_log_generator.md`로 이동
+✅ **EKS 설정 완료** → `07_alert_system.md`로 이동
 
 > ⚠️ **Note**: Phase 1 (Terraform Base Layer) 완료! 이제 Phase 2 (E2E 테스트) 시작
 
