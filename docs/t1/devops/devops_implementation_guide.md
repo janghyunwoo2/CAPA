@@ -316,8 +316,8 @@ resource "helm_release" "airflow" {
 | 단계 | 리소스 | 생성 내용 | 소요 시간 |
 |------|--------|----------|----------|
 | **1단계** | VPC/Subnet (Data Source) | 기본 VPC 및 서브넷 조회 | 즉시 |
-| **2단계** | `aws_eks_cluster.main` | EKS Cluster 1.29<br>- API/Audit/Authenticator 로깅<br>- Public + Private 엔드포인트 | **~8분** |
-| **3단계** | `aws_eks_node_group.main` | Node Group (t3.medium)<br>- Min/Desired/Max: 2/2/4<br>- On-Demand 인스턴스 | **~4분** |
+| **2단계** | `aws_eks_cluster.main` | EKS Cluster 1.30<br>- API/Audit/Authenticator 로깅<br>- Public + Private 엔드포인트 | **~8분** |
+| **3단계** | `aws_eks_node_group.main` | Node Group (t3.medium, **AL2023**)<br>- Min/Desired/Max: 2/2/4<br>- On-Demand 인스턴스 | **~4분** |
 | **4단계** | `aws_iam_openid_connect_provider` | **OIDC Provider 생성**<br>- IRSA 기반 구축<br>- EKS ↔ IAM 신뢰 관계 | 즉시 |
 | **5단계** | `aws_eks_access_entry` | 팀원 EKS 등록<br>- IAM ARN → EKS 연결 | 즉시 |
 | **6단계** | `aws_eks_addon.ebs_csi` | **EBS CSI Driver Addon**<br>- PVC/StorageClass 지원 | ~1분 |
@@ -384,7 +384,7 @@ kubectl get nodes
 | **1단계** | `01-providers.tf` | AWS, Helm, Kubernetes Provider | 즉시 | 초기 설정 |
 | **2단계** | `02-iam.tf` | 10개 IAM Role (EKS, Airflow, Bot, Redash, Vanna 등) | ~1분 | 우선 생성 (다른 리소스가 참조) |
 | **3단계** | `03-kinesis.tf`, `04-s3.tf` | Kinesis Stream, S3 Bucket | ~3분 | 병렬 생성 |
-| **4단계** | `05-eks.tf` | EKS Cluster, Node Group (t3.medium × 2~4) | **~12분** | 순차 생성 (가장 오래 걸림) |
+| **4단계** | `05-eks.tf` | EKS Cluster (1.30), Node Group (**AL2023**, t3.medium × 2~4) | **~12분** | 순차 생성 (가장 오래 걸림) |
 | **5단계** | `06-ecr.tf` | Container Registry | ~1분 | 이미지 저장소 |
 | **6단계** | `07-helm-releases.tf` | Airflow, Vanna (Helm Chart) | **~5분** | Helm Provider로 자동 배포 |
 | **7단계** | `08-k8s-apps.tf` | Slack Bot Deployment | ~1분 | Kubernetes Provider |

@@ -18,7 +18,7 @@ data "aws_subnets" "default" {
 resource "aws_eks_cluster" "main" {
   name     = "${var.project_name}-eks-${var.environment}"
   role_arn = aws_iam_role.eks_cluster.arn
-  version  = "1.29"
+  version  = "1.30"
 
   vpc_config {
     subnet_ids              = data.aws_subnets.default.ids
@@ -49,6 +49,7 @@ resource "aws_eks_node_group" "main" {
 
   instance_types = ["t3.medium"]
   capacity_type  = "ON_DEMAND"
+  ami_type       = "AL2023_x86_64_STANDARD"
 
   scaling_config {
     desired_size = 2
@@ -80,12 +81,30 @@ resource "aws_iam_openid_connect_provider" "eks" {
 }
 
 # ============================================
-# 5. EBS CSI Driver Addon
+# 5. EKS Addons
 # ============================================
+resource "aws_eks_addon" "vpc_cni" {
+  cluster_name  = aws_eks_cluster.main.name
+  addon_name    = "vpc-cni"
+  addon_version = "v1.20.4-eksbuild.2"
+}
+
+resource "aws_eks_addon" "kube_proxy" {
+  cluster_name  = aws_eks_cluster.main.name
+  addon_name    = "kube-proxy"
+  addon_version = "v1.30.14-eksbuild.20"
+}
+
+resource "aws_eks_addon" "coredns" {
+  cluster_name  = aws_eks_cluster.main.name
+  addon_name    = "coredns"
+  addon_version = "v1.11.1-eksbuild.8"
+}
+
 resource "aws_eks_addon" "ebs_csi" {
   cluster_name  = aws_eks_cluster.main.name
   addon_name    = "aws-ebs-csi-driver"
-  addon_version = "v1.31.0-eksbuild.1" # Safe version for 1.29
+  addon_version = "v1.31.0-eksbuild.1"
 
   depends_on = [aws_eks_node_group.main]
 }

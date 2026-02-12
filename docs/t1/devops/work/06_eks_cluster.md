@@ -17,8 +17,8 @@ Kubernetes 애플리케이션을 배포할 EKS 클러스터를 생성합니다. 
 
 | 리소스 | 생성 내용 | 소요 시간 |
 |--------|----------|----------|
-| EKS Cluster | Kubernetes 1.29 | ~8분 |
-| Node Group | t3.medium × 2~4 | ~4분 |
+| EKS Cluster | Kubernetes 1.30 | ~8분 |
+| Node Group | t3.medium × 2~4 (AL2023) | ~4분 |
 | OIDC Provider | IRSA 전제조건 | 즉시 |
 | EBS CSI Driver | PVC 지원 | ~1분 |
 
@@ -51,7 +51,7 @@ data "aws_subnets" "default" {
 resource "aws_eks_cluster" "main" {
   name     = "${var.project_name}-eks"
   role_arn = aws_iam_role.eks_cluster.arn
-  version  = "1.29"
+  version  = "1.30"
   
   vpc_config {
     subnet_ids              = data.aws_subnets.default.ids
@@ -77,7 +77,8 @@ resource "aws_eks_node_group" "main" {
   
   instance_types = ["t3.medium"]
   capacity_type  = "ON_DEMAND"
-  
+  ami_type       = "AL2023_x86_64_STANDARD"
+
   scaling_config {
     desired_size = 2
     max_size     = 4
@@ -266,7 +267,8 @@ resource "aws_eks_access_policy_association" "admin" {
 
 **EKS Cluster**:
 - 이름: capa-eks
-- 버전: 1.29
+- 버전: 1.30 (2027년 7월까지 지원)
+- OS: Amazon Linux 2023 (AL2023_x86_64_STANDARD)
 - Node 수: ______
 - Endpoint: _______________
 
