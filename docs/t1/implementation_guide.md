@@ -15,10 +15,10 @@
 | **Kinesis Pipeline** | Data Engineer | Kinesis Stream, Firehose | Log Generator | P0 |
 | **Glue Catalog** | Data Engineer | AWS Glue | S3 Parquet | P0 |
 | **Athena Setup** | Data Engineer | Athena, SQL | Glue Catalog | P0 |
+| **Redash Dashboard** | Data Engineer | Redash | Athena | P1 |
 | **Slack Bot (Basic)** | Backend Dev | Python, Slack Bolt | - | P1 |
 | **Vanna AI Integration** | ML Engineer | Vanna AI, ChromaDB, OpenAI API | Athena, Slack Bot | P1 |
 | **CloudWatch Alerts** | Data Engineer | CloudWatch, SNS | Kinesis | P1 |
-| **Redash Dashboard** | Data Engineer | Redash | Athena | P2 |
 | **Report Generator** | Backend Dev + ML | Python, Jinja2, Claude API | Athena, Airflow | P2 |
 | **Prophet Model** | ML Engineer | Prophet, Python | Athena | P3 |
 | **Airflow Orchestration** | Data Engineer | Airflow, EKS | Athena | P3 |
@@ -37,8 +37,8 @@
 전체 시스템의 구성 요소와 연결 관계를 보여줍니다.
 
 ```mermaid
-graph TB
-    subgraph DataSource["Data Source"]
+flowchart TB
+    subgraph DataGen["Data Generation"]
         LogGen[Log Generator]
     end
 
@@ -64,17 +64,21 @@ graph TB
                 Vanna[Vanna AI Service]
                 Chroma[ChromaDB]
                 Airflow[Apache Airflow]
+                Redash[Redash Dashboard]
+                SlackBot[Slack Bot App]
             end
         end
         
         subgraph Monitoring["Monitoring"]
             CW[CloudWatch]
             SNS[SNS Topic]
+            Prophet["Prophet (Future)"]
         end
     end
 
     subgraph Client["Client"]
-        Slack[Slack Interface]
+        SlackUI[Slack Service]
+        User[User]
     end
 
     LogGen -->|"JSON Stream"| KDS
@@ -83,7 +87,9 @@ graph TB
     Glue -.->|"Schema Metadata"| Athena
     Athena -->|"Query (S3 Scan)"| S3_Processed
     
-    Slack <-->|"Natural Language"| Vanna
+    User -->|"Message"| SlackUI
+    SlackUI <-->|"Socket Mode"| SlackBot
+    SlackBot <-->|"API Call"| Vanna
     Vanna <-->|"Vector Search"| Chroma
     Vanna -->|"SQL Query"| Athena
     Athena -->|"Result Set"| Vanna
@@ -92,7 +98,10 @@ graph TB
     
     KDS -->|"Metric"| CW
     CW -->|"Alarm"| SNS
-    SNS -->|"Webhook"| Slack
+    SNS -->|"Webhook"| SlackUI
+    
+    Athena -->|"KPI Visualization"| Redash
+    User -->|"View Dashboard"| Redash
 ```
 
 ---
@@ -127,13 +136,14 @@ flowchart LR
         ATH[Query Engine]
     end
     
-    subgraph AI["AI Layer"]
-        VAN[Vanna AI + ChromaDB]
-        LLM[OpenAI/Claude]
+    subgraph Applications["EKS App Layer"]
+        BOT[Slack Bot Pod]
+        VAN[Vanna AI Service]
+        LLM[OpenAI/Claude API]
     end
     
-    subgraph Slack["Slack Interface"]
-        BOT[Slack Bot]
+    subgraph Slack["External Service"]
+        UI[Slack Platform]
     end
     
     LG -->|"JSON"| KDS
@@ -141,11 +151,13 @@ flowchart LR
     KDF -->|"Parquet"| S3B
     S3B -->|"Table Metadata"| CAT
     CAT -->|"Schema"| ATH
-    BOT -->|"Natural Language"| VAN
+    
+    UI <-->|"Socket Mode"| BOT
+    BOT <-->|"API Call"| VAN
     VAN -->|"Context + Prompt"| LLM
     LLM -->|"SQL Query"| VAN
     VAN -->|"SQL Query"| ATH
-    ATH -->|"Query Results (JSON)"| VAN
+    ATH -->|"Query Results"| VAN
     VAN -->|"Formatted Response"| BOT
 ```
 
