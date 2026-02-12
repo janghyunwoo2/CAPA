@@ -1,0 +1,12 @@
+serviceAccount:
+  create: true
+  name: redash-sa
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/capa-redash-role
+
+postgresql:
+  enabled: true
+
+env:
+  REDASH_COOKIE_SECRET: "random-secret"
+  REDASH_SECRET_KEY: "random-secret"

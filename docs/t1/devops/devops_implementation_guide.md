@@ -84,39 +84,115 @@
 ### 3.1 AWS 리소스 맵
 
 ```mermaid
-graph TB
-    subgraph VPC["VPC (capa-vpc)"]
-        subgraph PublicSubnet["Public Subnet (Cost Optimized)"]
-            EKS[EKS Cluster]
-            Airflow[Airflow on EKS]
-            SlackBot[Slack Bot on EKS]
+flowchart TB
+    subgraph DataGen["📱 Data Generation"]
+        LG[Log Generator]
+    end
+    
+    subgraph Streaming["⚡ Real-time Pipeline"]
+        KDS[Kinesis Data Stream]
+        KDF[Kinesis Firehose]
+    end
+    
+    subgraph Storage["💾 Data Lake"]
+        S3[(S3 Parquet)]
+    end
+    
+    subgraph Processing["⚙️ Processing"]
+        GLU[Glue Catalog]
+        ATH[Athena]
+    end
+    
+    subgraph EKS["🐳 EKS Cluster"]
+        subgraph Batch["📅 Batch Processing"]
+            AIR[Airflow]
+        end
+        
+        subgraph AI["🤖 AI Layer"]
+            VAN[Vanna AI]
+            CHR[(ChromaDB)]
+        end
+        
+        subgraph Dashboard["📊 Dashboard"]
+            RDS[Redash]
+        end
+        
+        subgraph Report["📝 Report"]
+            RPT[Report Generator]
+        end
+        
+        subgraph Interface["👥 Interface"]
+            SLK[Slack Bot]
         end
     end
     
-    subgraph DataPipeline["Data Pipeline"]
-        Kinesis[Kinesis Stream]
-        Firehose[Kinesis Firehose]
-        S3[S3 Bucket]
-        Glue[Glue Catalog]
-        Athena[Athena]
+    subgraph Alert["🔔 Alert"]
+        CW[CloudWatch Alarms]
+        SNS[SNS Topic]
+        PRO[Prophet/ML]
     end
     
-    Kinesis --> Firehose --> S3 --> Glue --> Athena
-    SlackBot --> Athena
-    Airflow --> Athena
+    subgraph External["🌐 External"]
+        LLM[Claude/GPT API]
+    end
+
+    %% 데이터 흐름
+    LG --> KDS --> KDF --> S3
+    S3 --> GLU --> ATH
+    
+    %% 배치 처리
+    AIR -->|스케줄링| ATH
+    AIR -->|리포트 트리거| RPT
+    
+    %% AI Layer
+    ATH --> VAN
+    CHR -->|RAG| VAN
+    LLM -->|SQL 생성| VAN
+    VAN --> SLK
+    
+    %% Dashboard
+    ATH --> RDS
+    
+    %% Alert
+    KDS -->|Metrics| CW
+    ATH -->|집계 데이터| PRO
+    CW --> SNS
+    PRO --> SNS
+    SNS -->|알림| SLK
+    
+    %% Report
+    ATH --> RPT
+    LLM -->|인사이트 생성| RPT
+    RPT -->|PDF/Markdown| SLK
 ```
 
 ### 3.2 리소스 목록
 
 | 리소스 | 서비스 | 용도 | 우선순위 |
 |--------|--------|------|----------|
+| **Data Pipeline** |
 | `capa-logs-stream` | Kinesis Stream | 실시간 로그 수집 | P0 |
 | `capa-logs-firehose` | Kinesis Firehose | S3 전송 및 Parquet 변환 | P0 |
 | `capa-data-lake` | S3 Bucket | Raw/Processed 데이터 저장 | P0 |
 | `capa-glue-catalog` | Glue Database | 메타데이터 관리 | P0 |
 | `capa-athena-workgroup` | Athena Workgroup | 쿼리 실행 환경 | P0 |
+| **Container Orchestration** |
 | `capa-eks-cluster` | EKS | 컨테이너 오케스트레이션 | P1 |
 | `capa-oidc-provider` | IAM OIDC | GitHub Actions + IRSA 인증 | P0 |
+| **EKS Applications** |
+| `capa-airflow` | Airflow (Helm) | 배치 작업 스케줄링 | P1 |
+| `capa-slack-bot` | Slack Bot | 대화형 인터페이스 | P1 |
+| `capa-redash` | Redash (Helm) | KPI 대시보드 | P0 |
+| `capa-vanna-api` | Vanna AI (Helm) | Text-to-SQL API | P1 |
+| `capa-chromadb` | ChromaDB (Helm) | RAG 벡터 저장소 | P1 |
+| **Alert System** |
+| `capa-cloudwatch-alarms` | CloudWatch Alarms | MVP Alert (임계값 기반) | P0 |
+| `capa-sns-topic` | SNS Topic | Alert 알림 전송 | P0 |
+| `capa-prophet-ml` | Prophet/ML | 시계열 예측 이상 탐지 (확장) | P2 |
+| **Report & Analytics** |
+| `capa-report-generator` | Airflow DAG | 자동 리포트 생성 | P1 |
+| **Testing & Development** |
+| `capa-log-generator` | EC2/Local | 테스트 로그 생성 | P0 |
 
 ---
 
@@ -132,7 +208,9 @@ capa/
 ├── infrastructure/
 │   ├── helm-values/             # Helm Chart 설정
 │   │   ├── airflow.yaml
-│   │   └── vanna.yaml
+│   │   ├── vanna.yaml
+│   │   ├── redash.yaml
+│   │   └── chromadb.yaml
 │   │
 │   └── terraform/
 │       ├── modules/             # 재사용 모듈 (kinesis, s3, glue, eks 등)
@@ -141,17 +219,24 @@ capa/
 │           ├── base/            # [Layer 1] AWS 인프라
 │           │   ├── main.tf      # VPC, EKS, Kinesis, S3, Glue
 │           │   ├── outputs.tf   # ← cluster_endpoint, cluster_name 출력
-│           │   └── providers.tf # AWS Provider만 사용
+│           │   ├── providers.tf # AWS Provider만 사용
+│           │   ├── 09-cloudwatch.tf  # CloudWatch Alarms
+│           │   └── 10-sns.tf    # SNS Topic
 │           │
 │           └── apps/            # [Layer 2] K8s 앱
 │               ├── main.tf      # Helm Release (Airflow, Vanna)
 │               ├── data.tf      # ← base의 EKS 정보 참조
-│               └── providers.tf # Helm/K8s Provider 설정
+│               ├── providers.tf # Helm/K8s Provider 설정
+│               ├── helm-redash.tf   # Redash 배포
+│               ├── helm-vanna.tf    # Vanna AI 배포
+│               └── helm-chromadb.tf # ChromaDB 배포
 │
 ├── services/                    # 애플리케이션 소스 코드
 │   ├── airflow-dags/
 │   ├── slack-bot/
-│   └── vanna-api/
+│   ├── vanna-api/
+│   ├── log-generator/
+│   └── report-generator/
 │
 └── .github/workflows/
     ├── deploy-base.yaml         # Layer 1 배포 (OIDC)
@@ -231,8 +316,8 @@ resource "helm_release" "airflow" {
 | 단계 | 리소스 | 생성 내용 | 소요 시간 |
 |------|--------|----------|----------|
 | **1단계** | VPC/Subnet (Data Source) | 기본 VPC 및 서브넷 조회 | 즉시 |
-| **2단계** | `aws_eks_cluster.main` | EKS Cluster 1.29<br>- API/Audit/Authenticator 로깅<br>- Public + Private 엔드포인트 | **~8분** |
-| **3단계** | `aws_eks_node_group.main` | Node Group (t3.medium)<br>- Min/Desired/Max: 2/2/4<br>- On-Demand 인스턴스 | **~4분** |
+| **2단계** | `aws_eks_cluster.main` | EKS Cluster 1.30<br>- API/Audit/Authenticator 로깅<br>- Public + Private 엔드포인트 | **~8분** |
+| **3단계** | `aws_eks_node_group.main` | Node Group (t3.medium, **AL2023**)<br>- Min/Desired/Max: 2/2/4<br>- On-Demand 인스턴스 | **~4분** |
 | **4단계** | `aws_iam_openid_connect_provider` | **OIDC Provider 생성**<br>- IRSA 기반 구축<br>- EKS ↔ IAM 신뢰 관계 | 즉시 |
 | **5단계** | `aws_eks_access_entry` | 팀원 EKS 등록<br>- IAM ARN → EKS 연결 | 즉시 |
 | **6단계** | `aws_eks_addon.ebs_csi` | **EBS CSI Driver Addon**<br>- PVC/StorageClass 지원 | ~1분 |
@@ -270,11 +355,14 @@ kubectl get nodes
 |---------------|----------------|----------|----------|
 | **Airflow** | `airflow-*` (5개) | `capa-airflow-role` | S3 읽기/쓰기<br>(버킷: `capa-*`만) |
 | **Slack Bot** | `slack-bot-sa` | `capa-bot-role` | Athena 쿼리 실행<br>(DB: `capa_*`만) |
+| **Redash** | `redash-sa` | `capa-redash-role` | Athena 쿼리 실행<br>(DB: `capa_*`만) |
+| **Vanna API** | `vanna-sa` | `capa-vanna-role` | Athena 쿼리 + S3 읽기<br>(버킷: `capa-*`만) |
 | **Firehose** | (AWS Service) | `capa-firehose-role` | S3 `PutObject`만<br>**(읽기/삭제 불가)** |
+| **CloudWatch Alarms** | (AWS Service) | `capa-alarm-role` | SNS Publish<br>(Topic: `capa-*`만) |
 | **Cluster Autoscaler** | `cluster-autoscaler` | `capa-autoscaler-role` | Auto Scaling 제어<br>(태그: `capa-*`만) |
 
 **핵심 수치**:
-- **IAM Role 개수**: 7개 (역할별 완전 분리)
+- **IAM Role 개수**: **10개** (역할별 완전 분리)
 - **하드코딩된 AWS Credentials**: **0개** (IRSA 100% 적용)
 - **관리자 권한 사용**: **0건** (Least Privilege 100%)
 - **리소스 제한**: 모든 정책에 `capa-*` ARN 명시
@@ -294,17 +382,20 @@ kubectl get nodes
 | 단계 | Terraform 파일 | 생성 리소스 | 소요 시간 | 배포 방식 |
 |------|---------------|------------|----------|----------|
 | **1단계** | `01-providers.tf` | AWS, Helm, Kubernetes Provider | 즉시 | 초기 설정 |
-| **2단계** | `02-iam.tf` | 7개 IAM Role (EKS, Airflow, Bot 등) | ~1분 | 우선 생성 (다른 리소스가 참조) |
+| **2단계** | `02-iam.tf` | 10개 IAM Role (EKS, Airflow, Bot, Redash, Vanna 등) | ~1분 | 우선 생성 (다른 리소스가 참조) |
 | **3단계** | `03-kinesis.tf`, `04-s3.tf` | Kinesis Stream, S3 Bucket | ~3분 | 병렬 생성 |
-| **4단계** | `05-eks.tf` | EKS Cluster, Node Group (t3.medium × 2~4) | **~12분** | 순차 생성 (가장 오래 걸림) |
+| **4단계** | `05-eks.tf` | EKS Cluster (1.30), Node Group (**AL2023**, t3.medium × 2~4) | **~12분** | 순차 생성 (가장 오래 걸림) |
 | **5단계** | `06-ecr.tf` | Container Registry | ~1분 | 이미지 저장소 |
 | **6단계** | `07-helm-releases.tf` | Airflow, Vanna (Helm Chart) | **~5분** | Helm Provider로 자동 배포 |
 | **7단계** | `08-k8s-apps.tf` | Slack Bot Deployment | ~1분 | Kubernetes Provider |
-| **8단계** | `09-monitoring.tf` | CloudWatch Alarms | ~1분 | 모니터링 설정 |
+| **8단계** | `09-cloudwatch.tf` | CloudWatch Alarms (CTR, 트래픽) | ~1분 | 모니터링 설정 |
+| **9단계** | `10-sns.tf` | SNS Topic (Alert 알림) | ~1분 | 알림 인프라 |
+| **10단계** | `helm-redash.tf` | Redash (Helm Chart) | **~3분** | Dashboard 배포 |
+| **11단계** | `helm-vanna.tf` | Vanna AI + ChromaDB | **~3분** | AI Layer 배포 |
 
 **핵심 수치**:
-- **총 배포 시간**: **~20분** (EKS 12분 + Helm 5분 + 나머지 3분)
-- **Terraform 파일**: 9개
+- **총 배포 시간**: **~28분** (EKS 12분 + Helm 11분 + 나머지 5분)
+- **Terraform 파일**: 11개
 - **수동 클릭**: **0회** (완전 자동화)
 - **재현 가능성**: **100%** (코드 = 문서)
 
@@ -316,7 +407,13 @@ kubectl get nodes
     ↓
 07-helm-releases.tf (Airflow, Vanna) ← 5분 소요
     ↓
+10-helm-redash.tf (Redash) ← 3분 소요
+    ↓
+11-helm-vanna.tf (Vanna AI) ← 3분 소요
+    ↓
 08-k8s-apps.tf (Custom Apps)
+    ↓
+09-cloudwatch.tf + 10-sns.tf (Alert System)
 ```
 
 
@@ -458,9 +555,103 @@ jobs:
 
 ---
 
-## 12. 트러블슈팅 (실전 경험)
+## 12. Alert 시스템 구성
 
-### 12.1 EBS CSI Driver 누락
+### 12.1 MVP: CloudWatch Alarms
+
+**구성 요소**:
+- **CloudWatch Metrics**: Kinesis 유입량, EKS Pod CPU/Memory
+- **CloudWatch Alarms**: 임계값 설정
+- **SNS Topic**: Alert 알림 전송
+- **Slack 연동**: SNS → Lambda → Slack
+
+**Terraform 파일**: `09-cloudwatch.tf`, `10-sns.tf`
+
+**검증**:
+```bash
+aws cloudwatch describe-alarms --alarm-name-prefix capa-
+aws sns list-subscriptions-by-topic --topic-arn <SNS_TOPIC_ARN>
+```
+
+### 12.2 확장: Prophet/ML 기반 이상 탐지
+
+**구현 방향**:
+- Airflow DAG으로 시계열 예측 모델 학습
+- 실제 값이 신뢰구간을 벗어나면 SNS → Slack 알림
+
+---
+
+## 13. Dashboard 구성 (Redash)
+
+### 13.1 Redash 배포
+
+**Helm Chart**: `helm-redash.tf`
+**Helm Values**: `redash.yaml` (ServiceAccount IRSA 연동 필요)
+
+### 13.2 Athena 데이터 소스 연결
+
+**Redash UI 설정**:
+- Type: Amazon Athena
+- Region: `ap-northeast-2`
+- S3 Staging Directory: `s3://capa-athena-results/`
+- Database: `capa_logs`
+- IRSA 권한: Athena 쿼리 실행
+
+### 13.3 KPI 대시보드
+
+**주요 지표**:
+- CTR (Click-Through Rate)
+- CVR (Conversion Rate)
+- RPM (Revenue Per Mille)
+- 캠페인별 성과
+
+**검증**:
+```bash
+kubectl get pods -n redash
+kubectl port-forward -n redash svc/redash 5000:5000
+```
+
+---
+
+## 14. AI Layer (Vanna AI)
+
+### 14.1 아키텍처
+
+**구성 요소**:
+- **Vanna API**: FastAPI 기반 Text-to-SQL 서비스
+- **ChromaDB**: RAG용 벡터 저장소
+- **LLM API**: Claude/GPT (SQL 생성)
+
+**데이터 흐름**:
+```
+자연어 질문 → ChromaDB 검색 (RAG) → LLM SQL 생성 → Athena 실행 → 결과 반환
+```
+
+### 14.2 배포
+
+**Vanna AI**: `helm-vanna.tf` (Custom Chart)
+**ChromaDB**: `helm-chromadb.tf` (Persistent Volume 필요)
+
+**주요 설정**:
+- ServiceAccount IRSA 연동 (Athena 쿼리 권한)
+- OpenAI API Key (Secret)
+- ChromaDB 연결 정보
+
+### 14.3 검증
+
+```bash
+kubectl get pods -n vanna
+kubectl port-forward -n vanna svc/vanna-api 8080:8080
+curl http://localhost:8080/health
+
+kubectl get pods -n chromadb
+```
+
+---
+
+## 15. 트러블슈팅 (실전 경험)
+
+### 15.1 EBS CSI Driver 누락
 
 **증상**: Airflow Pod이 `Pending` 상태에서 벗어나지 못함  
 **원인**: PersistentVolumeClaim(PVC) 생성 시 EBS 볼륨을 자동으로 프로비저닝할 수 있는 CSI Driver가 설치되지 않음  
@@ -475,7 +666,7 @@ resource "aws_eks_addon" "ebs_csi" {
 
 **교훈**: Stateful 워크로드(Airflow, Vanna)는 스토리지 프로비저너가 필수이며, EKS에서는 CSI Driver를 명시적으로 설치해야 합니다.
 
-### 12.2 팀원 EKS 접근 권한
+### 15.2 팀원 EKS 접근 권한
 
 **증상**: 팀원이 `kubectl get pods` 실행 시 `Unauthorized` 에러 발생  
 **원인**: EKS 클러스터는 기본적으로 생성한 IAM 사용자/Role만 접근 가능하며, 추가 팀원의 IAM Principal을 명시적으로 등록해야 함  
@@ -493,7 +684,7 @@ resource "aws_eks_access_entry" "team_members" {
 
 **교훈**: 팀 협업 시 Access Entry를 코드로 관리하면 수동 설정 없이 자동으로 권한 부여 가능합니다.
 
-### 12.3 Helm Provider 연결 실패
+### 15.3 Helm Provider 연결 실패
 
 **증상**: `Error: Kubernetes cluster unreachable`  
 **원인**: `base` 계층의 EKS가 아직 배포되지 않았거나, `apps` 계층에서 클러스터 정보를 제대로 가져오지 못함  
@@ -504,9 +695,54 @@ resource "aws_eks_access_entry" "team_members" {
 
 ---
 
-## 13. 리스크 평가 및 트레이드오프
+### 15. Testing & Development
 
-### 13.1 Public Subnet의 EKS Nodes
+#### 15.1 Log Generator (`capa-log-generator`)
+
+**목적**: 실제 사용자가 없는 개발 초기 단계에서 데이터 파이프라인(Kinesis -> Athena)을 검증하기 위한 가상 로그 생성기.
+
+#### 15.2 데이터 스키마 설계 (Data Schema)
+
+**전략**: **Single Table Strategy (통합 테이블)**
+
+| 특징 | 설명 |
+|------|------|
+| **테이블명** | `ad_events_raw` (Glue Catalog) |
+| **파티션** | `year`, `month`, `day` (시간 기반) |
+| **포맷** | Parquet (Snappy 압축) |
+| **이벤트 구분** | `event_type` 컬럼 (`impression`, `click`, `conversion`) |
+
+**왜 통합 테이블인가?**
+1. **관리 효율성**: 초기 단계에서 테이블을 분리하지 않고 하나로 관리하여 파이프라인 복잡도 최소화
+2. **스키마 유사성**: 광고 이벤트 특성상 `user_id`, `campaign_id`, `device_type` 등 공통 필드가 80% 이상
+3. **유연성**: 추후 데이터량이 PB급으로 증가하거나 필드가 확연히 달라질 때 분리 고려 (Scaling Strategy)
+
+**데이터 예시 (JSON)**:
+> 모든 이벤트는 공통 필드를 가지며, `event_type`으로 구분됩니다.
+
+```json
+/* 1. Impression */
+{
+  "event_type": "impression",
+  "timestamp": 1707722401000,
+  "user_id": "user_123",
+  "campaign_id": "camp_5",
+  "device_type": "mobile",
+  "bid_price": 2.50
+}
+
+/* 2. Click (Impression과 동일 User/Campaign 유지) */
+{
+  "event_type": "click",
+  "timestamp": 1707722402000,
+  "user_id": "user_123",
+  ...
+}
+```
+
+## 16. 리스크 평가 및 트레이드오프
+
+### 16.1 Public Subnet의 EKS Nodes
 
 **결정**: 비용 절감을 위해 Public Subnet에 노드 배치  
 **장점**: NAT Gateway 비용 절감 ($30/월)  
@@ -516,7 +752,7 @@ resource "aws_eks_access_entry" "team_members" {
 - 노드에 민감 데이터 저장 금지
 - IRSA로 권한 최소화
 
-### 13.2 State 분리의 리스크
+### 16.2 State 분리의 리스크
 
 **결정**: Base와 Apps의 State를 분리  
 **리스크**: Base 변경 시 Apps와 불일치 가능  
@@ -524,7 +760,7 @@ resource "aws_eks_access_entry" "team_members" {
 
 ---
 
-## 14. 체크리스트
+## 17. 체크리스트
 
 ### Phase 0
 - [ ] OIDC Provider 설정 완료
@@ -536,15 +772,22 @@ resource "aws_eks_access_entry" "team_members" {
 - [ ] EBS CSI Driver Addon 설치 확인
 - [ ] Kinesis Stream 생성 확인
 - [ ] S3 버킷 접근 가능
+- [ ] CloudWatch Alarms 설정 확인
+- [ ] SNS Topic 생성 및 구독 확인
 
 ### Phase 2 (Apps)
 - [ ] Airflow Pod 실행 확인 (`kubectl get pods -n airflow`)
+- [ ] Redash Pod 실행 확인 (`kubectl get pods -n redash`)
+- [ ] Vanna API Pod 실행 확인 (`kubectl get pods -n vanna`)
+- [ ] ChromaDB Pod 실행 확인 (`kubectl get pods -n chromadb`)
 - [ ] Helm Release 정상 배포
 - [ ] kubectl 접근 권한 확인 (팀원 Access Entry)
+- [ ] Redash Web UI 접속 확인
+- [ ] Vanna API Health Check (`/health`)
 
 ---
 
-## 15. 참고 자료
+## 18. 참고 자료
 
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [GitHub Actions OIDC Guide](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services)
