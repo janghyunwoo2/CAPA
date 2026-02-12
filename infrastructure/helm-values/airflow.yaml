@@ -1,9 +1,58 @@
-# Airflow Helm Values
-# 작업: 10_helm_values_준비.md (Phase 3)
-# 용도: Apache Airflow Chart 설정
+# Airflow 공식 Helm Chart Values
+# Repository: https://github.com/apache/airflow/tree/main/chart
 
-# TODO: Executor 설정 (LocalExecutor)
-# TODO: PostgreSQL 설정
-# TODO: Webserver 설정
-# TODO: IRSA ServiceAccount
-# TODO: DAG 저장소 설정
+# Executor 설정 (LocalExecutor - MVP 단순화)
+executor: "LocalExecutor"
+
+# PostgreSQL (내장 DB)
+postgresql:
+  enabled: true
+  auth:
+    enablePostgresUser: true
+    postgresPassword: "airflow123"
+
+# Redis (비활성화 - LocalExecutor 사용)
+redis:
+  enabled: false
+
+# Webserver
+webserver:
+  replicas: 1
+  service:
+    type: LoadBalancer # 외부 접근용
+  defaultUser:
+    enabled: true
+    username: admin
+    password: admin
+    email: admin@example.com
+
+# Scheduler
+scheduler:
+  replicas: 1
+
+# DAG 저장소 (Git Sync 비활성화, ConfigMap 사용)
+dags:
+  persistence:
+    enabled: true
+    size: 1Gi
+
+# 환경 변수
+env:
+  - name: AIRFLOW__CORE__LOAD_EXAMPLES
+    value: "False"
+
+# IRSA (EKS OIDC 설정 후 활성화)
+serviceAccount:
+  create: true
+  name: airflow-sa
+  # annotations:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/capa-airflow-role
+
+# 리소스 제한
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 250m
+    memory: 512Mi

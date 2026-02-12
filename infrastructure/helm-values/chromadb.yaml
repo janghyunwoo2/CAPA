@@ -1,5 +1,3 @@
-# ChromaDB Helm Values
-# 작업: 10_helm_values_준비.md (Phase 3)
-# 용도: ChromaDB Chart 설정
-
-# TODO: Persistence 설정 (enabled: true, size: 10Gi)
+persistence:
+  enabled: true
+  size: 10Gi

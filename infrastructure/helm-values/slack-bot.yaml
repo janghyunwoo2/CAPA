@@ -2,6 +2,43 @@
 # 작업: 10_helm_values_준비.md (Phase 3)
 # 용도: Slack Bot Chart 설정
 
-# TODO: Image Repository (ECR)
-# TODO: Environment Variables (Slack Tokens - Secret)
-# TODO: ServiceAccount (IRSA)
+# Slack Bot Echo 버전 (MVP)
+replicaCount: 1
+
+image:
+  repository: <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/capa-slack-bot
+  tag: "latest"
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 3000
+
+# 환경 변수 (Slack Token은 Secret으로 관리)
+env:
+  - name: SLACK_BOT_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: slack-bot-secret # Terraform에서 생성한 Secret 이름
+        key: bot-token
+  - name: SLACK_APP_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: slack-bot-secret # Terraform에서 생성한 Secret 이름
+        key: app-token
+
+# IRSA
+serviceAccount:
+  create: true
+  name: slack-bot-sa
+  # annotations:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/capa-bot-role
+
+# 리소스
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi

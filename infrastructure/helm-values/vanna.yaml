@@ -1,7 +1,11 @@
-# Vanna AI Helm Values
-# 작업: 10_helm_values_준비.md (Phase 3)
-# 용도: Vanna AI API Chart 설정
+serviceAccount:
+  create: true
+  name: vanna-sa
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/capa-vanna-role
 
-# TODO: ServiceAccount (IRSA)
-# TODO: ChromaDB 연결 설정 (CHROMADB_HOST, CHROMADB_PORT)
-# TODO: Image Repository
+env:
+  - name: CHROMADB_HOST
+    value: "chromadb"
+  - name: CHROMADB_PORT
+    value: "8000"
