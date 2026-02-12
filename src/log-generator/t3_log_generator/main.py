@@ -1,6 +1,6 @@
 """
 Ad Log Generator - 메인 실행 스크립트 
-로그 생성 + Kinesis 전송 (환경 변수로 제어)
+로그 생성 + Kinesis 전송 (환경 변수로 제어) 
 """
 
 import time
