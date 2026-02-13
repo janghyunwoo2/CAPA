@@ -8,14 +8,6 @@
 - **광고 지면 관련**: inventory_id (지면에 이미지가 들어가는 곳)
 - **광고 비용**: CPC (Cost Per Click)
 
-#### (참고) RTB (Real-Time Bidding) 관련
-- **경매 시스템**: 몰로코 등 경쟁사 존재
-- **AI 활용**: 딥러닝 모델로 경매가 판단 및 예측 모델 개발
-- **주요 필드**:
-  - `adx_id`: RTB exchange 식별자
-  - `bid_logic`: 비딩 요청 시 사용한 로직
-  - `bid_cost`: 입찰 비용 (≠ 예산)
-
 ### 핵심 지표
 - **CTR (Click-Through Rate)**: 클릭수 / 노출수 * 100
 - **CVR (Conversion Rate)**: 전환율 (시간 단위 집계에서는 적용 X)
@@ -24,6 +16,14 @@
 ### 이미지 크기와 광고 효과
 - Creative 사이즈가 광고 효과에 영향
 
+### (참고) RTB (Real-Time Bidding) 관련
+- **경매 시스템**: 몰로코 등 경쟁사 존재
+- **AI 활용**: 딥러닝 모델로 경매가 판단 및 예측 모델 개발
+- **주요 필드**:
+  - `adx_id`: RTB exchange 식별자
+  - `bid_logic`: 비딩 요청 시 사용한 로직
+  - `bid_cost`: 입찰 비용 (≠ 예산)
+  
 ## 2. DB 테이블 구조
 
 ### 원천 로그 테이블
@@ -95,12 +95,7 @@ def hourly_ad_etl_dag():
 2. ad_combined_log에서 집계하여 ad_combined_log_summary 생성
 3. 시간별 CTR 계산 및 저장
 
-## 4. 미팅 일정
-
-- **2026년 2월 19일(목) 오후 4시**: 온라인 미팅
-- **2026년 2월 21일(토)**: 오프라인 미팅
-
-## 5. LLM/Text-to-SQL 시스템
+## 4. LLM/Text-to-SQL 시스템
 
 ### 시스템 구성
 - **LLM 프롬프트 구성**:
@@ -113,17 +108,12 @@ def hourly_ad_etl_dag():
   3. 생성된 SQL을 Athena로 실행
   4. 실행 결과를 LLM에게 전달하여 최종 분석
 
-### 멘토님이 사용하는 LLM
-- Claude Code
-- Anthropic
-- Gemini
-
 ### 중요 포인트
 - text-to-sql은 Airflow와 별개 시스템
 - Glue에서 테이블 관리
 - Redash에서 대시보드 생성
 
-## 6. 빅데이터 처리 철학
+## 5. 빅데이터 처리 철학
 
 ### 핵심 원칙
 - **실시간성 로그는 각자 저장**: 처음부터 합쳐서 저장하려고 하면 복잡도 증가
@@ -137,8 +127,7 @@ def hourly_ad_etl_dag():
 ### 관련 링크
 - https://dabletech.oopy.io/14a5bbc0-e5c2-80a7-93ce-c7237cd218c8
 
-## 7. 주요 쿼리 예시
-
+## 6. 주요 쿼리 예시
 ```sql
 SELECT cre_id, 
        SUM(impressions) as impressions,
