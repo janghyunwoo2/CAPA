@@ -75,9 +75,8 @@ x-airflow-common:
     # The following line can be used to set a custom config file, stored in the local config folder
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
   volumes:
-    # Mount only DAG code, exclude tests from being parsed
-    - ${AIRFLOW_PROJ_DIR:-.}/dags/airflow_dag.py:/opt/airflow/dags/airflow_dag.py
-    - ${AIRFLOW_PROJ_DIR:-.}/dags/script:/opt/airflow/dags/script
+    # Mount entire dags directory to include all DAG files
+    - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags
     - ${AIRFLOW_PROJ_DIR:-.}/logs:/opt/airflow/logs
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
