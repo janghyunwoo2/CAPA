@@ -93,7 +93,7 @@ resources:
 
 ### 3.2 Slack Bot Helm Values
 
-`infrastructure/helm-values/slack-bot.yaml`:
+`infrastructure/helm-values/slack-bot.yaml` (**generic-service 차트 사용**):
 
 ```yaml
 # Slack Bot Echo 버전 (MVP)
@@ -125,8 +125,8 @@ env:
 serviceAccount:
   create: true
   name: slack-bot-sa
-  # annotations:
-  #   eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/capa-bot-role
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/capa-bot-role
 
 # 리소스
 resources:
@@ -136,7 +136,7 @@ resources:
   requests:
     cpu: 100m
     memory: 128Mi
-    memory: 128Mi
+```
 
 ### 3.3 Redash Helm Values
 
@@ -147,7 +147,7 @@ serviceAccount:
   create: true
   name: redash-sa
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/capa-redash-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/capa-redash-role
 
 postgresql:
   enabled: true
@@ -159,7 +159,7 @@ env:
 
 ### 3.4 Report Generator Helm Values
 
-`infrastructure/helm-values/report-generator.yaml`:
+`infrastructure/helm-values/report-generator.yaml` (**generic-service 차트 사용**):
 
 ```yaml
 replicaCount: 1
@@ -175,7 +175,7 @@ serviceAccount:
   create: true
   name: report-generator-sa
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/capa-report-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/capa-report-role
 ```
 
 ### 3.5 Vanna AI & ChromaDB Values
@@ -187,13 +187,13 @@ persistence:
   size: 10Gi
 ```
 
-`infrastructure/helm-values/vanna.yaml`:
+`infrastructure/helm-values/vanna.yaml` (**generic-service 차트 사용**):
 ```yaml
 serviceAccount:
   create: true
   name: vanna-sa
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/capa-vanna-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/capa-vanna-role
 
 env:
   - name: CHROMADB_HOST
@@ -202,10 +202,10 @@ env:
     value: "8000"
 ```
 
-### 3.3 Slack Bot Secret 생성
+### 3.6 Slack Bot Secret 생성
 
 ```powershell
-# Slack Token을 Kubernetes Secret으로 저장
+# Slack Token을 Kubernetes Secret으로 저장 (1회성)
 kubectl create secret generic slack-bot-secret `
     -n default `
     --from-literal=bot-token='xoxb-YOUR-BOT-TOKEN' `

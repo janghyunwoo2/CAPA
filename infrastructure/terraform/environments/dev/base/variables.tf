@@ -25,3 +25,17 @@ variable "alert_email" {
   type        = string
   default     = "admin@example.com" # TODO: 실제 이메일 주소로 변경
 }
+
+variable "slack_bot_token" {
+  description = "Slack Bot Token (xoxb-...)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "slack_app_token" {
+  description = "Slack App Level Token (xapp-...)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}

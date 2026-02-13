@@ -14,10 +14,10 @@
 
 ### 2.1 ChromaDB 배포
 
-**Terraform 파일**: `infrastructure/terraform/environments/dev/apps/helm-chromadb.tf`
+**Terraform 파일**: `infrastructure/terraform/environments/dev/base/10-applications.tf`
 
 ```bash
-cd infrastructure/terraform/environments/dev/apps
+cd infrastructure/terraform/environments/dev/base
 terraform apply -target=helm_release.chromadb
 ```
 - Persistent Volume (EBS)이 정상적으로 바인딩되었는지 확인 (`kubectl get pvc -n chromadb`)
@@ -33,8 +33,9 @@ terraform apply -target=helm_release.chromadb
    ```
 
 2. **Terraform 배포**:
-   **파일**: `infrastructure/terraform/environments/dev/apps/helm-vanna.tf`
+   **Terraform 파일**: `infrastructure/terraform/environments/dev/base/10-applications.tf`
    ```bash
+   cd infrastructure/terraform/environments/dev/base
    terraform apply -target=helm_release.vanna
    ```
 

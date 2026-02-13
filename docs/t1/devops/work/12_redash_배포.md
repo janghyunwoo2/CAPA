@@ -14,10 +14,14 @@
 
 ### 2.1 Helm 배포
 
-**Terraform 파일**: `infrastructure/terraform/environments/dev/apps/helm-redash.tf`
+**Terraform 파일**: `infrastructure/terraform/environments/dev/base/10-applications.tf`
+**Values 파일**: `infrastructure/helm-values/redash.yaml`
 
-```bash
-cd infrastructure/terraform/environments/dev/apps
+```powershell
+# Base 디렉토리로 이동
+cd infrastructure\terraform\environments\dev\base
+
+# Redash 모듈만 타겟팅하여 배포
 terraform apply -target=helm_release.redash
 ```
 

@@ -46,7 +46,16 @@ docker push <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/capa-report-genera
 
 ### 2.2 Helm 배포
 
-**Terraform 파일**: `infrastructure/terraform/environments/dev/apps/helm-report-generator.tf` (신규 작성 필요)
+**Terraform 파일**: `infrastructure/terraform/environments/dev/base/10-applications.tf`
+**Values 파일**: `infrastructure/helm-values/report-generator.yaml`
+
+```powershell
+# Base 디렉토리로 이동
+cd infrastructure\terraform\environments\dev\base
+
+# Report Generator 배포
+terraform apply -target=helm_release.report_generator
+```
 
 ```hcl
 resource "helm_release" "report_generator" {
