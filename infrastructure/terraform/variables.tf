@@ -8,6 +8,18 @@ variable "aws_region" {
   default     = "ap-northeast-2"
 }
 
+variable "aws_access_key" {
+  description = "AWS Access Key ID"
+  type        = string
+  sensitive   = true
+}
+
+variable "aws_secret_key" {
+  description = "AWS Secret Access Key"
+  type        = string
+  sensitive   = true
+}
+
 variable "project_name" {
   description = "Project name"
   type        = string
@@ -18,6 +30,12 @@ variable "environment" {
   description = "Environment (dev/staging/prod)"
   type        = string
   default     = "dev"
+}
+
+variable "team_members_arns" {
+  description = "EKS 접근 권한을 부여할 팀원들의 IAM ARN 목록 (terraform.tfvars에서 설정)"
+  type        = list(string)
+  default     = []
 }
 
 variable "alert_email" {

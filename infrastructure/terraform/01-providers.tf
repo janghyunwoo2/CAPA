@@ -1,6 +1,8 @@
-# Terraform Providers Configuration
-# 작업: 04_iam_roles.md (Phase 1)
-# 용도: AWS Provider 설정 및 기본 태그 정의
+# ==============================================================================
+# CAPA Infrastructure - Terraform Provider Configuration
+# ==============================================================================
+# AWS Provider 설정 및 공통 변수 정의
+# ==============================================================================
 
 terraform {
   required_version = ">= 1.0.0"
@@ -8,7 +10,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "5.80.0"
+      version = "~> 5.0"
     }
     helm = {
       source  = "hashicorp/helm"
@@ -21,8 +23,13 @@ terraform {
   }
 }
 
+# ------------------------------------------------------------------------------
+# AWS Provider
+# ------------------------------------------------------------------------------
 provider "aws" {
-  region = var.aws_region
+  region     = var.aws_region
+  access_key = var.aws_access_key
+  secret_key = var.aws_secret_key
 
   default_tags {
     tags = {
@@ -33,7 +40,9 @@ provider "aws" {
   }
 }
 
-# Provider 설정을 위한 데이터 소스 (EKS 인증 토큰)
+# ------------------------------------------------------------------------------
+# Kubernetes & Helm Providers (EKS 연결용)
+# ------------------------------------------------------------------------------
 data "aws_eks_cluster" "cluster" {
   name = aws_eks_cluster.main.name
 }
