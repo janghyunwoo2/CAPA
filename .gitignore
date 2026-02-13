@@ -234,3 +234,27 @@ override.tf.json
 *_override.tf.json
 
 # prompts는 팀 공유 시 주석 해제
+*.tfplan
+tfplan
+# Terraform crash logs
+crash.log
+# Additional Terraform ignore patterns
+*.tfvars
+*.tfvars.json
+*.auto.tfvars
+*.auto.tfvars.json
+
+# .terraform.lock.hcl is typically committed, but you can ignore it if maintaining cross-platform providers is difficult
+# .terraform.lock.hcl
+
+# Local Backend Lock Info (sensitive)
+.terraform.tfstate.lock.info
+
+# CLI configuration files
+.terraformrc
+terraform.rc
+
+# Generated files
+apply.log
+apply_output.txt
+

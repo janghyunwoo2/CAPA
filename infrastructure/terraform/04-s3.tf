@@ -2,10 +2,6 @@
 # 작업: 05_data_pipeline_기본.md (Phase 1)
 # 용도: Parquet 데이터 저장소
 
-# ============================================
-# Account ID 조회 (Bucket 이름에 사용)
-# ============================================
-data "aws_caller_identity" "current" {}
 
 # ============================================
 # 1. S3 Bucket
@@ -38,6 +34,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
   rule {
     id     = "delete-old-logs"
     status = "Enabled"
+
+    filter {}
 
     expiration {
       days = 90 # 90일 후 삭제

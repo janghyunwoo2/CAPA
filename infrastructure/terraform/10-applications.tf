@@ -92,9 +92,19 @@ resource "helm_release" "airflow" {
   # StorageClass 및 IAM Role dependency 명시
   depends_on = [
     kubernetes_storage_class.gp2,
-    aws_iam_role_policy_attachment.airflow_s3
+    aws_iam_role_policy_attachment.airflow_s3_access
   ]
 }
+
+# Data source to retrieve Airflow Webserver LoadBalancer URL
+data "kubernetes_service" "airflow_webserver" {
+  metadata {
+    name      = "airflow-webserver"
+    namespace = kubernetes_namespace.airflow.metadata[0].name
+  }
+  depends_on = [helm_release.airflow]
+}
+
 
 /*
 # Redash

@@ -103,3 +103,21 @@ output "cloudwatch_alarm_firehose_delivery_failure" {
   description = "CloudWatch Alarm for Firehose delivery failure"
   value       = aws_cloudwatch_metric_alarm.firehose_delivery_failure.arn
 }
+
+output "cloudwatch_alarm_eks_node_cpu_high" {
+  description = "CloudWatch Alarm for EKS Node CPU high"
+  value       = aws_cloudwatch_metric_alarm.eks_node_cpu_high.arn
+}
+
+# ============================================
+# Airflow Outputs
+# ============================================
+output "airflow_webserver_url" {
+  description = "Airflow Webserver URL (LoadBalancer)"
+  value       = "http://${data.kubernetes_service.airflow_webserver.status.0.load_balancer.0.ingress.0.hostname}:8080"
+}
+
+output "airflow_admin_account" {
+  description = "Airflow Admin Credentials (Default)"
+  value       = "admin / admin"
+}
