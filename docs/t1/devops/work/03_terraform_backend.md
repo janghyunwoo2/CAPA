@@ -2,244 +2,99 @@
 
 > **Phase**: 1 (Terraform Base Layer)  
 > **담당**: Infra Architect  
-> **예상 소요**: 10분  
+> **예상 소요**: 5분  
 > **선행 작업**: 02_저장소_구조_설정.md
+> **수정 이력**: 2026-02-13 (Windows 환경 이슈로 Local State 전환)
 
 ---
 
 ## 1. 목표
 
-Terraform State를 안전하게 저장하고 동시 실행을 방지하기 위해 S3 Backend + DynamoDB Locking을 설정합니다.
+개발 환경(Windows)의 안정적인 Terraform 실행을 위해 **Local State**를 사용하도록 설정합니다.
+*(기존 S3 + DynamoDB Backend는 Windows 환경에서의 Locking 문제로 인해 보류되었습니다.)*
 
 ---
 
-## 2. 왜 필요한가?
+## 2. 왜 Local State인가?
 
-| 항목 | Local State | S3 Backend (권장) |
-|------|-------------|-------------------|
+| 항목 | Local State (현재 선택) | S3 Backend (Ops 권장) |
+|------|-------------------------|-------------------|
 | **State 저장 위치** | 로컬 PC (`.tfstate` 파일) | S3 Bucket (원격) |
-| **팀 협업** | ❌ 공유 불가 | ✅ 팀원 모두 동일 State 사용 |
-| **동시 실행 방지** | ❌ 충돌 위험 | ✅ DynamoDB Locking |
-| **State 유실** | ❌ PC 고장 시 복구 불가 | ✅ S3 버전 관리 |
+| **Windows 호환성** | ✅ 안정적 (파일 락킹) | ❌ 불안정 (Process Hang, Lock 이슈) |
+| **팀 협업** | ❌ 공유 불가 (1인 개발 적합) | ✅ 팀원 모두 동일 State 사용 |
+| **설정 복잡도** | ✅ 매우 낮음 | ⚠️ 높음 (S3, DynamoDB 필요) |
+
+> **결정 사항**: 1인 개발/DevOps 초기 단계 및 Windows 환경 특성을 고려하여 **Local State**를 기본으로 사용합니다. 향후 운영 환경(Production) 구축 시 Linux 기반 CI/CD에서 S3 Backend로 전환합니다.
 
 ---
 
 ## 3. 실행 단계
 
-### 3.1 AWS 콘솔에서 S3 Bucket 생성
+### 3.1 Backend 설정 파일 수정
 
-**방법 1: AWS CLI (권장)**
-```powershell
-# S3 Bucket 생성
-aws s3api create-bucket `
-    --bucket capa-terraform-state-<YOUR_ACCOUNT_ID> `
-    --region ap-northeast-2 `
-    --create-bucket-configuration LocationConstraint=ap-northeast-2
-
-# 버전 관리 활성화
-aws s3api put-bucket-versioning `
-    --bucket capa-terraform-state-<YOUR_ACCOUNT_ID> `
-    --versioning-configuration Status=Enabled
-
-# 암호화 활성화
-aws s3api put-bucket-encryption `
-    --bucket capa-terraform-state-<YOUR_ACCOUNT_ID> `
-    --server-side-encryption-configuration '{
-        "Rules": [{
-            "ApplyServerSideEncryptionByDefault": {
-                "SSEAlgorithm": "AES256"
-            }
-        }]
-    }'
-```
-
-**방법 2: Terraform으로 생성 (추천)**
-```hcl
-# infrastructure/terraform/bootstrap/backend.tf
-resource "aws_s3_bucket" "terraform_state" {
-  bucket = "capa-terraform-state-${data.aws_caller_identity.current.account_id}"
-  
-  tags = {
-    Name    = "CAPA Terraform State"
-    Project = "CAPA"
-  }
-}
-
-resource "aws_s3_bucket_versioning" "terraform_state" {
-  bucket = aws_s3_bucket.terraform_state.id
-  
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" {
-  bucket = aws_s3_bucket.terraform_state.id
-  
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-  }
-}
-
-data "aws_caller_identity" "current" {}
-```
-
-### 3.2 DynamoDB Table 생성
-
-```powershell
-# DynamoDB Table 생성 (State Locking용)
-aws dynamodb create-table `
-    --table-name capa-terraform-lock `
-    --attribute-definitions AttributeName=LockID,AttributeType=S `
-    --key-schema AttributeName=LockID,KeyType=HASH `
-    --billing-mode PAY_PER_REQUEST `
-    --region ap-northeast-2
-```
-
-**Terraform으로 생성**:
-```hcl
-# infrastructure/terraform/bootstrap/backend.tf (추가)
-resource "aws_dynamodb_table" "terraform_lock" {
-  name         = "capa-terraform-lock"
-  billing_mode = "PAY_PER_REQUEST"
-  hash_key     = "LockID"
-  
-  attribute {
-    name = "LockID"
-    type = "S"
-  }
-  
-  tags = {
-    Name    = "CAPA Terraform Lock Table"
-    Project = "CAPA"
-  }
-}
-```
-
-### 3.3 Terraform Backend 설정 파일 생성
-
-`infrastructure/terraform/environments/dev/base/backend.tf`:
+`infrastructure/terraform/environments/dev/base/backend.tf` 파일을 아래와 같이 작성(또는 수정)합니다. S3 관련 블록은 주석 처리합니다.
 
 ```hcl
+# infrastructure/terraform/environments/dev/base/backend.tf
 terraform {
-  backend "s3" {
-    bucket         = "capa-terraform-state-123456789012"  # YOUR_ACCOUNT_ID로 변경
-    key            = "dev/base/terraform.tfstate"
-    region         = "ap-northeast-2"
-    dynamodb_table = "capa-terraform-lock"
-    encrypt        = true
-  }
+  # backend "s3" {
+  #   bucket         = "capa-terraform-state-827913617635"
+  #   key            = "dev/base/terraform.tfstate"
+  #   region         = "ap-northeast-2"
+  #   dynamodb_table = "capa-terraform-lock"
+  #   encrypt        = true
+  # }
 }
 ```
 
-### 3.4 Backend 초기화
+### 3.2 Backend 초기화 및 마이그레이션
+
+기존에 S3 Backend를 시도했거나 설정이 남아있다면, Local로 상태를 가져와야 합니다.
 
 ```powershell
 cd infrastructure\terraform\environments\dev\base
 
-# Backend 초기화
-terraform init
-
-# 예상 출력:
-# Initializing the backend...
-# Successfully configured the backend "s3"!
+# Backend를 로컬로 마이그레이션 (State 파일 다운로드)
+terraform init -migrate-state
 ```
+
+### 3.3 (옵션) 기존 원격 리소스 정리
+
+이미 생성된 S3 버킷과 DynamoDB 테이블은 비용 절감을 위해 삭제하거나 남겨둘 수 있습니다. (현재는 유지 권장)
 
 ---
 
 ## 4. 검증 방법
 
-### 4.1 S3 Bucket 확인
+### 4.1 terraform.tfstate 확인
 
 ```powershell
-# S3 Bucket 존재 확인
-aws s3 ls | Select-String "capa-terraform-state"
-
-# 예상 출력: capa-terraform-state-123456789012
+# 로컬 디렉토리에 파일 존재 확인
+Get-ChildItem terraform.tfstate
 ```
 
-### 4.2 DynamoDB Table 확인
+### 4.2 Terraform 동작 확인
 
 ```powershell
-# DynamoDB Table 확인
-aws dynamodb describe-table --table-name capa-terraform-lock --region ap-northeast-2
-
-# 예상 출력: TableStatus: "ACTIVE"
+terraform validate
+terraform plan
 ```
-
-### 4.3 Terraform Backend 연결 확인
-
-```powershell
-cd infrastructure\terraform\environments\dev\base
-
-# Backend 상태 확인
-terraform init
-
-# 성공 시:
-# Backend configuration changed!
-# Terraform has been successfully initialized!
-```
-
-### 4.4 성공 기준
-
-- [ ] S3 Bucket `capa-terraform-state-*` 생성됨
-- [ ] S3 버전 관리 활성화됨
-- [ ] DynamoDB Table `capa-terraform-lock` 생성됨
-- [ ] `terraform init` 성공
-- [ ] `.terraform/` 폴더 생성됨
+* 위 명령어 실행 시 `Error acquiring the state lock` 에러 없이 진행되어야 함.
 
 ---
 
-## 5. 실패 시 대응
+## 5. 실패 시 대응 (Windows Lock 이슈)
 
-| 오류 | 원인 | 해결 방법 |
-|------|------|-----------|
-| `BucketAlreadyExists` | S3 Bucket 이름 중복 | Account ID를 suffix로 추가 |
-| `AccessDenied` | IAM 권한 부족 | S3, DynamoDB 권한 확인 |
-| `Error loading state` | Backend 미설정 | `backend.tf` 파일 확인 |
-| `Error locking state` | DynamoDB Table 없음 | Table 생성 확인 |
+Local State 사용 중에도 Terraform 프로세스가 비정상 종료되면 Lock이 남을 수 있습니다.
 
----
-
-## 6. 추가 설정 (선택사항)
-
-### 6.1 S3 Lifecycle Policy (비용 절감)
-
-```powershell
-# 90일 이상 된 State 버전 삭제
-aws s3api put-bucket-lifecycle-configuration `
-    --bucket capa-terraform-state-<YOUR_ACCOUNT_ID> `
-    --lifecycle-configuration '{
-        "Rules": [{
-            "Id": "DeleteOldVersions",
-            "Status": "Enabled",
-            "NoncurrentVersionExpiration": {
-                "NoncurrentDays": 90
-            }
-        }]
-    }'
-```
+| 오류 | 해결 방법 |
+|------|-----------|
+| `Error acquiring the state lock` | 1. `Stop-Process -Name terraform -Force` (좀비 프로세스 종료)<br>2. `.terraform.tfstate.lock.info` 파일 삭제 |
+| State 파일 유실 | `terraform.tfstate.backup` 파일을 `terraform.tfstate`로 복사하여 복구 |
 
 ---
 
-## 7. 다음 단계
+## 6. 다음 단계
 
-✅ **Terraform Backend 설정 완료** → `04_iam_roles.md`로 이동
+✅ **Terraform Backend 설정(Local) 완료** → `04_iam_roles.md`로 이동
 
----
-
-## 8. 결과 기록
-
-**실행자**: _______________  
-**실행 일시**: _______________  
-**결과**: ⬜ 성공 / ⬜ 실패  
-
-**S3 Bucket 이름**: `capa-terraform-state-_______________`  
-**DynamoDB Table**: `capa-terraform-lock`
-
-**메모**:
-```
-(실행 로그, 발생한 이슈 기록)
-```

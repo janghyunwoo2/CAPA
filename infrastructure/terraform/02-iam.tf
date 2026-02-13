@@ -48,12 +48,40 @@ resource "aws_iam_role_policy_attachment" "eks_node_policies" {
     "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
     "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
     "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
-    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
-    "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   ])
 
   policy_arn = each.value
   role       = aws_iam_role.eks_node.name
+}
+
+# ============================================
+# 3. EBS CSI Driver IAM Role (IRSA)
+# ============================================
+resource "aws_iam_role" "ebs_csi_driver" {
+  name = "capa-ebs-csi-driver-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Federated = aws_iam_openid_connect_provider.eks.arn
+      }
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Condition = {
+        StringEquals = {
+          "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa",
+          "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" = "sts.amazonaws.com"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_csi_driver_policy" {
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+  role       = aws_iam_role.ebs_csi_driver.name
 }
 
 # ============================================
@@ -150,6 +178,66 @@ resource "aws_iam_role_policy" "alarm_policy" {
 }
 
 # ============================================
-# Note: IRSA Roles (Airflow, Redash, Vanna, etc.)는 
+# 5. Airflow IRSA Role
+# ============================================
+resource "aws_iam_role" "airflow" {
+  name = "capa-airflow-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRoleWithWebIdentity"
+      Effect = "Allow"
+      Principal = {
+        Federated = aws_iam_openid_connect_provider.eks.arn
+      }
+      Condition = {
+        StringEquals = {
+          "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" = [
+            "system:serviceaccount:airflow:airflow-sa",
+            "system:serviceaccount:airflow:airflow-scheduler",
+            "system:serviceaccount:airflow:airflow-webserver",
+            "system:serviceaccount:airflow:airflow-triggerer",
+            "system:serviceaccount:airflow:airflow-worker"
+          ]
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_policy" "airflow_s3" {
+  name        = "capa-airflow-s3-policy"
+  description = "Airflow S3 access for data lake"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:PutObjectAcl",
+          "s3:GetObject",
+          "s3:GetBucketLocation",
+          "s3:ListBucket",
+          "s3:DeleteObject"
+        ]
+        Resource = [
+          aws_s3_bucket.data_lake.arn,
+          "${aws_s3_bucket.data_lake.arn}/*"
+        ]
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "airflow_s3" {
+  policy_arn = aws_iam_policy.airflow_s3.arn
+  role       = aws_iam_role.airflow.name
+}
+
+# ============================================
+# Note: IRSA Roles (Redash, Vanna, etc.)는 
 # EKS OIDC Provider 생성 후 추가 예정 (작업 06 이후)
 # ============================================
