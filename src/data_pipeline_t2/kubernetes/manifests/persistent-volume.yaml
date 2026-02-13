@@ -1,0 +1,61 @@
+# PersistentVolume 및 PersistentVolumeClaim 설정
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: airflow-data-pv
+  labels:
+    app: airflow
+    component: data-storage
+spec:
+  capacity:
+    storage: 20Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany  # 여러 Pod에서 동시 접근 가능
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: airflow-data
+  # 로컬 스토리지 사용 시
+  # hostPath:
+  #   path: /mnt/airflow-data
+  # AWS EBS 사용 시
+  # awsElasticBlockStore:
+  #   volumeID: vol-xxx
+  #   fsType: ext4
+  # NFS 사용 시 (추천)
+  nfs:
+    server: nfs-server.example.com
+    path: /exports/airflow-data
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: airflow-data-pvc
+  namespace: airflow
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: airflow-data
+  resources:
+    requests:
+      storage: 20Gi
+  selector:
+    matchLabels:
+      app: airflow
+      component: data-storage
+
+---
+# AWS EFS를 사용하는 경우의 StorageClass
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: efs-sc
+provisioner: efs.csi.aws.com
+parameters:
+  provisioningMode: efs-ap
+  fileSystemId: fs-xxxxxxxx
+  directoryPerms: "1000"
+  gidRangeStart: "1000"
+  gidRangeEnd: "2000"
+  basePath: "/airflow-data"

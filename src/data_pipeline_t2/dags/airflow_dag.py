@@ -137,7 +137,7 @@ def task_visualize_outputs(**context) -> None:
 # ============================================================================
 
 with DAG(
-    dag_id="capa_t2_pipeline",
+    dag_id="pipeline_t2_local",
     default_args=DEFAULT_ARGS,
     description="CAPA T2 로컬 데이터 파이프라인: 로그 생성 → 처리 → 분석 → 시각화",
     schedule=None,  # 수동 실행 또는 스케줄 설정 가능 (예: "0 2 * * *" = 매일 2시)

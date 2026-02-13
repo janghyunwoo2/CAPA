@@ -3,4 +3,4 @@ numpy
 pyarrow
 matplotlib
 seaborn
-apache-airflow==2.5.3
+apache-airflow>=2.9.0
