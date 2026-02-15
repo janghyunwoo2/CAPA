@@ -78,3 +78,13 @@ variable "redash_secret_key" {
   type        = string
   sensitive   = true
 }
+
+# ------------------------------------------------------------------------------
+# Vanna AI Secrets
+# ------------------------------------------------------------------------------
+variable "anthropic_api_key" {
+  description = "Anthropic API Key for Claude (Vanna AI)"
+  type        = string
+  sensitive   = true
+}
+

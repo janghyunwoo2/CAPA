@@ -1,0 +1,98 @@
+# Report Generator Kubernetes Manifest
+# 이 파일은 참고용입니다. 실제 배포는 Terraform (11-k8s-apps.tf)을 사용합니다.
+# 수동 배포 시: kubectl apply -f report-generator-deployment.yaml
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: report
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: report-generator-sa
+  namespace: report
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::827913617635:role/capa-report-generator-role
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: report-generator
+  namespace: report
+  labels:
+    app: report-generator
+spec:
+  type: LoadBalancer
+  selector:
+    app: report-generator
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: report-generator
+  namespace: report
+  labels:
+    app: report-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: report-generator
+  template:
+    metadata:
+      labels:
+        app: report-generator
+    spec:
+      serviceAccountName: report-generator-sa
+      containers:
+        - name: report-generator
+          image: 827913617635.dkr.ecr.ap-northeast-2.amazonaws.com/capa-report-generator:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            - name: ENVIRONMENT
+              value: "dev"
+            - name: AWS_REGION
+              value: "ap-northeast-2"
+            - name: ATHENA_DATABASE
+              value: "capa_db"
+            - name: REPORT_S3_BUCKET
+              value: "capa-data-lake-827913617635"
+            - name: LOG_LEVEL
+              value: "INFO"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
