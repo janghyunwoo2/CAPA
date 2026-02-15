@@ -12,13 +12,13 @@ resource "kubernetes_namespace" "airflow" {
   }
 }
 
-/*
 resource "kubernetes_namespace" "redash" {
   metadata {
     name = "redash"
   }
 }
 
+/*
 resource "kubernetes_namespace" "ai_apps" {
   metadata {
     name = "ai-apps" # Shared namespace for Vanna, ChromaDB, ReportGen
@@ -106,11 +106,10 @@ data "kubernetes_service" "airflow_webserver" {
 }
 
 
-/*
 # Redash
 resource "helm_release" "redash" {
   name       = "redash"
-  repository = "https://redash.github.io/contrib-helm-chart"
+  repository = "https://getredash.github.io/contrib-helm-chart/"
   chart      = "redash"
   version    = "3.0.0"
   namespace  = kubernetes_namespace.redash.metadata[0].name
@@ -118,8 +117,44 @@ resource "helm_release" "redash" {
   values = [
     file("${path.module}/../helm-values/redash.yaml")
   ]
+
+  set_sensitive {
+    name  = "postgresql.postgresqlPassword"
+    value = var.redash_postgresql_password
+  }
+
+  set_sensitive {
+    name  = "redash.cookieSecret"
+    value = var.redash_cookie_secret
+  }
+
+  set_sensitive {
+    name  = "redash.secretKey"
+    value = var.redash_secret_key
+  }
+
+  set {
+    name  = "redash.databaseUrl"
+    value = "postgresql://redash:${var.redash_postgresql_password}@redash-postgresql/redash"
+  }
+
+  set {
+    name  = "redash.redisUrl"
+    value = "redis://redash-redis-master:6379/0"
+  }
+
+  set {
+    name  = "redash.env.REDASH_DATABASE_URL"
+    value = "postgresql://redash:${var.redash_postgresql_password}@redash-postgresql/redash"
+  }
+
+  set {
+    name  = "redash.env.REDASH_REDIS_URL"
+    value = "redis://redash-redis-master:6379/0"
+  }
 }
 
+/*
 # ChromaDB (Vector DB for AI)
 resource "helm_release" "chromadb" {
   name       = "chromadb"

@@ -11,6 +11,9 @@ postgresql:
     registry: 827913617635.dkr.ecr.ap-northeast-2.amazonaws.com
     repository: capa/postgres
     tag: "11"
+  persistence:
+    enabled: true
+    size: 2Gi
 
 # Redis (비활성화 - LocalExecutor 사용)
 redis:

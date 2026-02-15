@@ -27,43 +27,29 @@ terraform apply -target=helm_release.redash
 
 ### 2.2 접속 및 초기 설정
 
-1. **포트 포워딩**:
-   ```bash
-   kubectl port-forward -n redash svc/redash 5000:5000
-   ```
-2. **브라우저 접속**: `http://localhost:5000`
-3. **관리자 계정 생성**: 초기 설정 화면 진행
+1. **외부 접속**: 
+   - AWS LoadBalancer를 통해 직접 접속이 가능합니다.
+   - **주소**: [http://a312731fa19694e56a1e8aec234ada93-547846460.ap-northeast-2.elb.amazonaws.com:5000](http://a312731fa19694e56a1e8aec234ada93-547846460.ap-northeast-2.elb.amazonaws.com:5000)
+2. **관리자 계정 생성**: 초기 설정 화면 진행
 
 ### 2.3 Athena 데이터 소스 연결
 
-1. **Settings** -> **Data Sources** -> **New Data Source**
-2. **Amazon Athena** 선택
-3. **설정값 입력**:
-   - AWS Region: `ap-northeast-2`
-   - S3 Staging Directory: `s3://capa-athena-results/` (terraform output 참조)
-   - Workgroup: `primary` (또는 생성한 workgroup)
-   - *Access Key/Secret Key는 IRSA 사용 시 비워둠 (권장)*
+(기존 내용 유지)
 
 ## 3. 검증
 
 ### 3.1 연결 테스트
+- 모든 파드 정상 실행 확인 (`kubectl get pods -n redash`)
+- LoadBalancer 접속 및 로그인 화면 출력 확인
 
-Redash 화면에서 "Test Connection" 클릭 -> **Success** 확인
+## 4. 문제 해결 (Troubleshooting)
 
-### 3.2 쿼리 실행 테스트
-
-**New Query**:
-```sql
-SELECT * FROM capa_logs.impressions LIMIT 10;
-```
-- 결과가 표출되면 성공
-
-## 4. 문제 해결
-
-- **연결 실패 (Permission Denied)**:
-  - Redash Pod의 ServiceAccount에 IAM Role이 제대로 연결되었는지 확인
-  - `kubectl describe sa -n redash redash-sa`
-  - IAM Role의 Trust Policy 확인
+- **ImagePullBackOff (Redis/Postgres)**: 
+  - 공인 ECR 이미지 접근 문제로 인해 Private ECR(`capa/redis`, `capa/postgres`)로 복사하여 사용.
+- **Internal Server Error (DB Connection)**:
+  - Redash가 유닉스 소켓으로 접속 시도하는 문제 해결을 위해 `REDASH_DATABASE_URL`을 명시적으로 설정.
+- **DB 초기화 오류**:
+  - `python manage.py database create_tables` 명령을 통해 수동으로 테이블 초기화 완료.
 
 ---
 

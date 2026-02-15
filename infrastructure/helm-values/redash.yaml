@@ -2,11 +2,99 @@ serviceAccount:
   create: true
   name: redash-sa
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/capa-redash-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::827913617635:role/capa-redash-role
 
 postgresql:
   enabled: true
+  image:
+    registry: 827913617635.dkr.ecr.ap-northeast-2.amazonaws.com
+    repository: capa/postgres
+    tag: "11"
+  postgresqlUsername: "redash"
+  postgresqlDatabase: "redash"
+  postgresqlPassword: "" # Managed by Terraform (set_sensitive)
+  persistence:
+    enabled: true
+    storageClass: "gp2"
+    size: 2Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 200m
+      memory: 512Mi
 
-env:
-  REDASH_COOKIE_SECRET: "random-secret"
-  REDASH_SECRET_KEY: "random-secret"
+redis:
+  enabled: true
+  image:
+    registry: 827913617635.dkr.ecr.ap-northeast-2.amazonaws.com
+    repository: capa/redis
+    tag: "6.0.9"
+  auth:
+    enabled: false # Redis 패스워드 비활성화 (Redash 기본 연결 설정과 맞춤)
+  master:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+server:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  readinessProbe:
+    initialDelaySeconds: 30
+    timeoutSeconds: 15
+    periodSeconds: 15
+  livenessProbe:
+    initialDelaySeconds: 60
+    timeoutSeconds: 15
+    periodSeconds: 20
+
+scheduler:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+adhocWorker:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+scheduledWorker:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+genericWorker:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+service:
+  type: LoadBalancer
+  port: 5000

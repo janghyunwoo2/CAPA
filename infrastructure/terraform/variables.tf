@@ -57,3 +57,24 @@ variable "slack_app_token" {
   sensitive   = true
   default     = ""
 }
+
+# ------------------------------------------------------------------------------
+# Redash Secrets
+# ------------------------------------------------------------------------------
+variable "redash_postgresql_password" {
+  description = "Password for Redash PostgreSQL database"
+  type        = string
+  sensitive   = true
+}
+
+variable "redash_cookie_secret" {
+  description = "Secret key for Redash cookie generation"
+  type        = string
+  sensitive   = true
+}
+
+variable "redash_secret_key" {
+  description = "Secret key for Redash data encryption"
+  type        = string
+  sensitive   = true
+}
