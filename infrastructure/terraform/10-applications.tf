@@ -18,6 +18,12 @@ resource "kubernetes_namespace" "redash" {
   }
 }
 
+resource "kubernetes_namespace" "chromadb" {
+  metadata {
+    name = "chromadb"
+  }
+}
+
 /*
 resource "kubernetes_namespace" "ai_apps" {
   metadata {
@@ -153,12 +159,6 @@ resource "helm_release" "redash" {
   set {
     name  = "redash.env.REDASH_REDIS_URL"
     value = "redis://redash-redis-master:6379/0"
-  }
-}
-
-resource "kubernetes_namespace" "chromadb" {
-  metadata {
-    name = "chromadb"
   }
 }
 

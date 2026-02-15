@@ -546,3 +546,199 @@ resource "kubernetes_deployment" "vanna_api" {
 }
 
 
+
+# =====================================================================================================================
+# Slack Bot (Socket Mode)
+# =====================================================================================================================
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Slack Bot Namespace
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "kubernetes_namespace" "slack_bot" {
+  metadata {
+    name = "slack-bot"
+  }
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Slack Bot - ECR Repository
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "aws_ecr_repository" "slack_bot" {
+  name                 = "capa-slack-bot"
+  image_tag_mutability = "MUTABLE"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  encryption_configuration {
+    encryption_type = "AES256"
+  }
+
+  lifecycle {
+    prevent_destroy = false
+  }
+}
+
+output "slack_bot_repository_url" {
+  value       = aws_ecr_repository.slack_bot.repository_url
+  description = "ECR repository URL for Slack Bot"
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Slack Bot - Secrets
+# ---------------------------------------------------------------------------------------------------------------------
+
+resource "kubernetes_secret" "slack_bot_secrets" {
+  metadata {
+    name      = "slack-bot-secrets"
+    namespace = kubernetes_namespace.slack_bot.metadata[0].name
+  }
+
+  data = {
+    slack-bot-token = var.slack_bot_token
+    slack-app-token = var.slack_app_token
+  }
+
+  type = "Opaque"
+}
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Slack Bot - Kubernetes Resources
+# ---------------------------------------------------------------------------------------------------------------------
+
+# Service (for Health Check & Internal Access)
+resource "kubernetes_service" "slack_bot" {
+  metadata {
+    name      = "slack-bot"
+    namespace = kubernetes_namespace.slack_bot.metadata[0].name
+    labels = {
+      app = "slack-bot"
+    }
+  }
+
+  spec {
+    selector = {
+      app = "slack-bot"
+    }
+
+    port {
+      name        = "http"
+      port        = 3000 # Flask Port
+      target_port = 3000
+      protocol    = "TCP"
+    }
+
+    type = "ClusterIP"
+  }
+}
+
+# Deployment
+resource "kubernetes_deployment" "slack_bot" {
+  metadata {
+    name      = "slack-bot"
+    namespace = kubernetes_namespace.slack_bot.metadata[0].name
+    labels = {
+      app = "slack-bot"
+    }
+  }
+
+  spec {
+    replicas = 1
+
+    selector {
+      match_labels = {
+        app = "slack-bot"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app = "slack-bot"
+        }
+      }
+
+      spec {
+        container {
+          name              = "slack-bot"
+          image             = "${aws_ecr_repository.slack_bot.repository_url}:latest"
+          image_pull_policy = "Always"
+
+          port {
+            name           = "http"
+            container_port = 3000
+            protocol       = "TCP"
+          }
+
+          # 환경 변수 (Secrets)
+          env {
+            name = "SLACK_BOT_TOKEN"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.slack_bot_secrets.metadata[0].name
+                key  = "slack-bot-token"
+              }
+            }
+          }
+          env {
+            name = "SLACK_APP_TOKEN"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.slack_bot_secrets.metadata[0].name
+                key  = "slack-app-token"
+              }
+            }
+          }
+
+          # 환경 변수 (Internal Service URLs)
+          env {
+            name  = "VANNA_API_URL"
+            value = "http://vanna-api.vanna.svc.cluster.local:8000"
+          }
+          env {
+            name  = "REPORT_API_URL"
+            value = "http://report-generator.report.svc.cluster.local:8000"
+          }
+
+          # 리소스 제한
+          resources {
+            requests = {
+              cpu    = "100m"
+              memory = "128Mi"
+            }
+            limits = {
+              cpu    = "500m"
+              memory = "512Mi"
+            }
+          }
+
+          # 헬스 체크 (/health)
+          liveness_probe {
+            http_get {
+              path = "/health"
+              port = "http"
+            }
+            initial_delay_seconds = 30
+            period_seconds        = 10
+            failure_threshold     = 3
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/health"
+              port = "http"
+            }
+            initial_delay_seconds = 10
+            period_seconds        = 5
+            failure_threshold     = 2
+          }
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_service.slack_bot, kubernetes_secret.slack_bot_secrets]
+}
