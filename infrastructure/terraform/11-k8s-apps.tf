@@ -483,7 +483,7 @@ resource "kubernetes_deployment" "vanna_api" {
           }
           env {
             name  = "CHROMA_HOST"
-            value = "chromadb-service.chromadb.svc.cluster.local"
+            value = "chromadb.chromadb.svc.cluster.local"
           }
           env {
             name  = "CHROMA_PORT"

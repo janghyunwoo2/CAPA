@@ -156,19 +156,30 @@ resource "helm_release" "redash" {
   }
 }
 
-/*
+resource "kubernetes_namespace" "chromadb" {
+  metadata {
+    name = "chromadb"
+  }
+}
+
 # ChromaDB (Vector DB for AI)
 resource "helm_release" "chromadb" {
   name       = "chromadb"
-  repository = "https://amikos-tech.github.io/helm-charts"
+  repository = "https://amikos-tech.github.io/chromadb-chart/"
   chart      = "chromadb"
-  namespace  = kubernetes_namespace.ai_apps.metadata[0].name
+  namespace  = kubernetes_namespace.chromadb.metadata[0].name
 
   values = [
     file("${path.module}/../helm-values/chromadb.yaml")
   ]
+
+  set {
+    name  = "persistence.size"
+    value = "5Gi" # Plan에 명시된 5Gi 사용
+  }
+
+  depends_on = [aws_eks_addon.ebs_csi]
 }
-*/
 
 # ---------------------------------------------------------------------------------------------------------------------
 # 4. Custom Applications (Generic Service)
