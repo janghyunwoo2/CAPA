@@ -117,7 +117,51 @@ output "airflow_webserver_url" {
   value       = "http://${data.kubernetes_service.airflow_webserver.status.0.load_balancer.0.ingress.0.hostname}:8080"
 }
 
+
 output "airflow_admin_account" {
   description = "Airflow Admin Credentials (Default)"
   value       = "admin / admin"
+}
+
+# ============================================
+# AI Application Endpoints (Internal)
+# ============================================
+
+output "vanna_api_internal_url" {
+  description = "Internal URL for Vanna AI API"
+  value       = "http://vanna-api.vanna.svc.cluster.local:8000"
+}
+
+output "report_generator_internal_url" {
+  description = "Internal URL for Report Generator"
+  value       = "http://report-generator.report.svc.cluster.local:8000"
+}
+
+output "slack_bot_internal_url" {
+  description = "Internal URL for Slack Bot (Health Check)"
+  value       = "http://slack-bot.slack-bot.svc.cluster.local:3000"
+}
+
+output "chromadb_internal_url" {
+  description = "Internal URL for ChromaDB"
+  value       = "http://chromadb.chromadb.svc.cluster.local:8000"
+}
+
+# ============================================
+# AI Application ECR Repositories
+# ============================================
+
+output "ecr_vanna_api_url" {
+  description = "ECR Repository URL for Vanna AI API"
+  value       = aws_ecr_repository.vanna_api.repository_url
+}
+
+output "ecr_report_generator_url" {
+  description = "ECR Repository URL for Report Generator"
+  value       = aws_ecr_repository.report_generator.repository_url
+}
+
+output "ecr_slack_bot_url" {
+  description = "ECR Repository URL for Slack Bot"
+  value       = aws_ecr_repository.slack_bot.repository_url
 }
