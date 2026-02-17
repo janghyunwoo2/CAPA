@@ -1,8 +1,7 @@
 serviceAccount:
   create: true
   name: redash-sa
-  annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::827913617635:role/capa-redash-role
+  annotations: {} # Managed by Terraform
 
 postgresql:
   enabled: true

@@ -77,7 +77,8 @@ resource "aws_iam_role_policy" "report_generator" {
         Action = [
           "s3:GetObject",
           "s3:PutObject",
-          "s3:ListBucket"
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
         ]
         Resource = [
           aws_s3_bucket.data_lake.arn,
@@ -89,7 +90,18 @@ resource "aws_iam_role_policy" "report_generator" {
         Action = [
           "athena:StartQueryExecution",
           "athena:GetQueryExecution",
-          "athena:GetQueryResults"
+          "athena:GetQueryResults",
+          "athena:StopQueryExecution"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "glue:GetDatabase",
+          "glue:GetTable",
+          "glue:GetTables",
+          "glue:GetPartitions"
         ]
         Resource = "*"
       },
@@ -100,7 +112,7 @@ resource "aws_iam_role_policy" "report_generator" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:*"
+        Resource = "*"
       }
     ]
   })
@@ -203,6 +215,10 @@ resource "kubernetes_deployment" "report_generator" {
           env {
             name  = "REPORT_S3_BUCKET"
             value = aws_s3_bucket.data_lake.id
+          }
+          env {
+            name  = "VANNA_API_URL"
+            value = "http://vanna-api.vanna.svc.cluster.local:8000"
           }
           env {
             name  = "LOG_LEVEL"
@@ -330,7 +346,8 @@ resource "aws_iam_role_policy" "vanna" {
         Action = [
           "s3:GetObject",
           "s3:PutObject",
-          "s3:ListBucket"
+          "s3:ListBucket",
+          "s3:GetBucketLocation"
         ]
         Resource = [
           aws_s3_bucket.data_lake.arn,
@@ -476,6 +493,10 @@ resource "kubernetes_deployment" "vanna_api" {
           env {
             name  = "AWS_REGION"
             value = var.aws_region
+          }
+          env {
+            name  = "S3_STAGING_DIR"
+            value = "s3://${aws_s3_bucket.data_lake.bucket}/athena-results/"
           }
           env {
             name  = "ATHENA_DATABASE"

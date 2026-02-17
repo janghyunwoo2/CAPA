@@ -38,70 +38,85 @@
 
 ```mermaid
 flowchart TB
-    subgraph DataGen["Data Generation"]
-        LogGen[Log Generator]
+    subgraph DataGen["📱 Data Generation"]
+        LG[Log Generator]
     end
-
-    subgraph AWS["AWS Cloud"]
-        subgraph Ingestion["Data Ingestion"]
-            KDS[Kinesis Data Stream]
-            KDF[Kinesis Firehose]
-        end
-
-        subgraph Storage["Data Storage"]
-            S3_Raw[(S3 Raw Data)]
-            S3_Processed[(S3 Parquet)]
-            Glue[AWS Glue Catalog]
-        end
-
-        subgraph Analysis["Data Analysis"]
-            Athena[Amazon Athena]
-        end
-
-        subgraph AI_App["AI Application Layer"]
-            EKS[Amazon EKS]
-            subgraph Pods["K8s Pods"]
-                Vanna[Vanna AI Service]
-                Chroma[ChromaDB]
-                Airflow[Apache Airflow]
-                Redash[Redash Dashboard]
-                SlackBot[Slack Bot App]
-            end
+    
+    subgraph Streaming["⚡ Real-time Pipeline"]
+        KDS[Kinesis Data Stream]
+        KDF[Kinesis Firehose]
+    end
+    
+    subgraph Storage["💾 Data Lake"]
+        S3[(S3 Parquet)]
+    end
+    
+    subgraph Processing["⚙️ Processing"]
+        GLU[Glue Catalog]
+        ATH[Athena]
+    end
+    
+    subgraph EKS["🐳 EKS Cluster"]
+        subgraph Batch["📅 Batch Processing"]
+            AIR[Airflow]
         end
         
-        subgraph Monitoring["Monitoring"]
-            CW[CloudWatch]
-            SNS[SNS Topic]
-            Prophet["Prophet (Future)"]
+        subgraph AI["🤖 AI Layer"]
+            VAN[Vanna AI]
+            CHR[(ChromaDB)]
+        end
+        
+        subgraph Dashboard["📊 Dashboard"]
+            RDS[Redash]
+        end
+        
+        subgraph Report["📝 Report"]
+            RPT[Report Generator]
+        end
+        
+        subgraph Interface["👥 Interface"]
+            SLK[Slack Bot]
         end
     end
-
-    subgraph Client["Client"]
-        SlackUI[Slack Service]
-        User[User]
+    
+    subgraph Alert["🔔 Alert"]
+        CW[CloudWatch Alarms]
+        SNS[SNS Topic]
+        PRO[Prophet/ML]
+    end
+    
+    subgraph External["🌐 External"]
+        LLM[Claude/GPT API]
     end
 
-    LogGen -->|"JSON Stream"| KDS
-    KDS -->|"Buffering"| KDF
-    KDF -->|"Parquet Conversion"| S3_Processed
-    Glue -.->|"Schema Metadata"| Athena
-    Athena -->|"Query (S3 Scan)"| S3_Processed
+    %% 데이터 흐름
+    LG --> KDS --> KDF --> S3
+    S3 --> GLU --> ATH
     
-    User -->|"Message"| SlackUI
-    SlackUI <-->|"Socket Mode"| SlackBot
-    SlackBot <-->|"API Call"| Vanna
-    Vanna <-->|"Vector Search"| Chroma
-    Vanna -->|"SQL Query"| Athena
-    Athena -->|"Result Set"| Vanna
+    %% 배치 처리
+    AIR -->|스케줄링| ATH
+    AIR -->|리포트 트리거| RPT
     
-    Airflow -->|"ETL Job"| Athena
+    %% AI Layer
+    ATH --> VAN
+    CHR -->|RAG| VAN
+    LLM -->|SQL 생성| VAN
+    VAN --> SLK
     
-    KDS -->|"Metric"| CW
-    CW -->|"Alarm"| SNS
-    SNS -->|"Webhook"| SlackUI
+    %% Dashboard
+    ATH --> RDS
     
-    Athena -->|"KPI Visualization"| Redash
-    User -->|"View Dashboard"| Redash
+    %% Alert
+    KDS -->|Metrics| CW
+    ATH -->|집계 데이터| PRO
+    CW --> SNS
+    PRO --> SNS
+    SNS -->|알림| SLK
+    
+    %% Report
+    ATH --> RPT
+    RPT <-->|인사이트 요청/응답| VAN
+    RPT -->|PDF/Markdown| SLK
 ```
 
 ---
@@ -159,6 +174,12 @@ flowchart LR
     VAN -->|"SQL Query"| ATH
     ATH -->|"Query Results"| VAN
     VAN -->|"Formatted Response"| BOT
+
+    %% Report Flow 추가
+    AIR[Airflow] -->|"API Call"| RPT[Report Gen]
+    RPT -->|"Query Results"| ATH
+    RPT <-->|"Query Insights"| VAN
+    RPT -->|"Final Report"| BOT
 ```
 
 ### 2.1 데이터 형식 상세

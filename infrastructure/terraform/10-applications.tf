@@ -142,23 +142,14 @@ resource "helm_release" "redash" {
   }
 
   set {
-    name  = "redash.databaseUrl"
-    value = "postgresql://redash:${var.redash_postgresql_password}@redash-postgresql/redash"
+    name  = "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = aws_iam_role.redash.arn
   }
 
+  # Redis 인증 비활성화 명시 (WRONGPASS 오류 방지)
   set {
-    name  = "redash.redisUrl"
-    value = "redis://redash-redis-master:6379/0"
-  }
-
-  set {
-    name  = "redash.env.REDASH_DATABASE_URL"
-    value = "postgresql://redash:${var.redash_postgresql_password}@redash-postgresql/redash"
-  }
-
-  set {
-    name  = "redash.env.REDASH_REDIS_URL"
-    value = "redis://redash-redis-master:6379/0"
+    name  = "redis.auth.enabled"
+    value = "false"
   }
 }
 

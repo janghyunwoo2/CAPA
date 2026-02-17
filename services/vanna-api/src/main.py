@@ -8,6 +8,9 @@ from pydantic import BaseModel
 from typing import Dict, List, Optional
 import logging
 import os
+import time
+import boto3
+import pandas as pd
 from vanna.chromadb import ChromaDB_VectorStore
 from vanna.anthropic import Anthropic_Chat
 
@@ -28,13 +31,91 @@ CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ATHENA_DATABASE = os.getenv("ATHENA_DATABASE", "capa_db")
 AWS_REGION = os.getenv("AWS_REGION", "ap-northeast-2")
+S3_STAGING_DIR = os.getenv("S3_STAGING_DIR", "")  # Athena 쿼리 결과 저장 경로
 
 
-# Vanna 클래스 정의 (ChromaDB + Anthropic)
+# Vanna 클래스 정의 (ChromaDB + Anthropic + Custom Athena)
 class VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
     def __init__(self, config=None):
         ChromaDB_VectorStore.__init__(self, config=config)
         Anthropic_Chat.__init__(self, config=config)
+        self.athena_client = None
+        self.athena_database = None
+        self.s3_staging_dir = None
+
+    def connect_to_athena(self, database, region_name, s3_staging_dir):
+        """Athena 연결 설정"""
+        self.athena_database = database
+        self.s3_staging_dir = s3_staging_dir
+        self.athena_client = boto3.client("athena", region_name=region_name)
+        logger.info(f"Connected to Athena: {database}, storage: {s3_staging_dir}")
+
+    def run_sql(self, sql: str) -> pd.DataFrame:
+        """Athena에서 SQL 실행 및 결과 반환 (Custom Implementation)"""
+        if not self.athena_client:
+            raise Exception(
+                "Athena client not initialized. Call connect_to_athena() first."
+            )
+
+        logger.info(f"Executing Athena SQL: {sql}")
+
+        # 쿼리 실행 시작
+        response = self.athena_client.start_query_execution(
+            QueryString=sql,
+            QueryExecutionContext={"Database": self.athena_database},
+            ResultConfiguration={"OutputLocation": self.s3_staging_dir},
+        )
+        query_execution_id = response["QueryExecutionId"]
+
+        # 완료 대기 (최대 60초)
+        max_attempts = 60
+        attempts = 0
+        while attempts < max_attempts:
+            execution = self.athena_client.get_query_execution(
+                QueryExecutionId=query_execution_id
+            )
+            state = execution["QueryExecution"]["Status"]["State"]
+
+            if state == "SUCCEEDED":
+                break
+            elif state in ["FAILED", "CANCELLED"]:
+                reason = execution["QueryExecution"]["Status"].get(
+                    "StateChangeReason", "Unknown"
+                )
+                raise Exception(f"Athena query {state}: {reason}")
+
+            time.sleep(1)
+            attempts += 1
+        else:
+            raise Exception("Athena query timed out")
+
+        # 결과 가져오기
+        paginator = self.athena_client.get_paginator("get_query_results")
+        results_iter = paginator.paginate(QueryExecutionId=query_execution_id)
+
+        rows = []
+        columns = []
+
+        for results in results_iter:
+            if not columns:
+                columns = [
+                    col["Name"]
+                    for col in results["ResultSet"]["ResultSetMetadata"]["ColumnInfo"]
+                ]
+
+            for row in results["ResultSet"]["Rows"]:
+                data = [val.get("VarCharValue", None) for val in row["Data"]]
+                rows.append(data)
+
+        if not rows:
+            return pd.DataFrame(columns=columns)
+
+        # 데이터프레임 생성 (첫 줄이 컬럼명과 겹치면 제거)
+        df = pd.DataFrame(rows, columns=columns)
+        if len(df) > 0 and list(df.iloc[0]) == columns:
+            df = df.iloc[1:].reset_index(drop=True)
+
+        return df
 
 
 # Vanna 인스턴스 (전역)
@@ -45,18 +126,20 @@ def get_vanna() -> VannaAthena:
     """Vanna 인스턴스 반환 (Lazy Initialization)"""
     global vanna_instance
     if vanna_instance is None:
-        logger.info("Initializing Vanna instance...")
+        logger.info(f"Initializing Vanna instance with key: {ANTHROPIC_API_KEY[:5]}...")
         vanna_instance = VannaAthena(
             config={
                 "api_key": ANTHROPIC_API_KEY,
-                "model": "claude-3-5-sonnet-20241022",
+                "model": "claude-3-5-haiku-20241022",
                 "chroma_host": CHROMA_HOST,
                 "chroma_port": CHROMA_PORT,
             }
         )
         # Athena 연결 설정 (IRSA 자동 인증)
         vanna_instance.connect_to_athena(
-            database=ATHENA_DATABASE, region_name=AWS_REGION
+            database=ATHENA_DATABASE,
+            region_name=AWS_REGION,
+            s3_staging_dir=S3_STAGING_DIR,
         )
         logger.info("Vanna initialization complete")
     return vanna_instance

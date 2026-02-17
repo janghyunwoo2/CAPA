@@ -162,7 +162,7 @@ flowchart TB
     
     %% Report
     ATH --> RPT
-    LLM -->|인사이트 생성| RPT
+    RPT <-->|인사이트 요청/응답| VAN
     RPT -->|PDF/Markdown| SLK
 ```
 
