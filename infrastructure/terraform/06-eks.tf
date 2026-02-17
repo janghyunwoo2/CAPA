@@ -61,8 +61,8 @@ resource "aws_eks_node_group" "main" {
   capacity_type  = "ON_DEMAND"
 
   scaling_config {
-    desired_size = 2
-    min_size     = 2
+    desired_size = 3
+    min_size     = 3
     max_size     = 4
   }
 
@@ -128,6 +128,21 @@ resource "aws_eks_addon" "ebs_csi" {
   cluster_name  = aws_eks_cluster.main.name
   addon_name    = "aws-ebs-csi-driver"
   addon_version = "v1.31.0-eksbuild.1" # Safe version for 1.29
+
+  configuration_values = jsonencode({
+    controller = {
+      resources = {
+        requests = {
+          cpu    = "10m"
+          memory = "128Mi"
+        }
+        limits = {
+          cpu    = "100m"
+          memory = "256Mi"
+        }
+      }
+    }
+  })
 
   depends_on = [
     aws_eks_node_group.main,

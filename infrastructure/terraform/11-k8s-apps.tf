@@ -133,6 +133,20 @@ resource "kubernetes_service_account" "report_generator_sa" {
   }
 }
 
+# Secret for Slack (Needed in the same namespace)
+resource "kubernetes_secret" "report_slack_secrets" {
+  metadata {
+    name      = "slack-bot-secrets"
+    namespace = kubernetes_namespace.report.metadata[0].name
+  }
+
+  data = {
+    slack-bot-token = var.slack_bot_token
+  }
+
+  type = "Opaque"
+}
+
 # Service
 resource "kubernetes_service" "report_generator" {
   metadata {
@@ -224,6 +238,19 @@ resource "kubernetes_deployment" "report_generator" {
             name  = "LOG_LEVEL"
             value = "INFO"
           }
+          env {
+            name = "SLACK_BOT_TOKEN"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.report_slack_secrets.metadata[0].name
+                key  = "slack-bot-token"
+              }
+            }
+          }
+          env {
+            name  = "SLACK_CHANNEL_ID"
+            value = var.slack_channel_id
+          }
 
           # 리소스 제한
           resources {
@@ -237,7 +264,7 @@ resource "kubernetes_deployment" "report_generator" {
             }
           }
 
-          # 헬스 체크
+          # 헬스 체크(복구)
           liveness_probe {
             http_get {
               path = "/health"
@@ -258,6 +285,18 @@ resource "kubernetes_deployment" "report_generator" {
             period_seconds        = 5
             timeout_seconds       = 3
             failure_threshold     = 2
+          }
+        }
+
+        # 노드별 균등 배분 설정
+        topology_spread_constraint {
+          max_skew           = 1
+          topology_key       = "kubernetes.io/hostname"
+          when_unsatisfiable = "ScheduleAnyway"
+          label_selector {
+            match_labels = {
+              app = "report-generator"
+            }
           }
         }
       }
@@ -531,12 +570,12 @@ resource "kubernetes_deployment" "vanna_api" {
               memory = "512Mi"
             }
             limits = {
-              cpu    = "1000m"
-              memory = "2Gi"
+              cpu    = "500m"
+              memory = "1Gi"
             }
           }
 
-          # 헬스 체크
+          # 헬스 체크(복구)
           liveness_probe {
             http_get {
               path = "/health"
@@ -557,6 +596,18 @@ resource "kubernetes_deployment" "vanna_api" {
             period_seconds        = 5
             timeout_seconds       = 3
             failure_threshold     = 2
+          }
+        }
+
+        # 노드별 균등 배분 설정
+        topology_spread_constraint {
+          max_skew           = 1
+          topology_key       = "kubernetes.io/hostname"
+          when_unsatisfiable = "ScheduleAnyway"
+          label_selector {
+            match_labels = {
+              app = "vanna-api"
+            }
           }
         }
       }

@@ -89,7 +89,7 @@ def generate_report_task(report_type: str):
         except Exception as e:
             logger.error(f"Failed to call Vanna API: {e}")
 
-        # 3. 최종 리포트 구성 (여기서는 로그로 출력하고 향후 Slack 전송 등 추가 가능)
+        # 3. 최종 리포트 구성
         final_report = {
             "title": f"Daily Performance Report ({year}-{month}-{day})",
             "stats": stats,
@@ -101,7 +101,39 @@ def generate_report_task(report_type: str):
             f"FINAL REPORT: {json.dumps(final_report, ensure_ascii=False, indent=2)}"
         )
 
-        # TODO: Slack 등의 외부 채널로 메시지 전송 로직 추가 가능
+        # 4. Slack으로 전송
+        SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+        SLACK_CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID")
+
+        if SLACK_BOT_TOKEN and SLACK_CHANNEL_ID:
+            slack_message = (
+                f"📊 *{final_report['title']}*\n\n"
+                f"*핵심 지표:*\n"
+                f"- 노출: {stats['impressions']:,}회\n"
+                f"- 클릭: {stats['clicks']:,}회\n"
+                f"- 매출: {stats['revenue']:,.2f}원\n\n"
+                f"*🤖 AI 인사이트:*\n"
+                f"{insight}\n\n"
+                f"_{final_report['generated_at']}_"
+            )
+
+            try:
+                response = requests.post(
+                    "https://slack.com/api/chat.postMessage",
+                    headers={"Authorization": f"Bearer {SLACK_BOT_TOKEN}"},
+                    json={"channel": SLACK_CHANNEL_ID, "text": slack_message},
+                    timeout=10,
+                )
+                if response.json().get("ok"):
+                    logger.info("Successfully sent report to Slack")
+                else:
+                    logger.error(f"Failed to send report to Slack: {response.text}")
+            except Exception as e:
+                logger.error(f"Error sending message to Slack: {e}")
+        else:
+            logger.warning(
+                "SLACK_BOT_TOKEN or SLACK_CHANNEL_ID not set. Skipping Slack delivery."
+            )
 
     except Exception as e:
         logger.error(f"Error in generate_report_task: {e}")

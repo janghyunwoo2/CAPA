@@ -58,6 +58,12 @@ variable "slack_app_token" {
   default     = ""
 }
 
+variable "slack_channel_id" {
+  description = "Slack Channel ID to send reports (C...)"
+  type        = string
+  default     = ""
+}
+
 # ------------------------------------------------------------------------------
 # Redash Secrets
 # ------------------------------------------------------------------------------
