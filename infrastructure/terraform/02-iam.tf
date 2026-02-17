@@ -316,6 +316,11 @@ resource "aws_iam_role_policy_attachment" "airflow_s3_access" {
   role       = aws_iam_role.airflow.name
 }
 
+resource "aws_iam_role_policy_attachment" "airflow_athena_access" {
+  policy_arn = aws_iam_policy.redash_athena.arn
+  role       = aws_iam_role.airflow.name
+}
+
 # Consumer Role에도 Workload S3 권한 추가 (기존 ReadOnly 대체/보완)
 resource "aws_iam_role_policy_attachment" "app_s3_access" {
   policy_arn = aws_iam_policy.workload_s3_access.arn
