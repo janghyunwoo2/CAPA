@@ -1,5 +1,8 @@
 # ✅ 작업 09 완료: Athena 데이터 검증
 
+> [!IMPORTANT]
+> **2026-02-17 업데이트**: 파티션 인식 방식이 `MSCK REPAIR` 수동 실행에서 **Glue Crawler** 자동 인식 방식으로 변경되었습니다.
+
 **작업 파일**: [`09_athena_데이터_검증.md`](../work/09_athena_데이터_검증.md)
 **Phase**: 2 (E2E 연결 테스트)
 **실행 일시**: 2026-02-12 16:20 - 16:30
@@ -14,8 +17,9 @@
 *   **S3 경로**: `s3://capa-data-lake-xxx/raw/year=2026/month=02/day=12/`
 *   **파일 목록**: 시간대별 Parquet 파일 다수 확인 (15분 간격 등)
 *   **Glue Partition 업데이트**:
-    *   명령어: `MSCK REPAIR TABLE ad_events_raw`
-    *   결과: 새로운 파티션(`2026/02/12`)이 Glue Data Catalog에 정상 등록됨.
+    *   (이전) `MSCK REPAIR TABLE ad_events_raw`
+    *   (현재) `aws glue start-crawler --name capa-log-crawler` 실행
+    *   결과: S3의 파티션 구조와 데이터 스키마가 Glue Catalog에 자동 동기화됨.
 
 ---
 
@@ -45,7 +49,7 @@ SELECT event_type, COUNT(*) as count FROM ad_events_raw GROUP BY event_type;
 ## ✅ 성공 기준 달성
 
 - [x] S3 Parquet 파일 존재 확인 (`aws s3 ls`)
-- [x] Glue Partition 인식 (`MSCK REPAIR`)
+- [x] Glue Crawler 인식 (또는 `start-crawler` 실행)
 - [x] Athena `SELECT` 쿼리 정상 실행
 - [x] 데이터 정합성 확인 (이벤트 타입별 비율 정상)
 

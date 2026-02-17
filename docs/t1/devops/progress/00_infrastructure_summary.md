@@ -22,7 +22,8 @@
 | **Kinesis Firehose** | `capa-firehose` | Delivery Stream Name: `capa-firehose` |
 | **S3 Data Lake** | `capa-data-lake-827913617635` | `arn:aws:s3:::capa-data-lake-827913617635` |
 | **Glue Database** | `capa_db` | Athena 쿼리용 데이터베이스 카탈로그 |
-| **Glue Table** | `ad_events_raw` | 기초 광고 로그 원천 데이터 테이블 |
+| **Glue Table** | `ad_events_raw` | 기초 광고 로그 원천 데이터 (Crawler 관리) |
+| **Glue Crawler** | `capa-log-crawler` | S3 스키마 및 파티션 자동 인식 (On-demand) |
 
 ---
 

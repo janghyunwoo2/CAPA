@@ -63,7 +63,7 @@ resource "aws_kinesis_firehose_delivery_stream" "main" {
 
       schema_configuration {
         database_name = aws_glue_catalog_database.main.name
-        table_name    = aws_glue_catalog_table.raw.name
+        table_name    = "ad_events_raw" # Glue Crawler가 생성/관리하는 테이블 이름과 일치시킴
         role_arn      = aws_iam_role.firehose.arn
       }
     }

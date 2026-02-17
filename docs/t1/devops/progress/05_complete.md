@@ -1,5 +1,8 @@
 # ✅ 작업 05 완료: Data Pipeline 구축 (Kinesis, Firehose, Glue, S3)
 
+> [!IMPORTANT]
+> **2026-02-17 업데이트**: 스키마 관리 효율화를 위해 정적 테이블 정의를 주석 처리하고 **Glue Crawler**를 도입했습니다.
+
 **작업 파일**: [`05_data_pipeline_기본.md`](../work/05_data_pipeline_기본.md)  
 **Phase**: 1 (Terraform Base Layer)  
 **실행 일시**: 2026-02-12 12:45 - 13:10  
@@ -40,7 +43,8 @@
 | **S3 Bucket** | `capa-data-lake-827913617635` | ✅ 생성됨 | Raw/Processed 데이터 저장 |
 | **Kinesis Stream** | `capa-stream` | ✅ 생성됨 | 실시간 로그 수집 (1 Shard) |
 | **Glue Database** | `capa_db` | ✅ 생성됨 | 메타데이터 관리 |
-| **Glue Table** | `ad_events_raw` | ✅ 생성됨 | 데이터 스키마 정의 (Parquet) |
+| **Glue Table** | `ad_events_raw` | ✅ 관리됨 | Crawler에 의해 자동 관리 (S3-based) |
+| **Glue Crawler** | `capa-log-crawler` | ✅ 생성됨 | 스키마 및 파티션 자동 인식용 |
 | **Kinesis Firehose** | `capa-firehose` | ✅ 생성됨 | Stream → S3 변환 및 전송 |
 
 ---

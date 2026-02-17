@@ -38,7 +38,12 @@ output "glue_database_name" {
 
 output "glue_table_name" {
   description = "Glue Catalog table name"
-  value       = aws_glue_catalog_table.raw.name
+  value       = "ad_events_raw"
+}
+
+output "glue_crawler_name" {
+  description = "Glue Crawler name"
+  value       = aws_glue_crawler.main.name
 }
 
 # TODO: Athena Workgroup은 아직 생성되지 않음 (Task 08 이후 추가 예정)
