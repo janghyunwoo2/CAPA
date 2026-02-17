@@ -69,7 +69,7 @@ if state != 'SUCCEEDED': raise Exception(f"Query failed: {{state}}")
 print("Aggregation Success")
         """
         ],
-        service_account_name="airflow-sa",  # IRSA 권한 상속
+        service_account_name="airflow-scheduler",  # IRSA 권한 상속
         get_logs=True,
         is_delete_operator_pod=True,  # 작업 완료 후 파드 자동 삭제
     )
