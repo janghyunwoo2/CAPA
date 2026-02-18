@@ -1,19 +1,32 @@
 # Airflow 공식 Helm Chart Values
 # Repository: https://github.com/apache/airflow/tree/main/chart
+# 참고: 이전 프로젝트 성공 코드 기반 수정
 
 # Executor 설정 (LocalExecutor - MVP 단순화)
 executor: "LocalExecutor"
 
-# PostgreSQL (내장 DB)
+# PostgreSQL Configuration (Use ECR)
 postgresql:
-  enabled: true
-  auth:
-    enablePostgresUser: true
-    postgresPassword: "airflow123"
+  image:
+    registry: 827913617635.dkr.ecr.ap-northeast-2.amazonaws.com
+    repository: capa/postgres
+    tag: "11"
+  persistence:
+    enabled: true
+    size: 2Gi
 
 # Redis (비활성화 - LocalExecutor 사용)
 redis:
   enabled: false
+
+# Explicitly enable standard jobs for DB migration and User creation
+migrateDatabaseJob:
+  enabled: true
+  useHelmHooks: false
+  applyCustomEnv: false
+
+# Fixed secret key for all components (이전 프로젝트 성공 코드)
+webserverSecretKey: capa_airflow_secret_key_2026_fixed
 
 # Webserver
 webserver:
@@ -25,21 +38,49 @@ webserver:
     username: admin
     password: admin
     email: admin@example.com
+  startupProbe:
+    failureThreshold: 20 # 이전 프로젝트 값
+    periodSeconds: 10
+    timeoutSeconds: 10
+  extraInitContainers: [] # 이전 프로젝트 코드 추가
+  extraVolumes: []
+  extraVolumeMounts: []
 
 # Scheduler
 scheduler:
   replicas: 1
+  livenessProbe:
+    initialDelaySeconds: 60
+    failureThreshold: 5
+    periodSeconds: 20
+  extraInitContainers: [] # 이전 프로젝트 코드 추가
+  extraVolumes: []
+  extraVolumeMounts: []
 
-# DAG 저장소 (Git Sync 비활성화, ConfigMap 사용)
+# Triggerer
+triggerer:
+  extraInitContainers: [] # 이전 프로젝트 코드 추가
+  extraVolumes: []
+  extraVolumeMounts: []
+
+# DAG 저장소 (Git Sync 활성화, PVC 비활성화)
 dags:
   persistence:
+    enabled: false
+  gitSync:
     enabled: true
-    size: 1Gi
+    repo: https://github.com/janghyunwoo2/CAPA.git
+    branch: airflow-test
+    subPath: services/airflow-dags
+    wait: 60
 
-# 환경 변수
-env:
-  - name: AIRFLOW__CORE__LOAD_EXAMPLES
-    value: "False"
+# Airflow Configuration (이전 프로젝트 방식)
+airflow:
+  config:
+    AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
+    AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"
+    AIRFLOW__WEBSERVER__WEB_SERVER_WORKER_TIMEOUT: "300"
 
 # IRSA (EKS OIDC 설정 후 활성화)
 serviceAccount:
@@ -54,5 +95,5 @@ resources:
     cpu: 500m
     memory: 1Gi
   requests:
-    cpu: 250m
+    cpu: 200m
     memory: 512Mi

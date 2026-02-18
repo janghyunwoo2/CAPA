@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+vanna[chromadb]==0.7.9
+chromadb
+
+anthropic
+boto3
+pydantic
+pydantic-settings
+# pyarrow는 필요한 경우에만 설치 (Athena)
+pyarrow
+

@@ -1,0 +1,75 @@
+INFO:     Started server process [1]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     172.31.42.38:40910 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:45104 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:45110 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:50106 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:50110 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:37708 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:37710 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:37722 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:36642 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:36644 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:36666 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:47178 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:47184 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:47196 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Report generation endpoint called: daily
+INFO:     127.0.0.1:60040 - "POST /generate?report_type=daily HTTP/1.1" 200 OK
+INFO:main:Starting report generation task for type: daily
+INFO:athena_utils:Executing Athena SQL: 
+        SELECT 
+            COUNT(CASE WHEN event_type = 'impression' THEN 1 END) as impressions,
+            COUNT(CASE WHEN event_type = 'click' THEN 1 END) as clicks,
+            SUM(bid_price) as total_revenue
+        FROM ad_events_raw
+        WHERE year = '2026' AND month = '02' AND day = '17'
+        
+INFO:     172.31.42.38:40282 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:40284 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Retrieved stats: {'impressions': 1403, 'clicks': 135, 'revenue': 1597688.4099999997}
+INFO:     172.31.42.38:40300 - "GET /health HTTP/1.1" 200 OK
+ERROR:main:Vanna API error: 500 - {"detail":"Athena query FAILED: TYPE_MISMATCH: line 8:11: Cannot apply operator: varchar = date"}
+INFO:main:FINAL REPORT: {
+  "title": "Daily Performance Report (2026-02-17)",
+  "stats": {
+    "impressions": 1403,
+    "clicks": 135,
+    "revenue": 1597688.4099999997
+  },
+  "ai_insight": "AI 분석을 수행하지 못했습니다.",
+  "generated_at": "2026-02-17T07:30:01.442483"
+}
+INFO:     172.31.42.38:60326 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:60328 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:60338 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:58684 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:58682 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:58694 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:54716 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:54718 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:54730 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:59806 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:59804 - "GET /health HTTP/1.1" 200 OK
+WARNING:  Invalid HTTP request received.
+WARNING:  Invalid HTTP request received.
+INFO:     172.31.42.38:59818 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:35478 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:35488 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:35496 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:59032 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:59030 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:59046 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:56676 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:56684 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:56692 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:59028 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:59026 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:59044 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:41666 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:41674 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:41688 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:34900 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.42.38:34902 - "GET /health HTTP/1.1" 200 OK

@@ -1,0 +1,300 @@
+INFO:main:Health check requested
+INFO:     172.31.49.26:53806 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:54452 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:54458 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:54470 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:51402 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:51418 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:51434 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:38008 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:38014 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:38030 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:57298 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:57300 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:57322 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:60732 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:60740 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:60746 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:43116 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:43106 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:43118 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:52598 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:52614 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:52618 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:54062 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:54064 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:54082 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:45838 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:45836 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:45854 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:37284 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:37282 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:37308 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.49.26:55216 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.49.26:55232 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:main:Health check requested
+INFO:main:Health check requested
+INFO:     172.31.49.26:55240 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:51760 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:51774 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:51790 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:51788 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:51790 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:51800 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:58366 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:58368 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:58374 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:38960 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:38958 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:38982 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:55560 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:55566 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:55580 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:48778 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:48792 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:48794 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:44644 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:44642 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:44658 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:48856 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:48872 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:48878 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:52064 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:52066 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:52078 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:57330 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:57314 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:57342 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:59934 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:59936 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:59966 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:50354 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:50358 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:50374 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:34538 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:34548 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:34556 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:53922 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:53924 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:53940 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:58996 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:59000 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:59002 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Processing question: 오늘 광고 성과 데이터입니다: {'impressions': 1403, 'clicks': 135, 'revenue': 1597688.4099999997}. 이 데이터를 바탕으로 짧게 분석 보고서를 써줘.
+WARNING:chromadb.segment.impl.vector.local_persistent_hnsw:Number of requested results 10 is greater than number of elements in index 1, updating n_results = 1
+WARNING:chromadb.segment.impl.vector.local_persistent_hnsw:Number of requested results 10 is greater than number of elements in index 1, updating n_results = 1
+INFO:httpx:HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+INFO:main:Generated SQL: SELECT 
+    COUNT(CASE WHEN event_type = 'impression' THEN 1 END) AS impressions,
+    COUNT(CASE WHEN event_type = 'click' THEN 1 END) AS clicks,
+    ROUND(SUM(bid_price), 2) AS revenue,
+    ROUND(COUNT(CASE WHEN event_type = 'click' THEN 1 END) * 100.0 / COUNT(CASE WHEN event_type = 'impression' THEN 1 END), 2) AS ctr,
+    ROUND(COUNT(CASE WHEN event_type = 'conversion' THEN 1 END) * 100.0 / COUNT(CASE WHEN event_type = 'click' THEN 1 END), 2) AS cvr
+FROM ad_events_raw
+WHERE day = current_date;
+INFO:main:Executing Athena SQL: SELECT 
+    COUNT(CASE WHEN event_type = 'impression' THEN 1 END) AS impressions,
+    COUNT(CASE WHEN event_type = 'click' THEN 1 END) AS clicks,
+    ROUND(SUM(bid_price), 2) AS revenue,
+    ROUND(COUNT(CASE WHEN event_type = 'click' THEN 1 END) * 100.0 / COUNT(CASE WHEN event_type = 'impression' THEN 1 END), 2) AS ctr,
+    ROUND(COUNT(CASE WHEN event_type = 'conversion' THEN 1 END) * 100.0 / COUNT(CASE WHEN event_type = 'click' THEN 1 END), 2) AS cvr
+FROM ad_events_raw
+WHERE day = current_date;
+ERROR:main:Query error: Athena query FAILED: TYPE_MISMATCH: line 8:11: Cannot apply operator: varchar = date
+Traceback (most recent call last):
+  File "/app/main.py", line 197, in query_natural_language
+    results = vanna.run_sql(sql)
+              ^^^^^^^^^^^^^^^^^^
+  File "/app/main.py", line 85, in run_sql
+    raise Exception(f"Athena query {state}: {reason}")
+Exception: Athena query FAILED: TYPE_MISMATCH: line 8:11: Cannot apply operator: varchar = date
+SQL Prompt: [{'role': 'system', 'content': "You are a SQL expert. Please help to generate a SQL query to answer the question. Your response should ONLY be based on the given context and follow the response guidelines and format instructions. \n===Tables \nCREATE TABLE ad_events_raw (event_id string, event_type string, timestamp bigint, campaign_id string, user_id string, device_type string, bid_price double) PARTITIONED BY (day string)\n\n\n===Additional Context \n\nad_events_raw 테이블은 광고 로그 데이터를 담고 있습니다. event_type에는 impression, click, conversion이 있으며, bid_price는 비용을 의미합니다. 총 매출액은 bid_price의 합계입니다. 클릭률(CTR)은 click 수를 impression 수로 나눈 것이고, 전환율(CVR)은 conversion 수를 click 수로 나눈 것입니다.\n\n===Response Guidelines \n1. If the provided context is sufficient, please generate a valid SQL query without any explanations for the question. \n2. If the provided context is almost sufficient but requires knowledge of a specific string in a particular column, please generate an intermediate SQL query to find the distinct strings in that column. Prepend the query with a comment saying intermediate_sql \n3. If the provided context is insufficient, please explain why it can't be generated. \n4. Please use the most relevant table(s). \n5. If the question has been asked and answered before, please repeat the answer exactly as it was given before. \n6. Ensure that the output SQL is SQL-compliant and executable, and free of syntax errors. \n"}, {'role': 'user', 'content': "오늘 광고 성과 데이터입니다: {'impressions': 1403, 'clicks': 135, 'revenue': 1597688.4099999997}. 이 데이터를 바탕으로 짧게 분석 보고서를 써줘."}]
+Using model claude-3-5-haiku-20241022 for 372.5 tokens (approx)
+LLM Response: SELECT 
+    COUNT(CASE WHEN event_type = 'impression' THEN 1 END) AS impressions,
+    COUNT(CASE WHEN event_type = 'click' THEN 1 END) AS clicks,
+    ROUND(SUM(bid_price), 2) AS revenue,
+    ROUND(COUNT(CASE WHEN event_type = 'click' THEN 1 END) * 100.0 / COUNT(CASE WHEN event_type = 'impression' THEN 1 END), 2) AS ctr,
+    ROUND(COUNT(CASE WHEN event_type = 'conversion' THEN 1 END) * 100.0 / COUNT(CASE WHEN event_type = 'click' THEN 1 END), 2) AS cvr
+FROM ad_events_raw
+WHERE day = current_date;
+
+광고 성과 분석 보고서:
+- 총 노출수: 1,403회
+- 클릭수: 135회
+- 클릭률(CTR): 9.62%
+- 총 매출: 1,597,688.41원
+- 현재 광고는 중간 수준의 성과를 보이고 있으며, 클릭률 개선을 위한 추가 최적화가 필요해 보입니다.
+Extracted SQL: SELECT 
+    COUNT(CASE WHEN event_type = 'impression' THEN 1 END) AS impressions,
+    COUNT(CASE WHEN event_type = 'click' THEN 1 END) AS clicks,
+    ROUND(SUM(bid_price), 2) AS revenue,
+    ROUND(COUNT(CASE WHEN event_type = 'click' THEN 1 END) * 100.0 / COUNT(CASE WHEN event_type = 'impression' THEN 1 END), 2) AS ctr,
+    ROUND(COUNT(CASE WHEN event_type = 'conversion' THEN 1 END) * 100.0 / COUNT(CASE WHEN event_type = 'click' THEN 1 END), 2) AS cvr
+FROM ad_events_raw
+WHERE day = current_date;
+INFO:     172.31.42.109:51474 - "POST /query HTTP/1.1" 500 Internal Server Error
+INFO:main:Health check requested
+INFO:     172.31.49.26:36450 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.31.49.26:36460 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:main:Health check requested
+INFO:     172.31.49.26:36472 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:53416 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:53418 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:53430 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:41914 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:41926 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:41934 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:35400 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:35406 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:35414 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:34980 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:34992 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:35000 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:46176 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:46178 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:46200 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:34592 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:34590 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:34608 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:33922 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:33938 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:33948 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:46418 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:46434 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:46450 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:46718 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:46720 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:46736 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:37476 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:37480 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:37494 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:58246 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:58248 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:58260 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:42964 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:42972 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:42982 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:49680 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:49690 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:49704 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:53846 - "GET /health HTTP/1.1" 200 OK
+INFO:main:Health check requested
+INFO:     172.31.49.26:53858 - "GET /health HTTP/1.1" 200 OK
