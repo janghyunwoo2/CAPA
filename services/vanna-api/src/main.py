@@ -50,6 +50,26 @@ class VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
         self.athena_client = boto3.client("athena", region_name=region_name)
         logger.info(f"Connected to Athena: {database}, storage: {s3_staging_dir}")
 
+    def generate_explanation(self, question: str, sql: str, df: pd.DataFrame) -> str:
+        """결과에 대한 자연어 설명 생성 (Anthropic SDK 직접 사용)"""
+        try:
+            import anthropic
+
+            client = anthropic.Anthropic(api_key=self.config.get("api_key"))
+            model = self.config.get("model", "claude-3-5-haiku-20241022")
+
+            prompt = f"User Question: {question}\nSQL: {sql}\nResults:\n{df.to_string()}\n\nPlease summarize the results and answer the user's question in a friendly tone in Korean."
+
+            response = client.messages.create(
+                model=model,
+                max_tokens=1024,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return response.content[0].text
+        except Exception as e:
+            logger.error(f"Error in generate_explanation: {e}", exc_info=True)
+            return f"결과를 요약하는 중 오류가 발생했습니다. (에러: {str(e)})"
+
     def run_sql(self, sql: str) -> pd.DataFrame:
         """Athena에서 SQL 실행 및 결과 반환 (Custom Implementation)"""
         if not self.athena_client:
@@ -153,6 +173,7 @@ class QueryRequest(BaseModel):
 class QueryResponse(BaseModel):
     sql: str
     results: Optional[List[Dict]] = None
+    answer: Optional[str] = None
     error: Optional[str] = None
 
 
@@ -160,6 +181,14 @@ class TrainRequest(BaseModel):
     ddl: Optional[str] = None
     documentation: Optional[str] = None
     sql: Optional[str] = None
+
+
+class SummarizeRequest(BaseModel):
+    text: str
+
+
+class SummarizeResponse(BaseModel):
+    answer: str
 
 
 # =====================================================
@@ -196,9 +225,19 @@ async def query_natural_language(request: QueryRequest):
         # Athena 실행
         results = vanna.run_sql(sql)
 
+        # AI 요약/설명 생성
+        answer = "답변을 생성하지 못했습니다."
+        if results is not None:
+            try:
+                answer = vanna.generate_explanation(request.question, sql, results)
+            except Exception as ae:
+                logger.error(f"Explanation generation error: {ae}")
+                answer = f"쿼리 실행은 성공했으나 요약 생성 중 오류가 발생했습니다. (결과: {len(results)}건)"
+
         return QueryResponse(
             sql=sql,
             results=results.to_dict(orient="records") if results is not None else [],
+            answer=answer,
         )
 
     except Exception as e:
@@ -218,6 +257,32 @@ async def generate_sql_only(request: QueryRequest):
 
     except Exception as e:
         logger.error(f"SQL generation error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/summarize", response_model=SummarizeResponse)
+async def summarize_text(request: SummarizeRequest):
+    """
+    집계된 데이터 텍스트를 AI로 요약 분석
+    """
+    try:
+        import anthropic
+
+        vanna = get_vanna()
+        client = anthropic.Anthropic(api_key=vanna.config.get("api_key"))
+        model = vanna.config.get("model", "claude-3-5-haiku-20241022")
+
+        logger.info(f"Summarizing text: {request.text[:100]}...")
+
+        response = client.messages.create(
+            model=model,
+            max_tokens=1024,
+            messages=[{"role": "user", "content": request.text}],
+        )
+        return SummarizeResponse(answer=response.content[0].text)
+
+    except Exception as e:
+        logger.error(f"Summarization error: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -33,14 +33,28 @@ else:
     logger.warning("REPORT_S3_BUCKET not set. Athena queries will fail.")
 
 
-def generate_report_task(report_type: str):
+def generate_report_task(report_type: str, target_date: str = None):
     """실제 리포트 생성 및 분석 로직"""
     try:
-        logger.info(f"Starting report generation task for type: {report_type}")
+        logger.info(
+            f"Starting report generation task for type: {report_type}, date: {target_date}"
+        )
 
-        # 1. Athena 데이터 조회 (오늘의 핵심 KPI)
-        now = datetime.now()
-        year, month, day = now.strftime("%Y"), now.strftime("%m"), now.strftime("%d")
+        # 1. 날짜 설정 (파라미터가 있으면 사용, 없으면 오늘)
+        if target_date:
+            try:
+                date_obj = datetime.strptime(target_date, "%Y-%m-%d")
+            except ValueError:
+                logger.error(f"Invalid date format: {target_date}. Using today.")
+                date_obj = datetime.now()
+        else:
+            date_obj = datetime.now()
+
+        year, month, day = (
+            date_obj.strftime("%Y"),
+            date_obj.strftime("%m"),
+            date_obj.strftime("%d"),
+        )
 
         query = f"""
         SELECT 
@@ -75,16 +89,16 @@ def generate_report_task(report_type: str):
         # 2. Vanna AI를 통한 인사이트 생성
         insight = "AI 분석을 수행하지 못했습니다."
         try:
-            vanna_prompt = f"오늘 광고 성과 데이터입니다: {stats}. 이 데이터를 바탕으로 짧게 분석 보고서를 써줘."
+            vanna_prompt = f"당신은 CAPA 서비스의 데이터 분석 마케터입니다. 아래의 {year}년 {month}월 {day}일자 광고 성과 지표(노출, 클릭, 매출)를 보고, 현재 성과가 어떤지 분석하고 향후 개선 방향을 제안하는 짤막한 리포트를 한국어로 작성해 주세요.\n데이터: {stats}"
             response = requests.post(
-                f"{VANNA_API_URL}/query", json={"question": vanna_prompt}, timeout=30
+                f"{VANNA_API_URL}/summarize", json={"text": vanna_prompt}, timeout=30
             )
             if response.status_code == 200:
                 result = response.json()
                 insight = result.get("answer", insight)
             else:
                 logger.error(
-                    f"Vanna API error: {response.status_code} - {response.text}"
+                    f"Summarize API error: {response.status_code} - {response.text}"
                 )
         except Exception as e:
             logger.error(f"Failed to call Vanna API: {e}")
@@ -156,14 +170,15 @@ async def root():
 
 @app.post("/generate")
 async def generate_report(
-    background_tasks: BackgroundTasks, report_type: str = "daily"
+    background_tasks: BackgroundTasks, report_type: str = "daily", date: str = None
 ):
     """리포트 생성 트리거"""
-    logger.info(f"Report generation endpoint called: {report_type}")
-    background_tasks.add_task(generate_report_task, report_type)
+    logger.info(f"Report generation endpoint called: {report_type}, date: {date}")
+    background_tasks.add_task(generate_report_task, report_type, date)
     return {
         "status": "accepted",
         "report_type": report_type,
+        "date": date,
         "message": "Report generation task started in background",
         "timestamp": datetime.utcnow().isoformat(),
     }

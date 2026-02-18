@@ -45,12 +45,23 @@ def handle_mention(event, say):
 
     # 1. "리포트 생성" 명령어 확인
     if "리포트 생성" in text or "report" in text.lower():
+        # 날짜 추출 (예: 2026-02-17)
+        import re
+
+        date_match = re.search(r"(\d{4}-\d{2}-\d{2})", text)
+        target_date = date_match.group(1) if date_match else None
+
+        date_str = f" ({target_date})" if target_date else " (오늘)"
         say(
-            f"📊 <@{user}>님, 오늘의 성과 리포트 생성을 시작합니다. 잠시만 기다려주세요..."
+            f"📊 <@{user}>님, {date_str} 성과 리포트 생성을 시작합니다. 잠시만 기다려주세요..."
         )
         try:
+            params = {"report_type": "daily"}
+            if target_date:
+                params["date"] = target_date
+
             response = requests.post(
-                f"{REPORT_API_URL}/generate", params={"report_type": "daily"}, timeout=5
+                f"{REPORT_API_URL}/generate", params=params, timeout=5
             )
             if response.status_code == 202 or response.status_code == 200:
                 say(

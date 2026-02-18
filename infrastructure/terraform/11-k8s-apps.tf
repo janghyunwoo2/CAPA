@@ -563,28 +563,28 @@ resource "kubernetes_deployment" "vanna_api" {
             value = "INFO"
           }
 
-          # 리소스 제한
+          # 리소스 제한 (안정성 확보를 위해 소폭 상향)
           resources {
             requests = {
               cpu    = "250m"
               memory = "512Mi"
             }
             limits = {
-              cpu    = "500m"
-              memory = "1Gi"
+              cpu    = "700m"
+              memory = "1.2Gi"
             }
           }
 
-          # 헬스 체크(복구)
+          # 헬스 체크(타임아웃 완화)
           liveness_probe {
             http_get {
               path = "/health"
               port = "http"
             }
             initial_delay_seconds = 60
-            period_seconds        = 10
-            timeout_seconds       = 5
-            failure_threshold     = 3
+            period_seconds        = 20
+            timeout_seconds       = 15
+            failure_threshold     = 5
           }
 
           readiness_probe {
@@ -593,9 +593,9 @@ resource "kubernetes_deployment" "vanna_api" {
               port = "http"
             }
             initial_delay_seconds = 30
-            period_seconds        = 5
-            timeout_seconds       = 3
-            failure_threshold     = 2
+            period_seconds        = 10
+            timeout_seconds       = 10
+            failure_threshold     = 3
           }
         }
 
