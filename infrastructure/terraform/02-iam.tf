@@ -617,3 +617,19 @@ resource "aws_iam_role_policy_attachment" "aws_lb_controller" {
   policy_arn = aws_iam_policy.aws_lb_controller.arn
   role       = aws_iam_role.aws_lb_controller.name
 }
+
+# ------------------------------------------------------------------------------
+# 팀원용 ECR 푸시 권한 (ECR PowerUser)
+# ------------------------------------------------------------------------------
+resource "aws_iam_user_policy_attachment" "team_ecr_push" {
+  for_each   = toset([for arn in var.team_members_arns : arn if can(regex("user/", arn))])
+  user       = split("/", each.value)[1] # arn:aws:iam::...:user/name -> name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser"
+}
+
+# Role 기반인 경우 (만약 팀원이 Role을 사용한다면)
+resource "aws_iam_role_policy_attachment" "team_role_ecr_push" {
+  for_each   = toset([for arn in var.team_members_arns : arn if can(regex("role/", arn))])
+  role       = split("/", each.value)[1]
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser"
+}
