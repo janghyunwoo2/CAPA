@@ -98,7 +98,7 @@ ipython_config.py
 #   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
 #   commonly ignored for libraries.
-#uv.lock
+# uv.lock
 
 # poetry
 #   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
@@ -106,7 +106,7 @@ ipython_config.py
 #   commonly ignored for libraries.
 #   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
 #poetry.lock
-#poetry.toml
+# pyproject.toml
 
 # pdm
 #   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
@@ -234,27 +234,9 @@ override.tf.json
 *_override.tf.json
 
 # prompts는 팀 공유 시 주석 해제
-*.tfplan
-tfplan
-# Terraform crash logs
-crash.log
-# Additional Terraform ignore patterns
-*.tfvars
-*.tfvars.json
-*.auto.tfvars
-*.auto.tfvars.json
 
-# .terraform.lock.hcl is typically committed, but you can ignore it if maintaining cross-platform providers is difficult
-# .terraform.lock.hcl
-
-# Local Backend Lock Info (sensitive)
-.terraform.tfstate.lock.info
-
-# CLI configuration files
-.terraformrc
-terraform.rc
-
-# Generated files
-apply.log
-apply_output.txt
-
+# uv 파일
+uv.lock
+# poetry 파일
+pyproject.toml
+**/logs/

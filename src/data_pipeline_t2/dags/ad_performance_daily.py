@@ -1,3 +1,9 @@
+"""
+[DEPRECATED] 이 DAG은 ad_hourly_summary.py + ad_daily_summary.py로 대체되었습니다.
+- ad_hourly_summary: 매시간 impression+click 조인 → hourly summary
+- ad_daily_summary: 매일 hourly summary 집계 + conversion 조인 → daily summary
+"""
+
 from airflow import DAG
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
 from airflow.utils.dates import days_ago

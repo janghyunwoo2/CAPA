@@ -1,0 +1,39 @@
+# Log Generator 컨테이너 이미지
+FROM python:3.9-slim
+
+LABEL maintainer="capa-t2-team"
+LABEL description="CAPA T2 Log Generator Service"
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# 시스템 패키지 업데이트
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python 의존성 설치
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 애플리케이션 코드 복사
+COPY dags/script/generate_sample_logs.py /app/
+
+# 데이터 디렉토리 생성
+RUN mkdir -p /data/raw
+
+# 비루트 사용자로 실행
+RUN groupadd -g 1000 airflow && \
+    useradd -r -u 1000 -g airflow airflow && \
+    chown -R airflow:airflow /app /data
+
+USER airflow
+
+# 헬스체크
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD python -c "import sys; sys.exit(0)"
+
+# 기본 실행 명령
+ENTRYPOINT ["python"]
+CMD ["generate_sample_logs.py"]

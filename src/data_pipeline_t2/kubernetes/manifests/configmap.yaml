@@ -1,0 +1,96 @@
+# ConfigMap for shared configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: capa-t2-config
+  namespace: airflow
+data:
+  # 파이프라인 설정
+  pipeline_config.yaml: |
+    pipeline:
+      name: capa_t2_data_pipeline
+      version: "1.0.0"
+      environment: production
+      
+    data_generation:
+      num_days: 7
+      rows_per_day: 10000
+      output_format: parquet
+      compression: snappy
+      
+    data_processing:
+      batch_size: 1000
+      parallelism: 4
+      memory_limit: 2048
+      
+    analysis:
+      top_n: 20
+      metrics:
+        - clicks
+        - impressions
+        - ctr
+        - spend
+        
+    visualization:
+      chart_types:
+        - line
+        - bar
+        - scatter
+      output_format: png
+      dpi: 300
+      
+  # 로깅 설정
+  logging.conf: |
+    [loggers]
+    keys=root,capa
+    
+    [handlers]
+    keys=console,file
+    
+    [formatters]
+    keys=detailed
+    
+    [logger_root]
+    level=INFO
+    handlers=console
+    
+    [logger_capa]
+    level=DEBUG
+    handlers=console,file
+    qualname=capa
+    propagate=0
+    
+    [handler_console]
+    class=StreamHandler
+    level=INFO
+    formatter=detailed
+    args=(sys.stdout,)
+    
+    [handler_file]
+    class=FileHandler
+    level=DEBUG
+    formatter=detailed
+    args=('/data/logs/capa_pipeline.log', 'a')
+    
+    [formatter_detailed]
+    format=%(asctime)s - %(name)s - %(levelname)s - %(message)s
+    datefmt=%Y-%m-%d %H:%M:%S
+
+---
+# Secret for sensitive data
+apiVersion: v1
+kind: Secret
+metadata:
+  name: capa-t2-secrets
+  namespace: airflow
+type: Opaque
+stringData:
+  # AWS 자격 증명 (S3 접근용)
+  aws-access-key-id: "your-access-key-id"
+  aws-secret-access-key: "your-secret-access-key"
+  
+  # 데이터베이스 연결 정보
+  db-connection-string: "postgresql://user:password@host:5432/capa_db"
+  
+  # API 키
+  analytics-api-key: "your-analytics-api-key"

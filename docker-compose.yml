@@ -1,9 +1,8 @@
-version: '3.8'
+name: capa
 
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: capa-postgres
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -17,7 +16,6 @@ services:
 
   airflow-webserver:
     image: apache/airflow:2.7.3-python3.11
-    container_name: capa-airflow-webserver
     depends_on:
       - postgres
     environment:
@@ -40,7 +38,6 @@ services:
 
   airflow-scheduler:
     image: apache/airflow:2.7.3-python3.11
-    container_name: capa-airflow-scheduler
     depends_on:
       - postgres
       - airflow-webserver
@@ -63,7 +60,6 @@ services:
   # Redash (선택사항 - 로컬 개발용)
   # redash:
   #   image: redash/redash:latest
-  #   container_name: capa-redash
   #   ports:
   #     - "5000:5000"
   #   environment:
