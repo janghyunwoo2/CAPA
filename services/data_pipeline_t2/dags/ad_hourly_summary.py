@@ -11,7 +11,7 @@ DAG: ad_hourly_summary
     → S3 Parquet (ad_hourly_summary/)
     → Glue 파티션 등록
 """
-
+# 테스트
 from airflow import DAG
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
 from airflow.operators.python import PythonOperator
