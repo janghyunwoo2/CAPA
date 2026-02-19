@@ -31,7 +31,8 @@ redis:
     repository: capa/redis
     tag: "6.0.9"
   auth:
-    enabled: false # Redis 패스워드 비활성화 (Redash 기본 연결 설정과 맞춤)
+    enabled: false
+    password: "" # 빈 문자열로 명시하여 Redash가 비밀번호 없이 연결하도록 강제
   master:
     resources:
       requests:
@@ -95,5 +96,5 @@ genericWorker:
       memory: 512Mi
 
 service:
-  type: LoadBalancer
+  type: ClusterIP
   port: 5000

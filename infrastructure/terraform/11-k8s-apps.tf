@@ -169,7 +169,7 @@ resource "kubernetes_service" "report_generator" {
       protocol    = "TCP"
     }
 
-    type = "LoadBalancer"
+    type = "ClusterIP" # 내부 전용 (Slack Bot이 클러스터 내부에서 호출)
   }
 }
 
@@ -766,10 +766,6 @@ resource "kubernetes_deployment" "slack_bot" {
           }
 
           # 환경 변수 (Internal Service URLs)
-          env {
-            name  = "VANNA_API_URL"
-            value = "http://vanna-api.vanna.svc.cluster.local:8000"
-          }
           env {
             name  = "REPORT_API_URL"
             value = "http://report-generator.report.svc.cluster.local:8000"

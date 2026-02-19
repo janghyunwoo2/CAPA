@@ -153,6 +153,15 @@ resource "helm_release" "redash" {
   }
 }
 
+# Data source to retrieve Redash LoadBalancer URL
+data "kubernetes_service" "redash" {
+  metadata {
+    name      = "redash"
+    namespace = kubernetes_namespace.redash.metadata[0].name
+  }
+  depends_on = [helm_release.redash]
+}
+
 # ChromaDB (Vector DB for AI)
 resource "helm_release" "chromadb" {
   name       = "chromadb"

@@ -1,48 +1,58 @@
-# CAPA 프로젝트 종합 인프라 및 서비스 명세서
+# 🏁 CAPA 프로젝트 종합 인프라 및 서비스 명세서
 
-본 문서는 CAPA 프로젝트의 전체 인프라 자원과 서비스 엔드포인트 정보를 포함합니다. 팀원 간 협업 및 서비스 연동 시 아래 정보를 참조하시기 바랍니다.
+본 문서는 CAPA 프로젝트의 전체 인프라 자원, 통합 서비스 엔드포인트 및 접속 정보를 포함합니다. **비용 효율적인 단일 ALB(Application Load Balancer) 기반의 통합 아키텍처**로 구성되어 있습니다.
 
 ---
 
-## 1. 🤖 AI 애플리케이션 및 서비스 (EKS)
-| 서비스 명 | 내부 접속 URL (Internal DNS) | ECR 리포지토리 URL | 비고 |
+## 🚀 1. 통합 서비스 엔드포인트 (Public)
+모든 외부 접속 서비스는 하나의 로드밸런서(ALB) 주소를 공유하며, 경로(Path)를 통해 구분됩니다.
+
+| 서비스 명 | 접속 URL | 계정 정보 | 비고 |
 | :--- | :--- | :--- | :--- |
-| **Vanna AI API** | `http://vanna-api.vanna.svc.cluster.local:8000` | `827913617635.dkr.ecr.ap-northeast-2.amazonaws.com/capa-vanna-api` | Text-to-SQL 서비스 |
-| **Report Generator** | `http://report-generator.report.svc.cluster.local:8000` | `827913617635.dkr.ecr.ap-northeast-2.amazonaws.com/capa-report-generator` | 데이터 리포트(PDF/Excel) 생성 |
-| **Slack Bot** | `http://slack-bot.slack-bot.svc.cluster.local:3000` | `827913617635.dkr.ecr.ap-northeast-2.amazonaws.com/capa-slack-bot` | 슬랙 인터페이스 대화형 지원 |
-| **ChromaDB** | `http://chromadb.chromadb.svc.cluster.local:8000` | - | 지식 베이스 벡터 데이터베이스 |
-| **Airflow** | `http://a015fd856c89f45b8a62247f8b61fc74-2092633233.ap-northeast-2.elb.amazonaws.com:8080` | - | 데이터 파이프라인 스케줄러 (admin/admin) |
+| **📊 Redash (BI)** | [바로가기](http://k8s-capaunifiedlb-ab7aaac323-480086301.ap-northeast-2.elb.amazonaws.com/) | `ehrtk2003@gmail.com` / `admin123!` | 통합 ALB 루트 접속 |
+| **🌬️ Airflow** | [바로가기](http://k8s-capaunifiedlb-ab7aaac323-480086301.ap-northeast-2.elb.amazonaws.com/airflow/) | `admin` / `admin` | `/airflow/` 경로 필수 (슬래시 포함) |
+
+> **ALB DNS**: `k8s-capaunifiedlb-ab7aaac323-480086301.ap-northeast-2.elb.amazonaws.com`
 
 ---
 
-## 2. 📊 데이터 파이프라인 및 스토리지 (AWS)
-| 구분 | 리소스 명 | 식별자 / ARN |
+## 🤖 2. 백엔드 및 AI 서비스 (Internal Only)
+보안 및 비용 절감을 위해 클러스터 내부 통신(`ClusterIP`)으로만 노출됩니다.
+
+| 서비스 명 | 내부 DNS URL | ECR 리포지토리 주소 | 비고 |
+| :--- | :--- | :--- | :--- |
+| **Vanna AI API** | `http://vanna-api.vanna.svc.cluster.local:8000` | `.../capa-vanna-api` | 자연어 SQL 질의 엔진 |
+| **Report Generator** | `http://report-generator.report.svc.cluster.local:8000` | `.../capa-report-generator` | PDF/Excel 리포트 생성기 |
+| **Slack Bot** | `http://slack-bot.slack-bot.svc.cluster.local:3000` | `.../capa-slack-bot` | 슬랙 인터페이스 서버 |
+| **ChromaDB** | `http://chromadb.chromadb.svc.cluster.local:8000` | - | 벡터 데이터베이스 |
+
+---
+
+## 📊 3. 데이터 파이프라인 및 스토리지 (AWS)
+| 구분 | 리소스 명 | 식별자 / ARN | 상세 정보 |
+| :--- | :--- | :--- | :--- |
+| **Stream** | `capa-stream` | `arn:aws:kinesis:...:stream/capa-stream` | 실시간 광고 로그 수집 |
+| **Firehose** | `capa-firehose` | Delivery Stream: `capa-firehose` | S3 가공 적재 (Parquet) |
+| **Data Lake** | `capa-data-lake-xxx` | `s3://capa-data-lake-827913617635` | 원천/분석 데이터 저장소 |
+| **Glue/Athena** | `capa_db` | Table: `ad_events_raw` | 무중단 쿼리를 위한 카탈로그 |
+
+---
+
+## 🔔 4. 모니터링 및 알림 (AWS)
+| 구분 | 알람 명칭 | 감시 기준 | 알림 타겟 |
+| :--- | :--- | :--- | :--- |
+| **SNS Topic** | `capa-alerts-dev` | 장애 발생 시 알림 발송 | 팀원 지정 이메일/채널 |
+| **EKS CPU** | `capa-eks-node-cpu-high` | Node CPU > 80% | 고부하 발생 시 경고 |
+| **트래픽 저하** | `capa-kinesis-low-traffic` | 수집 트래픽 비정상 감소 | 데이터 소스 입력 이상 감지 |
+
+---
+
+## 🔑 5. 주요 IAM 역할 및 보안
+| 역할(Role) | ARN | 용도 |
 | :--- | :--- | :--- |
-| **Kinesis Stream** | `capa-stream` | `arn:aws:kinesis:ap-northeast-2:827913617635:stream/capa-stream` |
-| **Kinesis Firehose** | `capa-firehose` | Delivery Stream Name: `capa-firehose` |
-| **S3 Data Lake** | `capa-data-lake-827913617635` | `arn:aws:s3:::capa-data-lake-827913617635` |
-| **Glue Database** | `capa_db` | Athena 쿼리용 데이터베이스 카탈로그 |
-| **Glue Table** | `ad_events_raw` | 기초 광고 로그 원천 데이터 (Crawler 관리) |
-| **Glue Crawler** | `capa-log-crawler` | S3 스키마 및 파티션 자동 인식 (On-demand) |
+| **ALB Controller** | `arn:aws:iam::...:role/capa-aws-load-balancer-controller-role` | 로드밸런서 자동 관리 권한 |
+| **Airflow IRSA** | `arn:aws:iam::...:role/capa-airflow-role` | 파드 내 Athena/S3 접근 권한 |
+| **Redash IRSA** | `arn:aws:iam::...:role/capa-redash-role-northeast-2` | 대시보드 데이터 조회 권한 |
 
 ---
-
-## 3. 🔔 모니터링 및 알림 설정
-| 구분 | 리소스 명 / 알람 목적 | ARN / 상세 정보 |
-| :--- | :--- | :--- |
-| **SNS Topic** | `capa-alerts-dev` | `arn:aws:sns:ap-northeast-2:827913617635:capa-alerts-dev` |
-| **CPU 알람** | `capa-eks-node-cpu-high-dev` | EKS 작업 노드 CPU 고부하 감시 (80% 이상) |
-| **Kinesis 알람** | `capa-kinesis-low-traffic-dev` | 데이터 수집 트래픽 비정상 저하 감시 |
-| **Firehose 알람** | `capa-firehose-delivery-failure-dev` | S3 데이터 전송 실패 여부 감시 |
-
----
-
-## 4. 🔑 권한 및 인프라 역할 (IAM)
-| 역할(Role) 명 | ARN | 용도 |
-| :--- | :--- | :--- |
-| **EKS Cluster Role** | `arn:aws:iam::827913617635:role/capa-eks-cluster-role` | EKS 클러스터 제어 평면 권한 |
-| **EKS Node Role** | `arn:aws:iam::827913617635:role/capa-eks-node-role` | EKS 작업 노드 및 파드 실행 권한 |
-| **Firehose Role** | `arn:aws:iam::827913617635:role/capa-firehose-role` | Kinesis 데이터를 S3에 쓰기 위한 권한 |
-
----
-*최종 업데이트: 2026-02-15*
+**최종 업데이트**: 2026-02-19 (로드밸런서 통합 및 비용 최적화 완료)

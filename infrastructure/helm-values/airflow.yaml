@@ -32,7 +32,7 @@ webserverSecretKey: capa_airflow_secret_key_2026_fixed
 webserver:
   replicas: 1
   service:
-    type: LoadBalancer # 외부 접근용
+    type: ClusterIP # Ingress를 통해 통합 관리 예정
   defaultUser:
     enabled: true
     username: admin
@@ -74,13 +74,26 @@ dags:
     subPath: services/airflow-dags
     wait: 60
 
-# Airflow Configuration (이전 프로젝트 방식)
-airflow:
-  config:
-    AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
-    AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"
-    AIRFLOW__WEBSERVER__WEB_SERVER_WORKER_TIMEOUT: "300"
+# Airflow Configuration - 공식 Helm 차트 방식 (최상위 config 키)
+# 참고: airflow.config는 공식 차트에 없음. 최상위 config + env 사용
+config:
+  core:
+    load_examples: "False"
+  webserver:
+    expose_config: "True"
+    web_server_master_timeout: "300"
+    web_server_worker_timeout: "300"
+    base_url: "http://k8s-capaunifiedlb-ab7aaac323-480086301.ap-northeast-2.elb.amazonaws.com/airflow"
+    enable_proxy_fix: "True"
+
+# 환경변수 직접 주입 (config가 반영 안될 경우 fallback)
+env:
+  - name: AIRFLOW__WEBSERVER__BASE_URL
+    value: "http://k8s-capaunifiedlb-ab7aaac323-480086301.ap-northeast-2.elb.amazonaws.com/airflow"
+  - name: AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX
+    value: "True"
+  - name: AIRFLOW__CORE__LOAD_EXAMPLES
+    value: "False"
 
 # IRSA (EKS OIDC 설정 후 활성화)
 serviceAccount:

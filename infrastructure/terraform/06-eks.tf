@@ -150,4 +150,22 @@ resource "aws_eks_addon" "ebs_csi" {
   ]
 }
 
+# ------------------------------------------------------------------------------
+# Subnet Tagging for ALB Ingress Controller
+# ------------------------------------------------------------------------------
+# ALB 컨트롤러가 로드밸런서를 배치할 서브넷을 찾을 수 있도록 태그 추가
+resource "aws_ec2_tag" "subnet_elb_tag" {
+  for_each    = toset(data.aws_subnets.default.ids)
+  resource_id = each.value
+  key         = "kubernetes.io/role/elb"
+  value       = "1"
+}
+
+resource "aws_ec2_tag" "subnet_cluster_tag" {
+  for_each    = toset(data.aws_subnets.default.ids)
+  resource_id = each.value
+  key         = "kubernetes.io/cluster/${aws_eks_cluster.main.name}"
+  value       = "shared"
+}
+
 
