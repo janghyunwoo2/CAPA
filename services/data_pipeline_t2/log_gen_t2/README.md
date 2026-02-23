@@ -35,16 +35,34 @@ python ad_log_generator.py
 python ad_log_generator.py --date 2026-02-23
 ```
 
+### 날짜 범위로 여러 날 데이터 생성
+```bash
+# 2026-02-20부터 2026-02-22까지 3일간 데이터 생성
+python ad_log_generator.py --start-date 2026-02-20 --end-date 2026-02-22
+```
+
+### 과거 N일간 데이터 생성
+```bash
+# 오늘 포함 지난 7일간 데이터 생성
+python ad_log_generator.py --days-back 7
+```
+
 ### 특정 시간대만 생성
 ```bash
 # 오늘 12시부터 6시간 데이터 생성
 python ad_log_generator.py --start-hour 12 --hours 6
+
+# 특정 날짜의 특정 시간대
+python ad_log_generator.py --date 2026-02-20 --start-hour 18 --hours 4
 ```
 
-### 과거 데이터 백필
+### 과거 데이터 백필 예시
 ```bash
-# 2026-02-20 전체 24시간 데이터 생성
-python ad_log_generator.py --date 2026-02-20 --hours 24
+# 지난달 전체 데이터 생성
+python ad_log_generator.py --start-date 2026-01-01 --end-date 2026-01-31
+
+# 특정 주간 데이터만 생성
+python ad_log_generator.py --start-date 2026-02-17 --end-date 2026-02-23
 ```
 
 ## 생성되는 데이터

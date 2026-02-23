@@ -22,7 +22,7 @@ import textwrap
 # 설정
 # =============================================================================
 S3_BUCKET = "capa-data-lake-827913617635"
-DATABASE = "capa_db"
+DATABASE = "ad_log"
 ATHENA_OUTPUT = f"s3://{S3_BUCKET}/athena-results/"
 REGION = "ap-northeast-2"
 

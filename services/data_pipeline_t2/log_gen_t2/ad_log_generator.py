@@ -330,50 +330,105 @@ def main():
     """메인 함수"""
     import argparse
     
-    parser = argparse.ArgumentParser(description='광고 로그 데이터 생성기')
+    parser = argparse.ArgumentParser(
+        description='광고 로그 데이터 생성기',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+사용 예시:
+  # 오늘 전체 24시간 데이터 생성
+  python ad_log_generator.py
+  
+  # 특정 날짜 전체 데이터 생성
+  python ad_log_generator.py --date 2026-02-20
+  
+  # 특정 날짜의 특정 시간대만 생성
+  python ad_log_generator.py --date 2026-02-20 --start-hour 12 --hours 6
+  
+  # 날짜 범위로 여러 날 데이터 생성 (3일간)
+  python ad_log_generator.py --start-date 2026-02-20 --end-date 2026-02-22
+  
+  # 지난 7일간 데이터 생성
+  python ad_log_generator.py --days-back 7
+        '''
+    )
+    
     parser.add_argument('--date', type=str, 
-                       help='생성할 날짜 (YYYY-MM-DD 형식, 기본값: 오늘)')
+                       help='생성할 단일 날짜 (YYYY-MM-DD 형식)')
+    parser.add_argument('--start-date', type=str,
+                       help='생성할 시작 날짜 (YYYY-MM-DD 형식)')
+    parser.add_argument('--end-date', type=str,
+                       help='생성할 종료 날짜 (YYYY-MM-DD 형식, 포함)')
+    parser.add_argument('--days-back', type=int,
+                       help='오늘부터 과거 N일간 데이터 생성')
     parser.add_argument('--hours', type=int, default=24,
-                       help='생성할 시간 수 (기본값: 24시간)')
+                       help='날짜별 생성할 시간 수 (기본값: 24시간)')
     parser.add_argument('--start-hour', type=int, default=0,
                        help='시작 시간 (0-23, 기본값: 0)')
     
     args = parser.parse_args()
     
-    # 날짜 파싱
+    # 날짜 범위 결정
+    dates_to_process = []
+    
     if args.date:
-        target_date = datetime.strptime(args.date, '%Y-%m-%d')
+        # 단일 날짜 지정
+        dates_to_process = [datetime.strptime(args.date, '%Y-%m-%d')]
+    elif args.start_date and args.end_date:
+        # 날짜 범위 지정
+        start_date = datetime.strptime(args.start_date, '%Y-%m-%d')
+        end_date = datetime.strptime(args.end_date, '%Y-%m-%d')
+        current_date = start_date
+        while current_date <= end_date:
+            dates_to_process.append(current_date)
+            current_date += timedelta(days=1)
+    elif args.days_back:
+        # 과거 N일 지정
+        end_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        start_date = end_date - timedelta(days=args.days_back - 1)
+        current_date = start_date
+        while current_date <= end_date:
+            dates_to_process.append(current_date)
+            current_date += timedelta(days=1)
     else:
-        target_date = datetime.now()
+        # 기본값: 오늘
+        dates_to_process = [datetime.now()]
     
     # 생성기 인스턴스 생성
     generator = AdLogGenerator()
     
-    # 통계 수집
-    stats = []
+    # 전체 통계 수집
+    all_stats = []
     
-    # 지정된 시간만큼 데이터 생성
-    for hour_offset in range(args.hours):
-        current_hour = (args.start_hour + hour_offset) % 24
-        target_datetime = target_date.replace(hour=current_hour, minute=0, second=0, microsecond=0)
+    logger.info(f"데이터 생성 시작: {len(dates_to_process)}일간")
+    
+    # 각 날짜별로 데이터 생성
+    for target_date in dates_to_process:
+        logger.info(f"\n=== {target_date.strftime('%Y-%m-%d')} 데이터 생성 중 ===")
         
-        if hour_offset >= 24:
-            # 다음 날로 이동
-            target_datetime += timedelta(days=hour_offset // 24)
+        # 해당 날짜의 시간별 데이터 생성
+        for hour_offset in range(args.hours):
+            current_hour = (args.start_hour + hour_offset) % 24
+            target_datetime = target_date.replace(hour=current_hour, minute=0, second=0, microsecond=0)
             
-        try:
-            stat = generator.generate_hourly_data(target_datetime)
-            stats.append(stat)
-        except Exception as e:
-            logger.error(f"Failed to generate data for {target_datetime}: {e}")
+            if hour_offset >= 24:
+                # 다음 날로 이동
+                target_datetime += timedelta(days=hour_offset // 24)
+                
+            try:
+                stat = generator.generate_hourly_data(target_datetime)
+                all_stats.append(stat)
+            except Exception as e:
+                logger.error(f"Failed to generate data for {target_datetime}: {e}")
             
-    # 통계 출력
-    if stats:
-        logger.info("\n=== 생성 완료 통계 ===")
-        total_impressions = sum(s['impressions'] for s in stats)
-        total_clicks = sum(s['clicks'] for s in stats)
-        total_conversions = sum(s['conversions'] for s in stats)
+    # 전체 통계 출력
+    if all_stats:
+        logger.info("\n=== 전체 생성 완료 통계 ===")
+        total_impressions = sum(s['impressions'] for s in all_stats)
+        total_clicks = sum(s['clicks'] for s in all_stats)
+        total_conversions = sum(s['conversions'] for s in all_stats)
         
+        logger.info(f"처리된 날짜: {len(dates_to_process)}일")
+        logger.info(f"처리된 시간: {len(all_stats)}시간")
         logger.info(f"총 노출: {total_impressions:,}")
         logger.info(f"총 클릭: {total_clicks:,}")
         logger.info(f"총 전환: {total_conversions:,}")
