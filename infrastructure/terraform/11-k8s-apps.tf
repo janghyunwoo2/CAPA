@@ -571,7 +571,7 @@ resource "kubernetes_deployment" "vanna_api" {
             }
             limits = {
               cpu    = "700m"
-              memory = "1.2Gi"
+              memory = "1Gi"
             }
           }
 

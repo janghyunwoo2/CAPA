@@ -175,7 +175,22 @@ resource "helm_release" "chromadb" {
 
   set {
     name  = "persistence.size"
-    value = "5Gi" # Plan에 명시된 5Gi 사용
+    value = "5Gi"
+  }
+
+  set {
+    name  = "env.IS_PERSISTENT"
+    value = "TRUE"
+  }
+
+  set {
+    name  = "env.PERSIST_DIRECTORY"
+    value = "/data"
+  }
+
+  set {
+    name  = "env.CHROMA_SERVER_AUTH_PROVIDER"
+    value = ""
   }
 
   depends_on = [aws_eks_addon.ebs_csi]

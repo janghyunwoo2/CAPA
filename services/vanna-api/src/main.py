@@ -56,7 +56,7 @@ class VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
             import anthropic
 
             client = anthropic.Anthropic(api_key=self.config.get("api_key"))
-            model = self.config.get("model", "claude-3-5-haiku-20241022")
+            model = self.config.get("model", "claude-haiku-4-5")
 
             prompt = f"User Question: {question}\nSQL: {sql}\nResults:\n{df.to_string()}\n\nPlease summarize the results and answer the user's question in a friendly tone in Korean."
 
@@ -150,7 +150,7 @@ def get_vanna() -> VannaAthena:
         vanna_instance = VannaAthena(
             config={
                 "api_key": ANTHROPIC_API_KEY,
-                "model": "claude-3-5-haiku-20241022",
+                "model": "claude-haiku-4-5",
                 "chroma_host": CHROMA_HOST,
                 "chroma_port": CHROMA_PORT,
             }
@@ -270,7 +270,7 @@ async def summarize_text(request: SummarizeRequest):
 
         vanna = get_vanna()
         client = anthropic.Anthropic(api_key=vanna.config.get("api_key"))
-        model = vanna.config.get("model", "claude-3-5-haiku-20241022")
+        model = vanna.config.get("model", "claude-haiku-4-5")
 
         logger.info(f"Summarizing text: {request.text[:100]}...")
 
