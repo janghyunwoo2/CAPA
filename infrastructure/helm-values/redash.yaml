@@ -48,14 +48,14 @@ server:
       cpu: 100m
       memory: 256Mi
     limits:
-      cpu: 1000m
-      memory: 1Gi
+      cpu: 700m
+      memory: 768Mi
   readinessProbe:
-    initialDelaySeconds: 30
+    initialDelaySeconds: 60
     timeoutSeconds: 15
     periodSeconds: 15
   livenessProbe:
-    initialDelaySeconds: 60
+    initialDelaySeconds: 120
     timeoutSeconds: 15
     periodSeconds: 20
 
@@ -65,8 +65,8 @@ scheduler:
       cpu: 50m
       memory: 128Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: 200m
+      memory: 256Mi
 
 adhocWorker:
   resources:
@@ -74,8 +74,8 @@ adhocWorker:
       cpu: 50m
       memory: 128Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: 200m
+      memory: 256Mi
 
 scheduledWorker:
   resources:
@@ -83,8 +83,8 @@ scheduledWorker:
       cpu: 50m
       memory: 128Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: 200m
+      memory: 256Mi
 
 genericWorker:
   resources:
@@ -92,8 +92,8 @@ genericWorker:
       cpu: 50m
       memory: 128Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: 200m
+      memory: 256Mi
 
 service:
   type: ClusterIP

@@ -55,15 +55,17 @@ resource "aws_eks_node_group" "main" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = "${var.project_name}-node-group"
   node_role_arn   = aws_iam_role.eks_node.arn
-  subnet_ids      = data.aws_subnets.default.ids
+
+  # 단일 가용영역(Single-AZ) 강제 할당: 비용 절감 및 EBS 충돌 방지
+  subnet_ids = [sort(data.aws_subnets.default.ids)[0]]
 
   instance_types = ["t3.medium"]
   capacity_type  = "ON_DEMAND"
 
   scaling_config {
-    desired_size = 3
-    min_size     = 3
-    max_size     = 4
+    desired_size = 2
+    min_size     = 2
+    max_size     = 3
   }
 
   update_config {

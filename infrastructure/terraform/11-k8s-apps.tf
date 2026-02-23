@@ -255,12 +255,12 @@ resource "kubernetes_deployment" "report_generator" {
           # 리소스 제한
           resources {
             requests = {
-              cpu    = "250m"
-              memory = "512Mi"
+              cpu    = "100m"
+              memory = "256Mi"
             }
             limits = {
-              cpu    = "500m"
-              memory = "1Gi"
+              cpu    = "250m"
+              memory = "512Mi"
             }
           }
 
@@ -563,15 +563,15 @@ resource "kubernetes_deployment" "vanna_api" {
             value = "INFO"
           }
 
-          # 리소스 제한 (안정성 확보를 위해 소폭 상향)
+          # 리소스 제한
           resources {
             requests = {
-              cpu    = "250m"
+              cpu    = "200m"
               memory = "512Mi"
             }
             limits = {
-              cpu    = "700m"
-              memory = "1Gi"
+              cpu    = "400m"
+              memory = "768Mi"
             }
           }
 
@@ -774,12 +774,12 @@ resource "kubernetes_deployment" "slack_bot" {
           # 리소스 제한
           resources {
             requests = {
-              cpu    = "100m"
+              cpu    = "50m"
               memory = "128Mi"
             }
             limits = {
-              cpu    = "500m"
-              memory = "512Mi"
+              cpu    = "200m"
+              memory = "256Mi"
             }
           }
 
