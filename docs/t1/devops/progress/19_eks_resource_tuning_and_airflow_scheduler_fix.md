@@ -38,9 +38,9 @@
   - 트래픽이 적은 백그라운드 워커 중심 축소.
 - **Vanna API (AI 모듈)**: 
   - (변경 전) `CPU 700m / Mem 1Gi` -> (변경 후) `CPU 400m / Mem 768Mi`
-- **Redash (서버 및 워커 3종)**:
-  - Worker (3개): `CPU 500m / Mem 512Mi` -> `CPU 200m / Mem 256Mi`
-  - Server: 최초 CPU를 `400m`로 조였으나(Gunicorn Timeout 에러 137 발생), 최종적으로 **`CPU 700m / Mem 768Mi`**로 타협안 반영. 
+- **Redash (서버 및 워커 4종)**:
+  - Worker (4종: Scheduler, adhoc, scheduled, generic): `CPU 500m / Mem 512Mi` -> `CPU 200m / Mem 256Mi`
+  - Server: 최종적으로 **`CPU 700m / Mem 768Mi`**로 타협안 반영. 
   - Liveness / Readiness 대기 시간 2배 증설(`120s`, `60s`).
 - **Airflow Scheduler**: 
   - Liveness/Readiness Timeout 수치를 대폭 늘려 노드 경합 시 일시적으로 느려져도 파드가 죽지 않고 버티도록 수정.
@@ -55,8 +55,7 @@
 ## 🔍 [3단계] 최종 배포 및 검증
 
 ### 1) 노드별 최적화 비율 (Limits 기준)
-- **Node 1 (`172-31-34-230`)**: CPU 152%, Memory 150% (기존 217%에서 대폭 하락하여 경합 한계선 회피)
-- **Node 2 (`172-31-37-208`)**: CPU 82%, Memory 141% 
+- **기존 노드 1, 2**: CPU 및 Memory 점유율이 여전히 임계치 근처에 머물러 물리적 사양 확장 결정.
 
 ### 2) 파드 상태 결과
 ```bash
@@ -71,5 +70,5 @@ slack-bot-7949b85b86-vgw8b                 1/1     Running
 
 ## 📊 최종 결과 및 의의
 
-### 🏆 판정: ✅ **Pass & Cluster Stabilized**
-> 노드 규모(2대)에 무리하게 맞춰져 있던 앱(Redash, Vanna, Airflow)들의 최대 부하 수치(Limits)를 면밀하게 분석하여 깎아내고 밸런싱했습니다. 이 테트리스 튜닝을 통해 EC2 인스턴스의 OOM / CPU Throttling 패닉을 완벽히 차단했으며, 에러 루프에 빠져있던 **Airflow 스케줄러와 Redash 서버를 완벽하게 구출(Running)하는 데 성공**했습니다.
+### 🏆 판정: ⚠️ **Insufficient (사양 한계로 인한 추가 조치 필요)**
+> 리소스 다이어트를 통해 일시적으로 파드들을 복구했으나, `t3.medium`의 메모리(4GB) 및 파드 수용량 한계로 인해 근본적인 해결에는 실익이 없음을 확인했습니다. 이후 **[Task #20]에서 노드 사양 업그레이드(t3a.large)를 통해 100% 안정화를 달성**했습니다.

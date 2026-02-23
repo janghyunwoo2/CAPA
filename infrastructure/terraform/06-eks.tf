@@ -59,13 +59,13 @@ resource "aws_eks_node_group" "main" {
   # 단일 가용영역(Single-AZ) 강제 할당: 비용 절감 및 EBS 충돌 방지
   subnet_ids = [sort(data.aws_subnets.default.ids)[0]]
 
-  instance_types = ["t3.medium"]
+  instance_types = ["t3a.large"]
   capacity_type  = "ON_DEMAND"
 
   scaling_config {
     desired_size = 2
     min_size     = 2
-    max_size     = 3
+    max_size     = 3 # 2대로 충분하며, 부하 시 3대까지 확장 허용
   }
 
   update_config {
@@ -79,7 +79,9 @@ resource "aws_eks_node_group" "main" {
   ]
 
   tags = {
-    Name = "${var.project_name}-node-group"
+    Name                                                    = "${var.project_name}-node-group"
+    "k8s.io/cluster-autoscaler/enabled"                     = "true"
+    "k8s.io/cluster-autoscaler/${var.project_name}-cluster" = "owned"
   }
 }
 

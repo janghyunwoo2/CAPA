@@ -151,6 +151,27 @@ resource "helm_release" "redash" {
     name  = "redis.auth.enabled"
     value = "false"
   }
+
+  # Server 리소스 및 프로브 최적화 (Target 12 기록 기반)
+  set {
+    name  = "server.resources.limits.cpu"
+    value = "1000m"
+  }
+
+  set {
+    name  = "server.resources.limits.memory"
+    value = "1Gi"
+  }
+
+  set {
+    name  = "server.readinessProbe.initialDelaySeconds"
+    value = "60"
+  }
+
+  set {
+    name  = "server.readinessProbe.timeoutSeconds"
+    value = "15"
+  }
 }
 
 # Data source to retrieve Redash LoadBalancer URL

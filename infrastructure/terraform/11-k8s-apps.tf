@@ -810,3 +810,159 @@ resource "kubernetes_deployment" "slack_bot" {
 
   depends_on = [kubernetes_service.slack_bot, kubernetes_secret.slack_bot_secrets]
 }
+
+# =====================================================================================================================
+# Cluster Autoscaler
+# =====================================================================================================================
+resource "helm_release" "cluster_autoscaler" {
+  name       = "cluster-autoscaler"
+  repository = "https://kubernetes.github.io/autoscaler"
+  chart      = "cluster-autoscaler"
+  version    = "9.37.0"
+  namespace  = "kube-system"
+
+  set {
+    name  = "autoDiscovery.clusterName"
+    value = aws_eks_cluster.main.name
+  }
+
+  set {
+    name  = "awsRegion"
+    value = var.aws_region
+  }
+
+  set {
+    name  = "rbac.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
+    value = aws_iam_role.cluster_autoscaler.arn
+  }
+
+  set {
+    name  = "extraArgs.balance-similar-node-groups"
+    value = "true"
+  }
+
+  set {
+    name  = "extraArgs.skip-nodes-with-system-pods"
+    value = "false"
+  }
+
+  # 리소스 절약 (단일 AZ 환경)
+  set {
+    name  = "resources.requests.cpu"
+    value = "100m"
+  }
+  set {
+    name  = "resources.requests.memory"
+    value = "128Mi"
+  }
+  set {
+    name  = "resources.limits.cpu"
+    value = "200m"
+  }
+  set {
+    name  = "resources.limits.memory"
+    value = "256Mi"
+  }
+
+  depends_on = [
+    helm_release.metrics_server,
+    aws_iam_role.cluster_autoscaler
+  ]
+}
+
+# =====================================================================================================================
+# Horizontal Pod Autoscalers (HPA)
+# =====================================================================================================================
+
+resource "kubernetes_horizontal_pod_autoscaler_v2" "vanna_api" {
+  metadata {
+    name      = "vanna-api-hpa"
+    namespace = kubernetes_namespace.vanna.metadata[0].name
+  }
+
+  spec {
+    scale_target_ref {
+      api_version = "apps/v1"
+      kind        = "Deployment"
+      name        = "vanna-api"
+    }
+
+    min_replicas = 1
+    max_replicas = 3
+
+    metric {
+      type = "Resource"
+      resource {
+        name = "cpu"
+        target {
+          type                = "Utilization"
+          average_utilization = 70
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_deployment.vanna_api]
+}
+
+resource "kubernetes_horizontal_pod_autoscaler_v2" "slack_bot" {
+  metadata {
+    name      = "slack-bot-hpa"
+    namespace = kubernetes_namespace.slack_bot.metadata[0].name
+  }
+
+  spec {
+    scale_target_ref {
+      api_version = "apps/v1"
+      kind        = "Deployment"
+      name        = "slack-bot"
+    }
+
+    min_replicas = 1
+    max_replicas = 3
+
+    metric {
+      type = "Resource"
+      resource {
+        name = "cpu"
+        target {
+          type                = "Utilization"
+          average_utilization = 70
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_deployment.slack_bot]
+}
+
+resource "kubernetes_horizontal_pod_autoscaler_v2" "report_generator" {
+  metadata {
+    name      = "report-generator-hpa"
+    namespace = kubernetes_namespace.report.metadata[0].name
+  }
+
+  spec {
+    scale_target_ref {
+      api_version = "apps/v1"
+      kind        = "Deployment"
+      name        = "report-generator"
+    }
+
+    min_replicas = 1
+    max_replicas = 3
+
+    metric {
+      type = "Resource"
+      resource {
+        name = "cpu"
+        target {
+          type                = "Utilization"
+          average_utilization = 70
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_deployment.report_generator]
+}
