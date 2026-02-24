@@ -76,11 +76,7 @@ def build_hourly_summary_query(data_interval_start: str) -> str:
                 THEN CAST(COUNT(DISTINCT clk.event_id) AS DOUBLE)
                      / CAST(COUNT(DISTINCT imp.event_id) AS DOUBLE) * 100
                 ELSE 0.0
-            END AS ctr,
-
-            -- 비용 집계
-            SUM(imp.bid_price)              AS total_bid_cost,
-            AVG(imp.bid_price)              AS avg_bid_price
+            END AS ctr
 
         FROM {DATABASE}.ad_events_raw AS imp
         LEFT JOIN {DATABASE}.ad_events_raw AS clk
@@ -272,9 +268,7 @@ with DAG(
                 "    THEN CAST(COUNT(DISTINCT clk.event_id) AS DOUBLE) "
                 "         / CAST(COUNT(DISTINCT imp.event_id) AS DOUBLE) * 100 "
                 "    ELSE 0.0 "
-                "  END AS ctr, "
-                "  SUM(imp.bid_price) AS total_bid_cost, "
-                "  AVG(imp.bid_price) AS avg_bid_price "
+                "  END AS ctr "
                 "FROM {{ params.database }}.ad_events_raw AS imp "
                 "LEFT JOIN {{ params.database }}.ad_events_raw AS clk "
                 "  ON imp.campaign_id = clk.campaign_id "

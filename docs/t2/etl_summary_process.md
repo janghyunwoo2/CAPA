@@ -73,7 +73,6 @@ CREATE EXTERNAL TABLE ad_combined_log (
     device_type STRING,
     timestamp BIGINT,
     is_click BOOLEAN,
-    bid_price DOUBLE,
     click_timestamp BIGINT
 )
 PARTITIONED BY (dt STRING)  -- 형식: 2026-02-24-00
@@ -92,9 +91,7 @@ CREATE EXTERNAL TABLE ad_combined_log_summary (
     clicks BIGINT,
     conversions BIGINT,
     ctr DOUBLE,
-    cvr DOUBLE,
-    total_cost DOUBLE,
-    avg_bid_price DOUBLE
+    cvr DOUBLE
 )
 PARTITIONED BY (dt STRING)  -- 형식: 2026-02-24
 STORED AS PARQUET
@@ -117,7 +114,6 @@ SELECT
     imp.device_type,
     imp.timestamp,
     CASE WHEN clk.imp_event_id IS NOT NULL THEN true ELSE false END AS is_click,
-    imp.bid_price,
     clk.timestamp AS click_timestamp
 FROM ad_impression imp
 LEFT JOIN ad_click clk
@@ -135,9 +131,7 @@ WITH daily_combined AS (
         creative_id,
         device_type,
         COUNT(DISTINCT imp_event_id) as impressions,
-        SUM(CASE WHEN is_click THEN 1 ELSE 0 END) as clicks,
-        SUM(bid_price) as total_cost,
-        AVG(bid_price) as avg_bid_price
+        SUM(CASE WHEN is_click THEN 1 ELSE 0 END) as clicks
     FROM ad_combined_log
     WHERE dt >= '2026-02-24-00' 
         AND dt <= '2026-02-24-23'
@@ -170,9 +164,7 @@ SELECT
         WHEN dc.clicks > 0 
         THEN COALESCE(cv.conversions, 0) * 100.0 / dc.clicks 
         ELSE 0 
-    END as cvr,
-    dc.total_cost,
-    dc.avg_bid_price
+    END as cvr
 FROM daily_combined dc
 LEFT JOIN daily_conversions cv
     ON dc.campaign_id = cv.campaign_id 

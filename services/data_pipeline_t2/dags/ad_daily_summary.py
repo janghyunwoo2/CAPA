@@ -12,7 +12,7 @@ DAG: ad_daily_summary
 
 결과 테이블:
   ad_daily_summary: campaign_id, device_type별
-    impressions, clicks, conversions, ctr, cvr, total_bid_cost
+    impressions, clicks, conversions, ctr, cvr
 """
 
 from airflow import DAG
@@ -202,8 +202,7 @@ with DAG(
                 "    campaign_id, "
                 "    device_type, "
                 "    SUM(impressions)    AS impressions, "
-                "    SUM(clicks)         AS clicks, "
-                "    SUM(total_bid_cost) AS total_bid_cost "
+                "    SUM(clicks)         AS clicks "
                 "  FROM {{ params.database }}.ad_hourly_summary "
                 "  WHERE dt >= '{{ data_interval_start.strftime(\"%Y-%m-%d\") }}-00' "
                 "    AND dt <= '{{ data_interval_start.strftime(\"%Y-%m-%d\") }}-23' "
@@ -233,11 +232,7 @@ with DAG(
                 "    ELSE 0.0 END AS ctr, "
                 "  CASE WHEN h.clicks > 0 "
                 "    THEN CAST(COALESCE(c.conversions, 0) AS DOUBLE) / CAST(h.clicks AS DOUBLE) * 100 "
-                "    ELSE 0.0 END AS cvr, "
-                "  h.total_bid_cost, "
-                "  CASE WHEN h.impressions > 0 "
-                "    THEN h.total_bid_cost / CAST(h.impressions AS DOUBLE) "
-                "    ELSE 0.0 END AS avg_bid_price "
+                "    ELSE 0.0 END AS cvr "
                 "FROM hourly_agg h "
                 "LEFT JOIN conversion_agg c "
                 "  ON h.campaign_id = c.campaign_id "

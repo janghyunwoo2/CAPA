@@ -3,6 +3,7 @@ Daily ETL: 24시간 ad_combined_log + conversion 집계하여 ad_combined_log_su
 매일 실행되어 전날 데이터를 처리
 """
 
+import os
 import logging
 import argparse
 from datetime import datetime, timedelta
@@ -41,15 +42,14 @@ class DailyETL:
         # ad_combined_log_summary 테이블 생성
         schema = """
             campaign_id STRING,
-            creative_id STRING,
+            ad_id STRING,
+            advertiser_id STRING,
             device_type STRING,
             impressions BIGINT,
             clicks BIGINT,
             conversions BIGINT,
             ctr DOUBLE,
-            cvr DOUBLE,
-            total_cost DOUBLE,
-            avg_bid_price DOUBLE
+            cvr DOUBLE
         """
         
         query = create_external_table(
@@ -78,32 +78,31 @@ class DailyETL:
         WITH daily_combined AS (
             SELECT 
                 campaign_id,
-                creative_id,
+                ad_id,
+                advertiser_id,
                 device_type,
-                COUNT(DISTINCT imp_event_id) as impressions,
-                SUM(CASE WHEN is_click THEN 1 ELSE 0 END) as clicks,
-                SUM(bid_price) as total_cost,
-                AVG(bid_price) as avg_bid_price
+                COUNT(DISTINCT impression_id) as impressions,
+                SUM(CASE WHEN is_click THEN 1 ELSE 0 END) as clicks
             FROM {DATABASE}.ad_combined_log
             WHERE dt >= '{self.date_str}-00' 
                 AND dt <= '{self.date_str}-23'
-            GROUP BY campaign_id, creative_id, device_type
+            GROUP BY campaign_id, ad_id, advertiser_id, device_type
         ),
         daily_conversions AS (
             SELECT 
                 campaign_id,
                 device_type,
-                COUNT(DISTINCT event_id) as conversions
-            FROM {DATABASE}.ad_events_raw
-            WHERE event_type = 'conversion'
-                AND year = '{year}'
+                COUNT(DISTINCT conversion_id) as conversions
+            FROM {DATABASE}.conversions
+            WHERE year = '{year}'
                 AND month = '{month}'
                 AND day = '{day}'
             GROUP BY campaign_id, device_type
         )
         SELECT 
             dc.campaign_id,
-            dc.creative_id,
+            dc.ad_id,
+            dc.advertiser_id,
             dc.device_type,
             dc.impressions,
             dc.clicks,
@@ -117,9 +116,7 @@ class DailyETL:
                 WHEN dc.clicks > 0 
                 THEN CAST(COALESCE(cv.conversions, 0) AS DOUBLE) / CAST(dc.clicks AS DOUBLE) * 100
                 ELSE 0.0
-            END as cvr,
-            dc.total_cost,
-            dc.avg_bid_price
+            END as cvr
         FROM daily_combined dc
         LEFT JOIN daily_conversions cv
             ON dc.campaign_id = cv.campaign_id 

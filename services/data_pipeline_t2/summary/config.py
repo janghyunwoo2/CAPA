@@ -5,13 +5,34 @@ S3 버킷, Athena 설정 등 공통 설정값 관리
 
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
+
+# .env 파일 로드 (상위 디렉토리에서)
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent.parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+        print(f"Loaded .env from: {env_path}")
+except ImportError:
+    print("python-dotenv not installed. Using system environment variables only.")
+
+# AWS 자격 증명 확인 (환경 변수에서 읽기)
+# 설정 방법은 setup_aws_credentials.md 참조
+AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+
+if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY:
+    print("WARNING: AWS credentials not found in environment variables!")
+    print("Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY")
+    print("See setup_aws_credentials.md for instructions")
 
 # AWS 설정
-AWS_REGION = "ap-northeast-2"
+AWS_REGION = os.environ.get('AWS_DEFAULT_REGION', 'ap-northeast-2')
 S3_BUCKET = "capa-data-lake-827913617635"  # 실제 버킷명으로 변경 필요
 
 # Athena 설정
-DATABASE = "ad_log"
+DATABASE = "capa_ad_logs"
 ATHENA_OUTPUT_LOCATION = f"s3://{S3_BUCKET}/athena-results/"
 
 # S3 경로 설정
@@ -20,9 +41,9 @@ SUMMARY_PREFIX = "summary"
 
 # 테이블별 S3 경로
 S3_PATHS = {
-    "impression": f"s3://{S3_BUCKET}/{RAW_DATA_PREFIX}/impression/",
-    "click": f"s3://{S3_BUCKET}/{RAW_DATA_PREFIX}/click/",
-    "conversion": f"s3://{S3_BUCKET}/{RAW_DATA_PREFIX}/conversion/",
+    "impressions": f"s3://{S3_BUCKET}/{RAW_DATA_PREFIX}/impressions/",
+    "clicks": f"s3://{S3_BUCKET}/{RAW_DATA_PREFIX}/clicks/",
+    "conversions": f"s3://{S3_BUCKET}/{RAW_DATA_PREFIX}/conversions/",
     "ad_combined_log": f"s3://{S3_BUCKET}/{SUMMARY_PREFIX}/ad_combined_log/",
     "ad_combined_log_summary": f"s3://{S3_BUCKET}/{SUMMARY_PREFIX}/ad_combined_log_summary/"
 }

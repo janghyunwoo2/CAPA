@@ -3,6 +3,7 @@ Hourly ETL: impression + click 조인하여 ad_combined_log 생성
 매시간 실행되어 해당 시간의 데이터를 처리
 """
 
+import os
 import logging
 import argparse
 from datetime import datetime, timedelta
@@ -40,14 +41,15 @@ class HourlyETL:
         """필요한 테이블이 없으면 생성"""
         # ad_combined_log 테이블 생성
         schema = """
-            imp_event_id STRING,
+            impression_id STRING,
             user_id STRING,
+            ad_id STRING,
             campaign_id STRING,
-            creative_id STRING,
+            advertiser_id STRING,
+            platform STRING,
             device_type STRING,
             timestamp BIGINT,
             is_click BOOLEAN,
-            bid_price DOUBLE,
             click_timestamp BIGINT
         """
         
@@ -77,30 +79,27 @@ class HourlyETL:
         INSERT OVERWRITE TABLE {DATABASE}.ad_combined_log
         PARTITION (dt='{self.hour_str}')
         SELECT 
-            imp.event_id AS imp_event_id,
+            imp.impression_id,
             imp.user_id,
+            imp.ad_id,
             imp.campaign_id,
-            imp.creative_id,
+            imp.advertiser_id,
+            imp.platform,
             imp.device_type,
             imp.timestamp,
-            CASE WHEN clk.event_id IS NOT NULL THEN true ELSE false END AS is_click,
-            imp.bid_price,
+            CASE WHEN clk.impression_id IS NOT NULL THEN true ELSE false END AS is_click,
             clk.timestamp AS click_timestamp
-        FROM {DATABASE}.ad_events_raw imp
-        LEFT JOIN {DATABASE}.ad_events_raw clk
-            ON imp.event_id = clk.imp_event_id
-            AND clk.event_type = 'click'
+        FROM {DATABASE}.impressions imp
+        LEFT JOIN {DATABASE}.clicks clk
+            ON imp.impression_id = clk.impression_id
             AND clk.year = '{year}'
             AND clk.month = '{month}'
             AND clk.day = '{day}'
-            AND clk.timestamp >= {start_ts}
-            AND clk.timestamp < {end_ts}
-        WHERE imp.event_type = 'impression'
-            AND imp.year = '{year}'
+            AND clk.hour = '{hour}'
+        WHERE imp.year = '{year}'
             AND imp.month = '{month}'
             AND imp.day = '{day}'
-            AND imp.timestamp >= {start_ts}
-            AND imp.timestamp < {end_ts}
+            AND imp.hour = '{hour}'
         """
         
         return query
@@ -118,7 +117,7 @@ class HourlyETL:
             drop_query = f"DROP TABLE IF EXISTS {DATABASE}.{temp_table}"
             self.executor.execute_query(drop_query)
             
-            # CTAS 쿼리 생성
+            # CTAS 쿼리 생성 - 실제 테이블 구조에 맞게 수정
             ctas_query = f"""
             CREATE TABLE {DATABASE}.{temp_table}
             WITH (
@@ -127,30 +126,27 @@ class HourlyETL:
                 external_location = '{S3_PATHS["ad_combined_log"]}dt={self.hour_str}/'
             ) AS
             SELECT 
-                imp.event_id AS imp_event_id,
+                imp.impression_id,
                 imp.user_id,
+                imp.ad_id,
                 imp.campaign_id,
-                imp.creative_id,
+                imp.advertiser_id,
+                imp.platform,
                 imp.device_type,
                 imp.timestamp,
-                CASE WHEN clk.event_id IS NOT NULL THEN true ELSE false END AS is_click,
-                imp.bid_price,
+                CASE WHEN clk.click_id IS NOT NULL THEN true ELSE false END AS is_click,
                 clk.timestamp AS click_timestamp
-            FROM {DATABASE}.ad_events_raw imp
-            LEFT JOIN {DATABASE}.ad_events_raw clk
-                ON imp.event_id = clk.imp_event_id
-                AND clk.event_type = 'click'
+            FROM {DATABASE}.impressions imp
+            LEFT JOIN {DATABASE}.clicks clk
+                ON imp.impression_id = clk.impression_id
                 AND clk.year = '{self.target_hour.strftime("%Y")}'
                 AND clk.month = '{self.target_hour.strftime("%m")}'
                 AND clk.day = '{self.target_hour.strftime("%d")}'
-                AND clk.timestamp >= {int(self.target_hour.timestamp() * 1000)}
-                AND clk.timestamp < {int((self.target_hour + timedelta(hours=1)).timestamp() * 1000)}
-            WHERE imp.event_type = 'impression'
-                AND imp.year = '{self.target_hour.strftime("%Y")}'
+                AND clk.hour = '{self.target_hour.strftime("%H")}'
+            WHERE imp.year = '{self.target_hour.strftime("%Y")}'
                 AND imp.month = '{self.target_hour.strftime("%m")}'
                 AND imp.day = '{self.target_hour.strftime("%d")}'
-                AND imp.timestamp >= {int(self.target_hour.timestamp() * 1000)}
-                AND imp.timestamp < {int((self.target_hour + timedelta(hours=1)).timestamp() * 1000)}
+                AND imp.hour = '{self.target_hour.strftime("%H")}'
             """
             
             logger.info(f"Executing CTAS query for {self.hour_str}")

@@ -19,8 +19,8 @@ pip install -r requirements.txt
 
 ```python
 AWS_REGION = "ap-northeast-2"
-S3_BUCKET = "capa-data-lake-827913617635"  # 실제 버킷명으로 변경
-DATABASE = "ad_log"
+S3_BUCKET = "capa-data-lake-827913617635"
+DATABASE = "capa_ad_logs"
 ```
 
 ## 사용법
@@ -81,23 +81,27 @@ python daily_etl.py --target-date 2026-02-24
 ## 테이블 스키마
 
 ### ad_combined_log (Hourly)
-- imp_event_id: 노출 이벤트 ID
+- impression_id: 노출 이벤트 ID
 - user_id: 사용자 ID
+- ad_id: 광고 ID
 - campaign_id: 캠페인 ID
-- creative_id: 광고 소재 ID
+- advertiser_id: 광고주 ID
+- platform: 플랫폼
 - device_type: 디바이스 타입
 - timestamp: 이벤트 시간 (milliseconds)
 - is_click: 클릭 여부 (boolean)
-- bid_price: 입찰가
 - click_timestamp: 클릭 시간
 
 ### ad_combined_log_summary (Daily)
 - campaign_id: 캠페인 ID
-- creative_id: 광고 소재 ID  
+- ad_id: 광고 ID
+- advertiser_id: 광고주 ID
 - device_type: 디바이스 타입
 - impressions: 노출수
 - clicks: 클릭수
 - conversions: 전환수
+- ctr: 클릭률 (%)
+- cvr: 전환율 (%)
 - ctr: 클릭률 (%)
 - cvr: 전환률 (%)
 - total_cost: 총 비용
