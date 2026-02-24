@@ -23,6 +23,9 @@ postgresql:
     limits:
       cpu: 200m
       memory: 512Mi
+  primary:
+    nodeSelector:
+      node-type: core
 
 redis:
   enabled: true
@@ -41,6 +44,8 @@ redis:
       limits:
         cpu: 100m
         memory: 128Mi
+    nodeSelector:
+      node-type: core
 
 server:
   resources:
@@ -58,6 +63,8 @@ server:
     initialDelaySeconds: 120
     timeoutSeconds: 15
     periodSeconds: 20
+  nodeSelector:
+    node-type: core
 
 scheduler:
   resources:
@@ -67,6 +74,8 @@ scheduler:
     limits:
       cpu: 200m
       memory: 256Mi
+  nodeSelector:
+    node-type: core
 
 adhocWorker:
   resources:

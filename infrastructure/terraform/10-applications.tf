@@ -92,13 +92,14 @@ resource "helm_release" "airflow" {
     value = aws_iam_role.airflow.arn
   }
 
-  timeout = 900
-  wait    = true
+  timeout = 600
+  wait    = false # Karpenter가 비동기로 노드를 프로비저닝하므로 Terraform이 대기하지 않음
 
-  # StorageClass 및 IAM Role dependency 명시
+  # 배포 순서: 인프라(NodePool) 완료 후 애플리케이션 배포
   depends_on = [
     kubernetes_storage_class.gp2,
-    aws_iam_role_policy_attachment.airflow_s3_access
+    aws_iam_role_policy_attachment.airflow_s3_access,
+    kubectl_manifest.karpenter_nodepool_default # 스팟 노드 준비 후 배포
   ]
 }
 
@@ -172,6 +173,12 @@ resource "helm_release" "redash" {
     name  = "server.readinessProbe.timeoutSeconds"
     value = "15"
   }
+  wait = false # Karpenter 비동기 노드 프로비저닝 대응
+
+  # 배포 순서: 인프라(NodePool) 완료 후 배포
+  depends_on = [
+    kubectl_manifest.karpenter_nodepool_default
+  ]
 }
 
 # Data source to retrieve Redash LoadBalancer URL

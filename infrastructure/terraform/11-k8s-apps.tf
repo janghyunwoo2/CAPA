@@ -202,6 +202,13 @@ resource "kubernetes_deployment" "report_generator" {
       spec {
         service_account_name = kubernetes_service_account.report_generator_sa.metadata[0].name
 
+        # [Karpenter] 스팟 노드 배치 허용
+        toleration {
+          key      = "karpenter.sh/disruption"
+          operator = "Exists"
+          effect   = "NoSchedule"
+        }
+
         container {
           name              = "report-generator"
           image             = "${aws_ecr_repository.report_generator.repository_url}:latest"
@@ -513,6 +520,13 @@ resource "kubernetes_deployment" "vanna_api" {
       spec {
         service_account_name = kubernetes_service_account.vanna_sa.metadata[0].name
 
+        # [Karpenter] 스팟 노드 배치 허용
+        toleration {
+          key      = "karpenter.sh/disruption"
+          operator = "Exists"
+          effect   = "NoSchedule"
+        }
+
         container {
           name              = "vanna-api"
           image             = "${aws_ecr_repository.vanna_api.repository_url}:latest"
@@ -734,6 +748,13 @@ resource "kubernetes_deployment" "slack_bot" {
       }
 
       spec {
+        # [Karpenter] 스팟 노드 배치 허용
+        toleration {
+          key      = "karpenter.sh/disruption"
+          operator = "Exists"
+          effect   = "NoSchedule"
+        }
+
         container {
           name              = "slack-bot"
           image             = "${aws_ecr_repository.slack_bot.repository_url}:latest"
@@ -812,63 +833,11 @@ resource "kubernetes_deployment" "slack_bot" {
 }
 
 # =====================================================================================================================
-# Cluster Autoscaler
+# [제거됨] Cluster Autoscaler
+# Karpenter로 대체되었습니다. (15-karpenter.tf 참고)
+# IAM Role/Policy (02-iam.tf의 aws_iam_role.cluster_autoscaler)는 삭제 대상이나
+# 안전을 위해 terraform state rm 후 수동 정리를 권장합니다.
 # =====================================================================================================================
-resource "helm_release" "cluster_autoscaler" {
-  name       = "cluster-autoscaler"
-  repository = "https://kubernetes.github.io/autoscaler"
-  chart      = "cluster-autoscaler"
-  version    = "9.37.0"
-  namespace  = "kube-system"
-
-  set {
-    name  = "autoDiscovery.clusterName"
-    value = aws_eks_cluster.main.name
-  }
-
-  set {
-    name  = "awsRegion"
-    value = var.aws_region
-  }
-
-  set {
-    name  = "rbac.serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn"
-    value = aws_iam_role.cluster_autoscaler.arn
-  }
-
-  set {
-    name  = "extraArgs.balance-similar-node-groups"
-    value = "true"
-  }
-
-  set {
-    name  = "extraArgs.skip-nodes-with-system-pods"
-    value = "false"
-  }
-
-  # 리소스 절약 (단일 AZ 환경)
-  set {
-    name  = "resources.requests.cpu"
-    value = "100m"
-  }
-  set {
-    name  = "resources.requests.memory"
-    value = "128Mi"
-  }
-  set {
-    name  = "resources.limits.cpu"
-    value = "200m"
-  }
-  set {
-    name  = "resources.limits.memory"
-    value = "256Mi"
-  }
-
-  depends_on = [
-    helm_release.metrics_server,
-    aws_iam_role.cluster_autoscaler
-  ]
-}
 
 # =====================================================================================================================
 # Horizontal Pod Autoscalers (HPA)

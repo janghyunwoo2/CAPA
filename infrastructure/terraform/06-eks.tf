@@ -51,9 +51,9 @@ resource "aws_eks_cluster" "main" {
 # ------------------------------------------------------------------------------
 # EKS Node Group
 # ------------------------------------------------------------------------------
-resource "aws_eks_node_group" "main" {
+resource "aws_eks_node_group" "core" {
   cluster_name    = aws_eks_cluster.main.name
-  node_group_name = "${var.project_name}-node-group"
+  node_group_name = "${var.project_name}-core-node-group"
   node_role_arn   = aws_iam_role.eks_node.arn
 
   # 단일 가용영역(Single-AZ) 강제 할당: 비용 절감 및 EBS 충돌 방지
@@ -63,14 +63,19 @@ resource "aws_eks_node_group" "main" {
   capacity_type  = "ON_DEMAND"
 
   scaling_config {
-    desired_size = 2
-    min_size     = 2
-    max_size     = 3 # 2대로 충분하며, 부하 시 3대까지 확장 허용
+    desired_size = 1 # Karpenter가 나머지 노드를 관리
+    min_size     = 1
+    max_size     = 1 # 코어 노드는 1대 고정
   }
 
   update_config {
     max_unavailable = 1
   }
+
+  labels = {
+    "node-type" = "core"
+  }
+
 
   depends_on = [
     aws_iam_role_policy_attachment.eks_worker_node_policy,
@@ -79,9 +84,9 @@ resource "aws_eks_node_group" "main" {
   ]
 
   tags = {
-    Name                                                    = "${var.project_name}-node-group"
-    "k8s.io/cluster-autoscaler/enabled"                     = "true"
-    "k8s.io/cluster-autoscaler/${var.project_name}-cluster" = "owned"
+    Name = "${var.project_name}-core-node-group"
+    # Karpenter가 이 클러스터의 노드를 검색할 수 있도록 태그 추가
+    "karpenter.sh/discovery" = aws_eks_cluster.main.name
   }
 }
 
@@ -149,7 +154,7 @@ resource "aws_eks_addon" "ebs_csi" {
   })
 
   depends_on = [
-    aws_eks_node_group.main,
+    aws_eks_node_group.core,
     aws_iam_role_policy_attachment.eks_ebs_csi_driver_policy
   ]
 }
@@ -170,6 +175,13 @@ resource "aws_ec2_tag" "subnet_cluster_tag" {
   resource_id = each.value
   key         = "kubernetes.io/cluster/${aws_eks_cluster.main.name}"
   value       = "shared"
+}
+
+# Karpenter Discovery Tag for Security Group
+resource "aws_ec2_tag" "cluster_sg_karpenter_tag" {
+  resource_id = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+  key         = "karpenter.sh/discovery"
+  value       = aws_eks_cluster.main.name
 }
 
 

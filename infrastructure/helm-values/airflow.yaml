@@ -14,6 +14,9 @@ postgresql:
   persistence:
     enabled: true
     size: 2Gi
+  primary:
+    nodeSelector:
+      node-type: core
 
 # Redis (비활성화 - LocalExecutor 사용)
 redis:
@@ -45,6 +48,8 @@ webserver:
   extraInitContainers: [] # 이전 프로젝트 코드 추가
   extraVolumes: []
   extraVolumeMounts: []
+  nodeSelector:
+    node-type: core
 
 # Scheduler
 scheduler:
@@ -57,12 +62,19 @@ scheduler:
   extraInitContainers: [] # 이전 프로젝트 코드 추가
   extraVolumes: []
   extraVolumeMounts: []
+  nodeSelector:
+    node-type: core
 
-# Triggerer
+# Triggerer - 스팟 노드에 배치 (Karpenter 관리)
 triggerer:
   extraInitContainers: [] # 이전 프로젝트 코드 추가
   extraVolumes: []
   extraVolumeMounts: []
+  # [Karpenter] 스팟 노드 배치 허용 - Triggerer는 재시작에 강함
+  tolerations:
+    - key: "karpenter.sh/disruption"
+      operator: "Exists"
+      effect: "NoSchedule"
 
 # DAG 저장소 (Git Sync 활성화, PVC 비활성화)
 dags:

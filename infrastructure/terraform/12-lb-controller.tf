@@ -41,8 +41,15 @@ resource "helm_release" "aws_lb_controller" {
     value = data.aws_vpc.default.id
   }
 
+  # LB Controller를 코어 노드에 배치
+  set {
+    name  = "nodeSelector.node-type"
+    value = "core"
+  }
+
+
   depends_on = [
-    aws_eks_node_group.main,
+    aws_eks_node_group.core,
     aws_iam_role_policy_attachment.aws_lb_controller
   ]
 }
