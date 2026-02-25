@@ -75,52 +75,44 @@ class DailyETL:
         
         # CTAS 쿼리
         query = f"""
-        WITH daily_combined AS (
+        WITH combined_with_conversions AS (
             SELECT 
-                campaign_id,
-                ad_id,
-                advertiser_id,
-                device_type,
-                COUNT(DISTINCT impression_id) as impressions,
-                SUM(CASE WHEN is_click THEN 1 ELSE 0 END) as clicks
-            FROM {DATABASE}.ad_combined_log
-            WHERE dt >= '{self.date_str}-00' 
-                AND dt <= '{self.date_str}-23'
-            GROUP BY campaign_id, ad_id, advertiser_id, device_type
-        ),
-        daily_conversions AS (
-            SELECT 
-                campaign_id,
-                device_type,
-                COUNT(DISTINCT conversion_id) as conversions
-            FROM {DATABASE}.conversions
-            WHERE year = '{year}'
-                AND month = '{month}'
-                AND day = '{day}'
-            GROUP BY campaign_id, device_type
+                acl.campaign_id,
+                acl.ad_id,
+                acl.advertiser_id,
+                acl.device_type,
+                acl.impression_id,
+                acl.is_click,
+                CASE WHEN cv.conversion_id IS NOT NULL THEN 1 ELSE 0 END as is_conversion
+            FROM {DATABASE}.ad_combined_log acl
+            LEFT JOIN {DATABASE}.conversions cv
+                ON acl.impression_id = cv.impression_id
+                AND cv.year = '{year}'
+                AND cv.month = '{month}'
+                AND cv.day = '{day}'
+            WHERE acl.dt >= '{self.date_str}-00' 
+                AND acl.dt <= '{self.date_str}-23'
         )
         SELECT 
-            dc.campaign_id,
-            dc.ad_id,
-            dc.advertiser_id,
-            dc.device_type,
-            dc.impressions,
-            dc.clicks,
-            COALESCE(cv.conversions, 0) as conversions,
+            campaign_id,
+            ad_id,
+            advertiser_id,
+            device_type,
+            COUNT(DISTINCT impression_id) as impressions,
+            SUM(CASE WHEN is_click THEN 1 ELSE 0 END) as clicks,
+            SUM(is_conversion) as conversions,
             CASE 
-                WHEN dc.impressions > 0 
-                THEN CAST(dc.clicks AS DOUBLE) / CAST(dc.impressions AS DOUBLE) * 100
+                WHEN COUNT(*) > 0 
+                THEN CAST(SUM(CASE WHEN is_click THEN 1 ELSE 0 END) AS DOUBLE) / CAST(COUNT(*) AS DOUBLE) * 100
                 ELSE 0.0
             END as ctr,
             CASE 
-                WHEN dc.clicks > 0 
-                THEN CAST(COALESCE(cv.conversions, 0) AS DOUBLE) / CAST(dc.clicks AS DOUBLE) * 100
+                WHEN SUM(CASE WHEN is_click THEN 1 ELSE 0 END) > 0 
+                THEN CAST(SUM(is_conversion) AS DOUBLE) / CAST(SUM(CASE WHEN is_click THEN 1 ELSE 0 END) AS DOUBLE) * 100
                 ELSE 0.0
             END as cvr
-        FROM daily_combined dc
-        LEFT JOIN daily_conversions cv
-            ON dc.campaign_id = cv.campaign_id 
-            AND dc.device_type = cv.device_type
+        FROM combined_with_conversions
+        GROUP BY campaign_id, ad_id, advertiser_id, device_type
         """
         
         return query
@@ -187,8 +179,7 @@ class DailyETL:
                 SUM(clicks) as total_clicks,
                 SUM(conversions) as total_conversions,
                 AVG(ctr) as avg_ctr,
-                AVG(cvr) as avg_cvr,
-                SUM(total_cost) as total_cost
+                AVG(cvr) as avg_cvr
             FROM {DATABASE}.ad_combined_log_summary
             WHERE dt = '{self.date_str}'
             """

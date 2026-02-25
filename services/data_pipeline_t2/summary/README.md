@@ -102,10 +102,6 @@ python daily_etl.py --target-date 2026-02-24
 - conversions: 전환수
 - ctr: 클릭률 (%)
 - cvr: 전환율 (%)
-- ctr: 클릭률 (%)
-- cvr: 전환률 (%)
-- total_cost: 총 비용
-- avg_bid_price: 평균 입찰가
 
 ## 주의사항
 
