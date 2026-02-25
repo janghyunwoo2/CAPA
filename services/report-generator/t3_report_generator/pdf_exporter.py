@@ -48,10 +48,16 @@ def create_pdf(
     from reportlab.pdfbase.ttfonts import TTFont
     
     try:
-        # Windows 맑은 고딕 폰트 등록 (일반 폰트만 사용)
-        pdfmetrics.registerFont(TTFont('MalgunGothic', 'malgun.ttf'))
-        korean_font = 'MalgunGothic'
-        logger.info("한글 폰트 등록 성공: MalgunGothic")
+        # 우선 리눅스(도커 컨테이너) 환경의 나눔고딕을 시도합니다
+        try:
+            pdfmetrics.registerFont(TTFont('Nanum', '/usr/share/fonts/truetype/nanum/NanumGothic.ttf'))
+            korean_font = 'Nanum'
+            logger.info("한글 폰트 등록 성공: NanumGothic")
+        except:
+            # 실패하면 로컬 윈도우 환경의 맑은 고딕을 시도합니다
+            pdfmetrics.registerFont(TTFont('Malgun', 'malgun.ttf'))
+            korean_font = 'Malgun'
+            logger.info("한글 폰트 등록 성공: MalgunGothic")
     except Exception as e:
         # 폰트 등록 실패 시 기본 폰트 사용
         logger.warning(f"한글 폰트 등록 실패: {e}. 기본 폰트를 사용합니다.")
@@ -249,7 +255,13 @@ def _create_trend_chart(daily_df: pd.DataFrame) -> str | None:
         생성된 PNG 이미지 파일 경로
     """
     try:
-        plt.rcParams["font.family"] = "DejaVu Sans"
+        # 차트 한글 폰트 설정 (도커 환경은 나눔고딕, 로컬 윈도우는 맑은 고딕)
+        import platform
+        if platform.system() == "Linux":
+            plt.rcParams["font.family"] = "NanumGothic"
+        else:
+            plt.rcParams["font.family"] = "Malgun Gothic"
+            
         fig, ax = plt.subplots(figsize=(12, 5))
 
         dates: list[str] = daily_df["date"].tolist()
