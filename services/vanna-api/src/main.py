@@ -147,12 +147,16 @@ def get_vanna() -> VannaAthena:
     global vanna_instance
     if vanna_instance is None:
         logger.info(f"Initializing Vanna instance with key: {ANTHROPIC_API_KEY[:5]}...")
+        import chromadb
+
+        # Instantiate external ChromaDB client properly
+        chroma_client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
+
         vanna_instance = VannaAthena(
             config={
                 "api_key": ANTHROPIC_API_KEY,
                 "model": "claude-haiku-4-5",
-                "chroma_host": CHROMA_HOST,
-                "chroma_port": CHROMA_PORT,
+                "client": chroma_client,
             }
         )
         # Athena 연결 설정 (IRSA 자동 인증)

@@ -1,7 +1,7 @@
-fastapi
+fastapi==0.115.9
 uvicorn[standard]
-vanna[chromadb]==0.7.9
-chromadb
+vanna==0.7.9
+chromadb==1.0.10
 
 anthropic
 boto3
