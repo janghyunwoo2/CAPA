@@ -56,7 +56,7 @@ class VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
             import anthropic
 
             client = anthropic.Anthropic(api_key=self.config.get("api_key"))
-            model = self.config.get("model", "claude-3-5-haiku-20241022")
+            model = self.config.get("model", "claude-haiku-4-5")
 
             prompt = f"User Question: {question}\nSQL: {sql}\nResults:\n{df.to_string()}\n\nPlease summarize the results and answer the user's question in a friendly tone in Korean."
 
@@ -147,12 +147,16 @@ def get_vanna() -> VannaAthena:
     global vanna_instance
     if vanna_instance is None:
         logger.info(f"Initializing Vanna instance with key: {ANTHROPIC_API_KEY[:5]}...")
+        import chromadb
+
+        # Instantiate external ChromaDB client properly
+        chroma_client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
+
         vanna_instance = VannaAthena(
             config={
                 "api_key": ANTHROPIC_API_KEY,
-                "model": "claude-3-5-haiku-20241022",
-                "chroma_host": CHROMA_HOST,
-                "chroma_port": CHROMA_PORT,
+                "model": "claude-haiku-4-5",
+                "client": chroma_client,
             }
         )
         # Athena 연결 설정 (IRSA 자동 인증)
@@ -270,7 +274,7 @@ async def summarize_text(request: SummarizeRequest):
 
         vanna = get_vanna()
         client = anthropic.Anthropic(api_key=vanna.config.get("api_key"))
-        model = vanna.config.get("model", "claude-3-5-haiku-20241022")
+        model = vanna.config.get("model", "claude-haiku-4-5")
 
         logger.info(f"Summarizing text: {request.text[:100]}...")
 

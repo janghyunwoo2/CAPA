@@ -23,6 +23,9 @@ postgresql:
     limits:
       cpu: 200m
       memory: 512Mi
+  primary:
+    nodeSelector:
+      node-type: core
 
 redis:
   enabled: true
@@ -31,7 +34,8 @@ redis:
     repository: capa/redis
     tag: "6.0.9"
   auth:
-    enabled: false # Redis 패스워드 비활성화 (Redash 기본 연결 설정과 맞춤)
+    enabled: false
+    password: "" # 빈 문자열로 명시하여 Redash가 비밀번호 없이 연결하도록 강제
   master:
     resources:
       requests:
@@ -40,6 +44,8 @@ redis:
       limits:
         cpu: 100m
         memory: 128Mi
+    nodeSelector:
+      node-type: core
 
 server:
   resources:
@@ -47,16 +53,18 @@ server:
       cpu: 100m
       memory: 256Mi
     limits:
-      cpu: 1000m
-      memory: 1Gi
+      cpu: 700m
+      memory: 768Mi
   readinessProbe:
-    initialDelaySeconds: 30
+    initialDelaySeconds: 60
     timeoutSeconds: 15
     periodSeconds: 15
   livenessProbe:
-    initialDelaySeconds: 60
+    initialDelaySeconds: 120
     timeoutSeconds: 15
     periodSeconds: 20
+  nodeSelector:
+    node-type: core
 
 scheduler:
   resources:
@@ -64,8 +72,10 @@ scheduler:
       cpu: 50m
       memory: 128Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: 200m
+      memory: 256Mi
+  nodeSelector:
+    node-type: core
 
 adhocWorker:
   resources:
@@ -73,8 +83,8 @@ adhocWorker:
       cpu: 50m
       memory: 128Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: 200m
+      memory: 256Mi
 
 scheduledWorker:
   resources:
@@ -82,8 +92,8 @@ scheduledWorker:
       cpu: 50m
       memory: 128Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: 200m
+      memory: 256Mi
 
 genericWorker:
   resources:
@@ -91,9 +101,9 @@ genericWorker:
       cpu: 50m
       memory: 128Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: 200m
+      memory: 256Mi
 
 service:
-  type: LoadBalancer
+  type: ClusterIP
   port: 5000

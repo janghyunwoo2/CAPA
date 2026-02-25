@@ -169,7 +169,7 @@ resource "kubernetes_service" "report_generator" {
       protocol    = "TCP"
     }
 
-    type = "LoadBalancer"
+    type = "ClusterIP" # 내부 전용 (Slack Bot이 클러스터 내부에서 호출)
   }
 }
 
@@ -201,6 +201,13 @@ resource "kubernetes_deployment" "report_generator" {
 
       spec {
         service_account_name = kubernetes_service_account.report_generator_sa.metadata[0].name
+
+        # [Karpenter] 스팟 노드 배치 허용
+        toleration {
+          key      = "karpenter.sh/disruption"
+          operator = "Exists"
+          effect   = "NoSchedule"
+        }
 
         container {
           name              = "report-generator"
@@ -255,12 +262,12 @@ resource "kubernetes_deployment" "report_generator" {
           # 리소스 제한
           resources {
             requests = {
-              cpu    = "250m"
-              memory = "512Mi"
+              cpu    = "100m"
+              memory = "256Mi"
             }
             limits = {
-              cpu    = "500m"
-              memory = "1Gi"
+              cpu    = "250m"
+              memory = "512Mi"
             }
           }
 
@@ -513,6 +520,13 @@ resource "kubernetes_deployment" "vanna_api" {
       spec {
         service_account_name = kubernetes_service_account.vanna_sa.metadata[0].name
 
+        # [Karpenter] 스팟 노드 배치 허용
+        toleration {
+          key      = "karpenter.sh/disruption"
+          operator = "Exists"
+          effect   = "NoSchedule"
+        }
+
         container {
           name              = "vanna-api"
           image             = "${aws_ecr_repository.vanna_api.repository_url}:latest"
@@ -563,15 +577,15 @@ resource "kubernetes_deployment" "vanna_api" {
             value = "INFO"
           }
 
-          # 리소스 제한 (안정성 확보를 위해 소폭 상향)
+          # 리소스 제한
           resources {
             requests = {
-              cpu    = "250m"
+              cpu    = "200m"
               memory = "512Mi"
             }
             limits = {
-              cpu    = "700m"
-              memory = "1.2Gi"
+              cpu    = "400m"
+              memory = "768Mi"
             }
           }
 
@@ -734,6 +748,13 @@ resource "kubernetes_deployment" "slack_bot" {
       }
 
       spec {
+        # [Karpenter] 스팟 노드 배치 허용
+        toleration {
+          key      = "karpenter.sh/disruption"
+          operator = "Exists"
+          effect   = "NoSchedule"
+        }
+
         container {
           name              = "slack-bot"
           image             = "${aws_ecr_repository.slack_bot.repository_url}:latest"
@@ -767,10 +788,6 @@ resource "kubernetes_deployment" "slack_bot" {
 
           # 환경 변수 (Internal Service URLs)
           env {
-            name  = "VANNA_API_URL"
-            value = "http://vanna-api.vanna.svc.cluster.local:8000"
-          }
-          env {
             name  = "REPORT_API_URL"
             value = "http://report-generator.report.svc.cluster.local:8000"
           }
@@ -778,12 +795,12 @@ resource "kubernetes_deployment" "slack_bot" {
           # 리소스 제한
           resources {
             requests = {
-              cpu    = "100m"
+              cpu    = "50m"
               memory = "128Mi"
             }
             limits = {
-              cpu    = "500m"
-              memory = "512Mi"
+              cpu    = "200m"
+              memory = "256Mi"
             }
           }
 
@@ -813,4 +830,108 @@ resource "kubernetes_deployment" "slack_bot" {
   }
 
   depends_on = [kubernetes_service.slack_bot, kubernetes_secret.slack_bot_secrets]
+}
+
+# =====================================================================================================================
+# [제거됨] Cluster Autoscaler
+# Karpenter로 대체되었습니다. (15-karpenter.tf 참고)
+# IAM Role/Policy (02-iam.tf의 aws_iam_role.cluster_autoscaler)는 삭제 대상이나
+# 안전을 위해 terraform state rm 후 수동 정리를 권장합니다.
+# =====================================================================================================================
+
+# =====================================================================================================================
+# Horizontal Pod Autoscalers (HPA)
+# =====================================================================================================================
+
+resource "kubernetes_horizontal_pod_autoscaler_v2" "vanna_api" {
+  metadata {
+    name      = "vanna-api-hpa"
+    namespace = kubernetes_namespace.vanna.metadata[0].name
+  }
+
+  spec {
+    scale_target_ref {
+      api_version = "apps/v1"
+      kind        = "Deployment"
+      name        = "vanna-api"
+    }
+
+    min_replicas = 1
+    max_replicas = 3
+
+    metric {
+      type = "Resource"
+      resource {
+        name = "cpu"
+        target {
+          type                = "Utilization"
+          average_utilization = 70
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_deployment.vanna_api]
+}
+
+resource "kubernetes_horizontal_pod_autoscaler_v2" "slack_bot" {
+  metadata {
+    name      = "slack-bot-hpa"
+    namespace = kubernetes_namespace.slack_bot.metadata[0].name
+  }
+
+  spec {
+    scale_target_ref {
+      api_version = "apps/v1"
+      kind        = "Deployment"
+      name        = "slack-bot"
+    }
+
+    min_replicas = 1
+    max_replicas = 3
+
+    metric {
+      type = "Resource"
+      resource {
+        name = "cpu"
+        target {
+          type                = "Utilization"
+          average_utilization = 70
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_deployment.slack_bot]
+}
+
+resource "kubernetes_horizontal_pod_autoscaler_v2" "report_generator" {
+  metadata {
+    name      = "report-generator-hpa"
+    namespace = kubernetes_namespace.report.metadata[0].name
+  }
+
+  spec {
+    scale_target_ref {
+      api_version = "apps/v1"
+      kind        = "Deployment"
+      name        = "report-generator"
+    }
+
+    min_replicas = 1
+    max_replicas = 3
+
+    metric {
+      type = "Resource"
+      resource {
+        name = "cpu"
+        target {
+          type                = "Utilization"
+          average_utilization = 70
+        }
+      }
+    }
+  }
+
+  depends_on = [kubernetes_deployment.report_generator]
 }

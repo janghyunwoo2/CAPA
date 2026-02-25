@@ -115,15 +115,28 @@ output "cloudwatch_alarm_eks_node_cpu_high" {
 }
 
 # ============================================
-# Airflow Outputs
+# External Application Endpoints (Public)
 # ============================================
-output "airflow_webserver_url" {
-  description = "Airflow Webserver URL (LoadBalancer)"
-  value       = "http://${data.kubernetes_service.airflow_webserver.status.0.load_balancer.0.ingress.0.hostname}:8080"
+
+# 통합 로드밸런서(Ingress) 주소 가져오기 (할당 전에는 Pending 메시지 출력)
+locals {
+  unified_alb_dns = try(kubernetes_ingress_v1.unified_ingress.status.0.load_balancer.0.ingress.0.hostname, "Still-Provisioning-Wait-2-Min")
 }
 
+output "airflow_webserver_url" {
+  description = "Airflow Webserver URL (Unified ALB)"
+  value       = local.unified_alb_dns == "Still-Provisioning-Wait-2-Min" ? local.unified_alb_dns : "http://${local.unified_alb_dns}/airflow"
+}
 
-output "airflow_admin_account" {
+output "redash_webserver_url" {
+  description = "Redash BI Dashboard URL (Unified ALB)"
+  value       = local.unified_alb_dns == "Still-Provisioning-Wait-2-Min" ? local.unified_alb_dns : "http://${local.unified_alb_dns}/"
+}
+
+# Report Generator는 ClusterIP 내부 전용 서비스 (외부 URL 없음, 내부 DNS로 접근)
+# → http://report-generator.report.svc.cluster.local:8000
+
+output "airflow_admin_credentials" {
   description = "Airflow Admin Credentials (Default)"
   value       = "admin / admin"
 }
