@@ -47,9 +47,7 @@ class DailyETL:
             device_type STRING,
             impressions BIGINT,
             clicks BIGINT,
-            conversions BIGINT,
-            ctr DOUBLE,
-            cvr DOUBLE
+            conversions BIGINT
         """
         
         query = create_external_table(
@@ -100,17 +98,7 @@ class DailyETL:
             device_type,
             COUNT(DISTINCT impression_id) as impressions,
             SUM(CASE WHEN is_click THEN 1 ELSE 0 END) as clicks,
-            SUM(is_conversion) as conversions,
-            CASE 
-                WHEN COUNT(*) > 0 
-                THEN CAST(SUM(CASE WHEN is_click THEN 1 ELSE 0 END) AS DOUBLE) / CAST(COUNT(*) AS DOUBLE) * 100
-                ELSE 0.0
-            END as ctr,
-            CASE 
-                WHEN SUM(CASE WHEN is_click THEN 1 ELSE 0 END) > 0 
-                THEN CAST(SUM(is_conversion) AS DOUBLE) / CAST(SUM(CASE WHEN is_click THEN 1 ELSE 0 END) AS DOUBLE) * 100
-                ELSE 0.0
-            END as cvr
+            SUM(is_conversion) as conversions
         FROM combined_with_conversions
         GROUP BY campaign_id, ad_id, advertiser_id, device_type
         """
@@ -177,9 +165,7 @@ class DailyETL:
                 COUNT(*) as campaign_count,
                 SUM(impressions) as total_impressions,
                 SUM(clicks) as total_clicks,
-                SUM(conversions) as total_conversions,
-                AVG(ctr) as avg_ctr,
-                AVG(cvr) as avg_cvr
+                SUM(conversions) as total_conversions
             FROM {DATABASE}.ad_combined_log_summary
             WHERE dt = '{self.date_str}'
             """
@@ -194,9 +180,7 @@ class DailyETL:
                     f"Campaigns: {result.get('campaign_count', 0)}, "
                     f"Impressions: {result.get('total_impressions', 0)}, "
                     f"Clicks: {result.get('total_clicks', 0)}, "
-                    f"Conversions: {result.get('total_conversions', 0)}, "
-                    f"Avg CTR: {float(result.get('avg_ctr', 0)):.2f}%, "
-                    f"Avg CVR: {float(result.get('avg_cvr', 0)):.2f}%"
+                    f"Conversions: {result.get('total_conversions', 0)}"
                 )
             
         except Exception as e:
