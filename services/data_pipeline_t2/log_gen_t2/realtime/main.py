@@ -10,7 +10,7 @@ import os
 from dotenv import load_dotenv
 
 from generator import AdLogGenerator
-from kinesis_sender import KinesisSender
+from kinesis_sender import FirehoseSender
 
 # .env 파일 로드 (상위 디렉토리의 .env 파일 사용)
 env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
@@ -24,9 +24,11 @@ load_dotenv(env_path)
 class Config:
     """환경 변수 기반 설정"""
     
-    # Kinesis 설정
-    ENABLE_KINESIS = True  # 항상 Kinesis 활성화
-    KINESIS_STREAM_NAME = os.getenv("KINESIS_STREAM_NAME", "capa-ad-logs-stream")
+    # Firehose 설정 (이벤트 타입별 3개 분리)
+    ENABLE_FIREHOSE = True  # 항상 Firehose 활성화
+    FIREHOSE_IMPRESSION = os.getenv("FIREHOSE_IMPRESSION", "capa-fh-imp-00")
+    FIREHOSE_CLICK = os.getenv("FIREHOSE_CLICK", "capa-fh-clk-00")
+    FIREHOSE_CONVERSION = os.getenv("FIREHOSE_CONVERSION", "capa-fh-cvs-00")
     AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "ap-northeast-2")
     
     # AWS 자격증명
@@ -53,21 +55,26 @@ def main():
     generator = AdLogGenerator()
     print("✅ 로그 생성기 초기화 완료", flush=True)
     
-    # Kinesis Sender 초기화
+    # Firehose Sender 초기화 (이벤트 타입별 3개 Firehose)
     sender = None
-    if Config.ENABLE_KINESIS:
-        sender = KinesisSender(
-            stream_name=Config.KINESIS_STREAM_NAME,
+    if Config.ENABLE_FIREHOSE:
+        firehose_names = {
+            "impression": Config.FIREHOSE_IMPRESSION,
+            "click": Config.FIREHOSE_CLICK,
+            "conversion": Config.FIREHOSE_CONVERSION,
+        }
+        sender = FirehoseSender(
+            firehose_names=firehose_names,
             region=Config.AWS_REGION,
             aws_access_key_id=Config.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=Config.AWS_SECRET_ACCESS_KEY
         )
-        print(f"✅ Kinesis 전송 활성화: {Config.KINESIS_STREAM_NAME} ({Config.AWS_REGION})", flush=True)
+        print(f"✅ Firehose 전송 활성화 ({Config.AWS_REGION})", flush=True)
     else:
-        print("ℹ️  Kinesis 전송 비활성화 (stdout만 사용)", flush=True)
+        print("ℹ️  Firehose 전송 비활성화 (stdout만 사용)", flush=True)
     
     print("=" * 60, flush=True)
-    target = Config.KINESIS_STREAM_NAME if Config.ENABLE_KINESIS else "Local Console"
+    target = "Firehose (imp/clk/cvs)" if Config.ENABLE_FIREHOSE else "Local Console"
     print(f"Starting Ad Log Generator (Target: {target})...", flush=True)
     print("=" * 60, flush=True)
     
@@ -124,10 +131,11 @@ def main():
         
         if sender:
             stats = sender.get_stats()
-            print(f"\n📊 Kinesis 전송 통계:", flush=True)
-            print(f"  - 성공: {stats['success']}", flush=True)
-            print(f"  - 실패: {stats['error']}", flush=True)
-            print(f"  - 전체: {stats['total']}", flush=True)
+            stats_by_type = sender.get_stats_by_type()
+            print(f"\n📊 Firehose 전송 통계:", flush=True)
+            print(f"  - 전체: 성공 {stats['success']} / 실패 {stats['error']} / 합계 {stats['total']}", flush=True)
+            for etype, s in stats_by_type.items():
+                print(f"  - {etype}: 성공 {s['success']} / 실패 {s['error']}", flush=True)
         
         print("=" * 60, flush=True)
 
