@@ -1,6 +1,6 @@
 """
 Ad Log Generator - 메인 실행 스크립트
-로그 생성 + Kinesis 전송 (환경 변수로 제어)
+로그 생성 + Kinesis Streams 3개 전송
 """
 
 import time
@@ -10,7 +10,7 @@ import os
 from dotenv import load_dotenv
 
 from generator import AdLogGenerator
-from kinesis_sender import FirehoseSender
+from kinesis_stream_sender import KinesisStreamSender
 
 # .env 파일 로드 (상위 디렉토리의 .env 파일 사용)
 env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), '.env')
@@ -24,11 +24,10 @@ load_dotenv(env_path)
 class Config:
     """환경 변수 기반 설정"""
     
-    # Firehose 설정 (이벤트 타입별 3개 분리)
-    ENABLE_FIREHOSE = True  # 항상 Firehose 활성화
-    FIREHOSE_IMPRESSION = os.getenv("FIREHOSE_IMPRESSION", "capa-fh-imp-00")
-    FIREHOSE_CLICK = os.getenv("FIREHOSE_CLICK", "capa-fh-clk-00")
-    FIREHOSE_CONVERSION = os.getenv("FIREHOSE_CONVERSION", "capa-fh-cvs-00")
+    # Kinesis Stream 설정 (이벤트 타입별 3개 분리)
+    KINESIS_IMPRESSION = os.getenv("KINESIS_IMPRESSION", "capa-knss-imp-00")
+    KINESIS_CLICK = os.getenv("KINESIS_CLICK", "capa-knss-clk-00")
+    KINESIS_CONVERSION = os.getenv("KINESIS_CONVERSION", "capa-knss-cvs-00")
     AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "ap-northeast-2")
     
     # AWS 자격증명
@@ -55,26 +54,21 @@ def main():
     generator = AdLogGenerator()
     print("✅ 로그 생성기 초기화 완료", flush=True)
     
-    # Firehose Sender 초기화 (이벤트 타입별 3개 Firehose)
-    sender = None
-    if Config.ENABLE_FIREHOSE:
-        firehose_names = {
-            "impression": Config.FIREHOSE_IMPRESSION,
-            "click": Config.FIREHOSE_CLICK,
-            "conversion": Config.FIREHOSE_CONVERSION,
-        }
-        sender = FirehoseSender(
-            firehose_names=firehose_names,
-            region=Config.AWS_REGION,
-            aws_access_key_id=Config.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=Config.AWS_SECRET_ACCESS_KEY
-        )
-        print(f"✅ Firehose 전송 활성화 ({Config.AWS_REGION})", flush=True)
-    else:
-        print("ℹ️  Firehose 전송 비활성화 (stdout만 사용)", flush=True)
+    # Kinesis Stream Sender 초기화 (이벤트 타입별 3개 Stream)
+    sender = KinesisStreamSender(
+        stream_names={
+            "impression": Config.KINESIS_IMPRESSION,
+            "click": Config.KINESIS_CLICK,
+            "conversion": Config.KINESIS_CONVERSION,
+        },
+        region=Config.AWS_REGION,
+        aws_access_key_id=Config.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=Config.AWS_SECRET_ACCESS_KEY,
+    )
+    print(f"✅ Kinesis 전송 활성화 ({Config.AWS_REGION})", flush=True)
     
     print("=" * 60, flush=True)
-    target = "Firehose (imp/clk/cvs)" if Config.ENABLE_FIREHOSE else "Local Console"
+    target = "Kinesis Streams (imp/clk/cvs)"
     print(f"Starting Ad Log Generator (Target: {target})...", flush=True)
     print("=" * 60, flush=True)
     
@@ -85,13 +79,7 @@ def main():
             impr = generator.generate_impression()
             
             # Kinesis 전송
-            if sender:
-                sender.send(impr)
-            else:
-                # _internal 필드 제거 후 출력
-                impr_copy = impr.copy()
-                impr_copy.pop('_internal', None)
-                print(json.dumps(impr_copy, ensure_ascii=False), flush=True)
+            sender.send(impr)
             
             # 내부 데이터 저장 (클릭/전환에서 사용)
             internal_data = impr.get('_internal', {})
@@ -102,12 +90,7 @@ def main():
                 
                 click = generator.generate_click(impr)
                 
-                if sender:
-                    sender.send(click)
-                else:
-                    click_copy = click.copy()
-                    click_copy.pop('_internal', None)
-                    print(json.dumps(click_copy, ensure_ascii=False), flush=True)
+                sender.send(click)
                 
                 # 3. 전환 확률 (CVR: 20% 가정)
                 if generator.should_convert():
@@ -115,12 +98,7 @@ def main():
                     
                     conv = generator.generate_conversion(click)
                     
-                    if sender:
-                        sender.send(conv)
-                    else:
-                        conv_copy = conv.copy()
-                        conv_copy.pop('_internal', None)
-                        print(json.dumps(conv_copy, ensure_ascii=False), flush=True)
+                    sender.send(conv)
             
             # 기본 대기 (1초에 하나씩)
             time.sleep(1.0)
@@ -129,13 +107,12 @@ def main():
         print("\n\n" + "=" * 60, flush=True)
         print("🛑 로그 생성 중지됨", flush=True)
         
-        if sender:
-            stats = sender.get_stats()
-            stats_by_type = sender.get_stats_by_type()
-            print(f"\n📊 Firehose 전송 통계:", flush=True)
-            print(f"  - 전체: 성공 {stats['success']} / 실패 {stats['error']} / 합계 {stats['total']}", flush=True)
-            for etype, s in stats_by_type.items():
-                print(f"  - {etype}: 성공 {s['success']} / 실패 {s['error']}", flush=True)
+        stats = sender.get_stats()
+        stats_by_type = sender.get_stats_by_type()
+        print(f"\n📊 Kinesis 전송 통계:", flush=True)
+        print(f"  - 전체: 성공 {stats['success']} / 실패 {stats['error']} / 합계 {stats['total']}", flush=True)
+        for etype, s in stats_by_type.items():
+            print(f"  - {etype}: 성공 {s['success']} / 실패 {s['error']}", flush=True)
         
         print("=" * 60, flush=True)
 
