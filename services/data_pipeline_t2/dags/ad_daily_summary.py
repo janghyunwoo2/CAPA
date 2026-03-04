@@ -15,9 +15,11 @@ DAG: ad_daily_summary
     impressions, clicks, conversions, ctr, cvr
 """
 
+import os
 import pendulum
 from airflow import DAG
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
+from airflow.providers.standard.operators.python import PythonOperator
 from airflow.sensors.external_task import ExternalTaskSensor
 from datetime import datetime, timedelta
 import textwrap
@@ -40,6 +42,55 @@ default_args = {
     "retry_delay": timedelta(minutes=10),
     "execution_timeout": timedelta(minutes=60),
 }
+
+def _use_kpo() -> bool:
+    val = os.getenv("USE_KPO")
+    if val is not None:
+        return val.lower() in ("1", "true", "yes")
+    return bool(os.getenv("KUBERNETES_SERVICE_HOST") and os.getenv("KUBERNETES_PORT"))
+
+USE_KPO = _use_kpo()
+
+def _run_athena_queries(database: str, output: str, region: str, queries: str, **_):
+    import boto3, time
+    client = boto3.client('athena', region_name=region)
+    def run(sql: str):
+        resp = client.start_query_execution(
+            QueryString=sql,
+            QueryExecutionContext={'Database': database},
+            ResultConfiguration={'OutputLocation': output},
+        )
+        qid = resp['QueryExecutionId']
+        while True:
+            st = client.get_query_execution(QueryExecutionId=qid)['QueryExecution']['Status']['State']
+            if st in ['SUCCEEDED','FAILED','CANCELLED']:
+                break
+            time.sleep(3)
+        if st != 'SUCCEEDED':
+            raise RuntimeError(f"Athena query {st}")
+    for i, q in enumerate((queries or "").split('|||')):
+        q = (q or '').strip()
+        if q:
+            print(f"[Athena] Step {i+1}")
+            run(q)
+
+def _repair_partitions(database: str, output: str, region: str, table: str, **_):
+    import boto3, time
+    client = boto3.client('athena', region_name=region)
+    sql = f"MSCK REPAIR TABLE {database}.{table}"
+    resp = client.start_query_execution(
+        QueryString=sql,
+        QueryExecutionContext={'Database': database},
+        ResultConfiguration={'OutputLocation': output},
+    )
+    qid = resp['QueryExecutionId']
+    while True:
+        st = client.get_query_execution(QueryExecutionId=qid)['QueryExecution']['Status']['State']
+        if st in ['SUCCEEDED','FAILED','CANCELLED']:
+            break
+        time.sleep(3)
+    if st != 'SUCCEEDED':
+        raise RuntimeError(f"Partition repair {st}")
 
 
 # =============================================================================
@@ -174,105 +225,106 @@ with DAG(
     #   + conversion 원천 로그에서 해당 일자 건만 COUNT (campaign_id 기준 조인)
     #   → 원천 impression/click 로그를 다시 스캔하지 않아 Athena 비용 최소화
     #
-    create_daily_summary = KubernetesPodOperator(
-        task_id="create_daily_summary",
-        name="daily-summary-athena",
-        namespace="airflow",
-        image="apache/airflow:2.9.3-python3.12",
-        cmds=["python", "-c"],
-        arguments=[ATHENA_RUNNER_SCRIPT],
-        env_vars={
-            "AWS_REGION": REGION,
-            "DATABASE": DATABASE,
-            "ATHENA_OUTPUT": ATHENA_OUTPUT,
-            "QUERIES": (
-                # --- Query 1: 임시 테이블 삭제 (idempotency) ---
-                "DROP TABLE IF EXISTS {{ params.database }}.ad_daily_summary_tmp"
-                "|||"
-                # --- Query 2: Daily Summary CTAS ---
-                # hourly_summary (impression+click 집계) + conversion 원천 로그 조인
-                "CREATE TABLE {{ params.database }}.ad_daily_summary_tmp "
-                "WITH ( "
-                "  format = 'PARQUET', "
-                "  write_compression = 'ZSTD', "
-                "  external_location = '{{ params.daily_path }}"
-                "/ds={{ params.target_date }}/' "
-                ") AS "
-                "WITH hourly_agg AS ( "
-                "  SELECT "
-                "    campaign_id, "
-                "    device_type, "
-                "    SUM(impressions)    AS impressions, "
-                "    SUM(clicks)         AS clicks "
-                "  FROM {{ params.database }}.ad_hourly_summary "
-                "  WHERE dt >= '{{ params.target_date }}-00' "
-                "    AND dt <= '{{ params.target_date }}-23' "
-                "  GROUP BY campaign_id, device_type "
-                "), "
-                "conversion_agg AS ( "
-                "  SELECT "
-                "    campaign_id, "
-                "    device_type, "
-                "    COUNT(DISTINCT event_id) AS conversions "
-                "  FROM {{ params.database }}.ad_events_raw "
-                "  WHERE event_type = 'conversion' "
-                "    AND year  = '{{ params.target_date[:4] }}' "
-                "    AND month = '{{ params.target_date[5:7] }}' "
-                "    AND day   = '{{ params.target_date[8:10] }}' "
-                "  GROUP BY campaign_id, device_type "
-                ") "
-                "SELECT "
-                "  h.campaign_id, "
-                "  h.device_type, "
-                "  '{{ params.target_date }}' AS ds, "
-                "  h.impressions, "
-                "  h.clicks, "
-                "  COALESCE(c.conversions, 0) AS conversions, "
-                "  CASE WHEN h.impressions > 0 "
-                "    THEN CAST(h.clicks AS DOUBLE) / CAST(h.impressions AS DOUBLE) * 100 "
-                "    ELSE 0.0 END AS ctr, "
-                "  CASE WHEN h.clicks > 0 "
-                "    THEN CAST(COALESCE(c.conversions, 0) AS DOUBLE) / CAST(h.clicks AS DOUBLE) * 100 "
-                "    ELSE 0.0 END AS cvr "
-                "FROM hourly_agg h "
-                "LEFT JOIN conversion_agg c "
-                "  ON h.campaign_id = c.campaign_id "
-                "  AND h.device_type = c.device_type"
-                "|||"
-                # --- Query 3: 임시 테이블 정리 ---
-                "DROP TABLE IF EXISTS {{ params.database }}.ad_daily_summary_tmp"
-            ),
-        },
-        params={
-            "database": DATABASE,
-            "daily_path": DAILY_SUMMARY_PATH,
-            "target_date": "{{ (data_interval_end - macros.timedelta(days=1)).strftime('%Y-%m-%d') }}",
-        },
-        service_account_name="airflow-scheduler",
-        get_logs=True,
-        is_delete_operator_pod=True,
-    )
+    if USE_KPO:
+        create_daily_summary = KubernetesPodOperator(
+            task_id="create_daily_summary",
+            name="daily-summary-athena",
+            namespace="airflow",
+            image="apache/airflow:2.9.3-python3.12",
+            cmds=["python", "-c"],
+            arguments=[ATHENA_RUNNER_SCRIPT],
+            env_vars={
+                "AWS_REGION": REGION,
+                "DATABASE": DATABASE,
+                "ATHENA_OUTPUT": ATHENA_OUTPUT,
+                "QUERIES": (
+                    "DROP TABLE IF EXISTS {{ params.database }}.ad_daily_summary_tmp"
+                    "|||"
+                    "CREATE TABLE {{ params.database }}.ad_daily_summary_tmp WITH ( format = 'PARQUET', write_compression = 'ZSTD', "
+                    "external_location = '{{ params.daily_path }}/ds={{ params.target_date }}/' ) AS "
+                    "WITH hourly_agg AS ( SELECT campaign_id, device_type, SUM(impressions) AS impressions, SUM(clicks) AS clicks "
+                    "FROM {{ params.database }}.ad_hourly_summary WHERE dt >= '{{ params.target_date }}-00' AND dt <= '{{ params.target_date }}-23' GROUP BY campaign_id, device_type ), "
+                    "conversion_agg AS ( SELECT campaign_id, device_type, COUNT(DISTINCT event_id) AS conversions FROM {{ params.database }}.ad_events_raw "
+                    "WHERE event_type = 'conversion' AND year='{{ params.target_date[:4] }}' AND month='{{ params.target_date[5:7] }}' AND day='{{ params.target_date[8:10] }}' GROUP BY campaign_id, device_type ) "
+                    "SELECT h.campaign_id, h.device_type, '{{ params.target_date }}' AS ds, h.impressions, h.clicks, COALESCE(c.conversions, 0) AS conversions, "
+                    "CASE WHEN h.impressions > 0 THEN CAST(h.clicks AS DOUBLE) / CAST(h.impressions AS DOUBLE) * 100 ELSE 0.0 END AS ctr, "
+                    "CASE WHEN h.clicks > 0 THEN CAST(COALESCE(c.conversions, 0) AS DOUBLE) / CAST(h.clicks AS DOUBLE) * 100 ELSE 0.0 END AS cvr FROM hourly_agg h LEFT JOIN conversion_agg c ON h.campaign_id = c.campaign_id AND h.device_type = c.device_type"
+                    "|||"
+                    "DROP TABLE IF EXISTS {{ params.database }}.ad_daily_summary_tmp"
+                ),
+            },
+            params={
+                "database": DATABASE,
+                "daily_path": DAILY_SUMMARY_PATH,
+                "target_date": "{{ (data_interval_end - macros.timedelta(days=1)).strftime('%Y-%m-%d') }}",
+            },
+            service_account_name="airflow-scheduler",
+            get_logs=True,
+            is_delete_operator_pod=True,
+        )
+    else:
+        create_daily_summary = PythonOperator(
+            task_id="create_daily_summary",
+            python_callable=_run_athena_queries,
+            op_kwargs={
+                "region": REGION,
+                "database": DATABASE,
+                "output": ATHENA_OUTPUT,
+                "queries": (
+                    "DROP TABLE IF EXISTS {{ params.database }}.ad_daily_summary_tmp"
+                    "|||"
+                    "CREATE TABLE {{ params.database }}.ad_daily_summary_tmp WITH ( format = 'PARQUET', write_compression = 'ZSTD', "
+                    "external_location = '{{ params.daily_path }}/ds={{ params.target_date }}/' ) AS "
+                    "WITH hourly_agg AS ( SELECT campaign_id, device_type, SUM(impressions) AS impressions, SUM(clicks) AS clicks "
+                    "FROM {{ params.database }}.ad_hourly_summary WHERE dt >= '{{ params.target_date }}-00' AND dt <= '{{ params.target_date }}-23' GROUP BY campaign_id, device_type ), "
+                    "conversion_agg AS ( SELECT campaign_id, device_type, COUNT(DISTINCT event_id) AS conversions FROM {{ params.database }}.ad_events_raw "
+                    "WHERE event_type = 'conversion' AND year='{{ params.target_date[:4] }}' AND month='{{ params.target_date[5:7] }}' AND day='{{ params.target_date[8:10] }}' GROUP BY campaign_id, device_type ) "
+                    "SELECT h.campaign_id, h.device_type, '{{ params.target_date }}' AS ds, h.impressions, h.clicks, COALESCE(c.conversions, 0) AS conversions, "
+                    "CASE WHEN h.impressions > 0 THEN CAST(h.clicks AS DOUBLE) / CAST(h.impressions AS DOUBLE) * 100 ELSE 0.0 END AS ctr, "
+                    "CASE WHEN h.clicks > 0 THEN CAST(COALESCE(c.conversions, 0) AS DOUBLE) / CAST(h.clicks AS DOUBLE) * 100 ELSE 0.0 END AS cvr FROM hourly_agg h LEFT JOIN conversion_agg c ON h.campaign_id = c.campaign_id AND h.device_type = c.device_type"
+                    "|||"
+                    "DROP TABLE IF EXISTS {{ params.database }}.ad_daily_summary_tmp"
+                ),
+            },
+            params={
+                "database": DATABASE,
+                "daily_path": DAILY_SUMMARY_PATH,
+                "target_date": "{{ (data_interval_end - macros.timedelta(days=1)).strftime('%Y-%m-%d') }}",
+            },
+        )
 
     # =========================================================================
     # Task 3: Glue 파티션 등록
     # =========================================================================
-    register_partition = KubernetesPodOperator(
-        task_id="register_partition",
-        name="daily-register-partition",
-        namespace="airflow",
-        image="apache/airflow:2.9.3-python3.12",
-        cmds=["python", "-c"],
-        arguments=[PARTITION_REPAIR_SCRIPT],
-        env_vars={
-            "AWS_REGION": REGION,
-            "DATABASE": DATABASE,
-            "ATHENA_OUTPUT": ATHENA_OUTPUT,
-            "TABLE": "ad_daily_summary",
-        },
-        service_account_name="airflow-scheduler",
-        get_logs=True,
-        is_delete_operator_pod=True,
-    )
+    if USE_KPO:
+        register_partition = KubernetesPodOperator(
+            task_id="register_partition",
+            name="daily-register-partition",
+            namespace="airflow",
+            image="apache/airflow:2.9.3-python3.12",
+            cmds=["python", "-c"],
+            arguments=[PARTITION_REPAIR_SCRIPT],
+            env_vars={
+                "AWS_REGION": REGION,
+                "DATABASE": DATABASE,
+                "ATHENA_OUTPUT": ATHENA_OUTPUT,
+                "TABLE": "ad_daily_summary",
+            },
+            service_account_name="airflow-scheduler",
+            get_logs=True,
+            is_delete_operator_pod=True,
+        )
+    else:
+        register_partition = PythonOperator(
+            task_id="register_partition",
+            python_callable=_repair_partitions,
+            op_kwargs={
+                "region": REGION,
+                "database": DATABASE,
+                "output": ATHENA_OUTPUT,
+                "table": "ad_daily_summary",
+            },
+        )
 
     # =========================================================================
     # Task 4: 리포트 생성 트리거 (기존 report-generator 연동)

@@ -3,9 +3,11 @@ DAG(수동 실행 전용): ad_hourly_summary_manual
 주기: 없음 (schedule=None)
 역할: ad_impression + ad_click → ad_hourly_summary 테이블 생성 (수동 1회 트리거용)
 """
+import os
 import pendulum
 from airflow import DAG
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
+from airflow.providers.standard.operators.python import PythonOperator
 from datetime import timedelta
 import textwrap
 
@@ -117,6 +119,65 @@ if state != 'SUCCEEDED':
 print(f"[DONE] Partition repair completed")
 """)
 
+def _use_kpo() -> bool:
+    val = os.getenv("USE_KPO")
+    if val is not None:
+        return val.lower() in ("1", "true", "yes")
+    # 자동 감지: in-cluster 환경 변수 존재 시 KPO 사용
+    return bool(os.getenv("KUBERNETES_SERVICE_HOST") and os.getenv("KUBERNETES_PORT"))
+
+USE_KPO = _use_kpo()
+
+def _run_athena_query(database: str, output: str, region: str, query: str, tmp_table: str | None = None, **_):
+    import boto3, time
+    client = boto3.client('athena', region_name=region)
+
+    def run(sql: str, desc: str = ""):
+        print(f"[Athena] {desc}")
+        resp = client.start_query_execution(
+            QueryString=sql,
+            QueryExecutionContext={'Database': database},
+            ResultConfiguration={'OutputLocation': output},
+        )
+        qid = resp['QueryExecutionId']
+        while True:
+            st = client.get_query_execution(QueryExecutionId=qid)['QueryExecution']['Status']['State']
+            if st in ['SUCCEEDED','FAILED','CANCELLED']:
+                break
+            time.sleep(3)
+        if st != 'SUCCEEDED':
+            raise RuntimeError(f"Athena query {st}")
+
+    if tmp_table:
+        try:
+            run(f"DROP TABLE IF EXISTS {database}.{tmp_table}", "Drop tmp table")
+        except Exception as e:  # noqa: BLE001
+            print(f"[WARN] Drop tmp table: {e}")
+    run(query, "Main query execution")
+    if tmp_table:
+        try:
+            run(f"DROP TABLE IF EXISTS {database}.{tmp_table}", "Cleanup tmp table")
+        except Exception as e:  # noqa: BLE001
+            print(f"[WARN] Cleanup: {e}")
+
+def _repair_partitions(database: str, output: str, region: str, table: str, **_):
+    import boto3, time
+    client = boto3.client('athena', region_name=region)
+    sql = f"MSCK REPAIR TABLE {database}.{table}"
+    resp = client.start_query_execution(
+        QueryString=sql,
+        QueryExecutionContext={'Database': database},
+        ResultConfiguration={'OutputLocation': output},
+    )
+    qid = resp['QueryExecutionId']
+    while True:
+        st = client.get_query_execution(QueryExecutionId=qid)['QueryExecution']['Status']['State']
+        if st in ['SUCCEEDED','FAILED','CANCELLED']:
+            break
+        time.sleep(3)
+    if st != 'SUCCEEDED':
+        raise RuntimeError(f"Partition repair {st}")
+
 with DAG(
     dag_id="ad_hourly_summary_manual",
     default_args=default_args,
@@ -127,81 +188,120 @@ with DAG(
     max_active_runs=1,
     tags=["capa", "hourly", "ad", "etl", "manual"],
 ) as dag:
+    if USE_KPO:
+        create_hourly_summary = KubernetesPodOperator(
+            task_id="create_hourly_summary",
+            name="hourly-summary-athena",
+            namespace="airflow",
+            image="apache/airflow:2.9.3-python3.12",
+            cmds=["python", "-c"],
+            arguments=[ATHENA_RUNNER_SCRIPT],
+            env_vars={
+                "AWS_REGION": REGION,
+                "DATABASE": DATABASE,
+                "ATHENA_OUTPUT": ATHENA_OUTPUT,
+                "TMP_TABLE": "ad_hourly_summary_tmp",
+                "QUERY": (
+                    "CREATE TABLE {{ params.database }}.ad_hourly_summary_tmp "
+                    "WITH ( "
+                    "  format = 'PARQUET', "
+                    "  write_compression = 'ZSTD', "
+                    "  external_location = '{{ params.summary_path }}"
+                    "/dt={{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y-%m-%d-%H\") }}/' "
+                    ") AS "
+                    "SELECT "
+                    "  imp.campaign_id, "
+                    "  imp.device_type, "
+                    "  '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y-%m-%d-%H\") }}' AS dt, "
+                    "  COUNT(DISTINCT imp.event_id) AS impressions, "
+                    "  COUNT(DISTINCT clk.event_id) AS clicks, "
+                    "  CASE "
+                    "    WHEN COUNT(DISTINCT imp.event_id) > 0 "
+                    "    THEN CAST(COUNT(DISTINCT clk.event_id) AS DOUBLE) "
+                    "         / CAST(COUNT(DISTINCT imp.event_id) AS DOUBLE) * 100 "
+                    "    ELSE 0.0 "
+                    "  END AS ctr "
+                    "FROM {{ params.database }}.ad_events_raw AS imp "
+                    "LEFT JOIN {{ params.database }}.ad_events_raw AS clk "
+                    "  ON imp.campaign_id = clk.campaign_id "
+                    "  AND imp.user_id = clk.user_id "
+                    "  AND clk.event_type = 'click' "
+                    "  AND clk.year = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' "
+                    "  AND clk.month = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' "
+                    "  AND clk.day = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' "
+                    "WHERE imp.event_type = 'impression' "
+                    "  AND imp.year = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' "
+                    "  AND imp.month = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' "
+                    "  AND imp.day = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' "
+                    "  AND imp.timestamp >= {{ ((data_interval_end - macros.timedelta(minutes=10)).replace(minute=0, second=0, microsecond=0)).int_timestamp * 1000 }} "
+                    "  AND imp.timestamp < {{ (((data_interval_end - macros.timedelta(minutes=10)).replace(minute=0, second=0, microsecond=0) + macros.timedelta(hours=1))).int_timestamp * 1000 }} "
+                    "GROUP BY imp.campaign_id, imp.device_type"
+                ),
+            },
+            params={
+                "database": DATABASE,
+                "summary_path": HOURLY_SUMMARY_PATH,
+            },
+            service_account_name="airflow-scheduler",
+            get_logs=True,
+            is_delete_operator_pod=True,
+        )
 
-    create_hourly_summary = KubernetesPodOperator(
-        task_id="create_hourly_summary",
-        name="hourly-summary-athena",
-        namespace="airflow",
-        image="apache/airflow:2.9.3-python3.12",
-        cmds=["python", "-c"],
-        arguments=[ATHENA_RUNNER_SCRIPT],
-        env_vars={
-            "AWS_REGION": REGION,
-            "DATABASE": DATABASE,
-            "ATHENA_OUTPUT": ATHENA_OUTPUT,
-            "TMP_TABLE": "ad_hourly_summary_tmp",
-            "QUERY": (
-                "CREATE TABLE {{ params.database }}.ad_hourly_summary_tmp "
-                "WITH ( "
-                "  format = 'PARQUET', "
-                "  write_compression = 'ZSTD', "
-                "  external_location = '{{ params.summary_path }}"
-                "/dt={{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y-%m-%d-%H\") }}/' "
-                ") AS "
-                "SELECT "
-                "  imp.campaign_id, "
-                "  imp.device_type, "
-                "  '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y-%m-%d-%H\") }}' AS dt, "
-                "  COUNT(DISTINCT imp.event_id) AS impressions, "
-                "  COUNT(DISTINCT clk.event_id) AS clicks, "
-                "  CASE "
-                "    WHEN COUNT(DISTINCT imp.event_id) > 0 "
-                "    THEN CAST(COUNT(DISTINCT clk.event_id) AS DOUBLE) "
-                "         / CAST(COUNT(DISTINCT imp.event_id) AS DOUBLE) * 100 "
-                "    ELSE 0.0 "
-                "  END AS ctr "
-                "FROM {{ params.database }}.ad_events_raw AS imp "
-                "LEFT JOIN {{ params.database }}.ad_events_raw AS clk "
-                "  ON imp.campaign_id = clk.campaign_id "
-                "  AND imp.user_id = clk.user_id "
-                "  AND clk.event_type = 'click' "
-                "  AND clk.year = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' "
-                "  AND clk.month = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' "
-                "  AND clk.day = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' "
-                "WHERE imp.event_type = 'impression' "
-                "  AND imp.year = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' "
-                "  AND imp.month = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' "
-                "  AND imp.day = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' "
-                "  AND imp.timestamp >= {{ ((data_interval_end - macros.timedelta(minutes=10)).replace(minute=0, second=0, microsecond=0)).int_timestamp * 1000 }} "
-                "  AND imp.timestamp < {{ (((data_interval_end - macros.timedelta(minutes=10)).replace(minute=0, second=0, microsecond=0) + macros.timedelta(hours=1))).int_timestamp * 1000 }} "
-                "GROUP BY imp.campaign_id, imp.device_type"
-            ),
-        },
-        params={
-            "database": DATABASE,
-            "summary_path": HOURLY_SUMMARY_PATH,
-        },
-        service_account_name="airflow-scheduler",
-        get_logs=True,
-        is_delete_operator_pod=True,
-    )
+        register_partition = KubernetesPodOperator(
+            task_id="register_partition",
+            name="register-partition",
+            namespace="airflow",
+            image="apache/airflow:2.9.3-python3.12",
+            cmds=["python", "-c"],
+            arguments=[PARTITION_REPAIR_SCRIPT],
+            env_vars={
+                "AWS_REGION": REGION,
+                "DATABASE": DATABASE,
+                "ATHENA_OUTPUT": ATHENA_OUTPUT,
+                "TABLE": "ad_hourly_summary",
+            },
+            service_account_name="airflow-scheduler",
+            get_logs=True,
+            is_delete_operator_pod=True,
+        )
+    else:
+        create_hourly_summary = PythonOperator(
+            task_id="create_hourly_summary",
+            python_callable=_run_athena_query,
+            op_kwargs={
+                "region": REGION,
+                "database": DATABASE,
+                "output": ATHENA_OUTPUT,
+                "tmp_table": "ad_hourly_summary_tmp",
+                "query": (
+                    "CREATE TABLE {{ params.database }}.ad_hourly_summary_tmp "
+                    "WITH ( format = 'PARQUET', write_compression = 'ZSTD', "
+                    "external_location = '{{ params.summary_path }}/dt={{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y-%m-%d-%H\") }}/' ) AS "
+                    "SELECT imp.campaign_id, imp.device_type, "
+                    "'{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y-%m-%d-%H\") }}' AS dt, "
+                    "COUNT(DISTINCT imp.event_id) AS impressions, COUNT(DISTINCT clk.event_id) AS clicks, "
+                    "CASE WHEN COUNT(DISTINCT imp.event_id) > 0 THEN CAST(COUNT(DISTINCT clk.event_id) AS DOUBLE) / CAST(COUNT(DISTINCT imp.event_id) AS DOUBLE) * 100 ELSE 0.0 END AS ctr "
+                    "FROM {{ params.database }}.ad_events_raw AS imp LEFT JOIN {{ params.database }}.ad_events_raw AS clk "
+                    "ON imp.campaign_id = clk.campaign_id AND imp.user_id = clk.user_id AND clk.event_type = 'click' "
+                    "AND clk.year='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' AND clk.month='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' AND clk.day='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' "
+                    "WHERE imp.event_type = 'impression' AND imp.year='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' AND imp.month='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' AND imp.day='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' "
+                    "AND imp.timestamp >= {{ ((data_interval_end - macros.timedelta(minutes=10)).replace(minute=0, second=0, microsecond=0)).int_timestamp * 1000 }} "
+                    "AND imp.timestamp < {{ (((data_interval_end - macros.timedelta(minutes=10)).replace(minute=0, second=0, microsecond=0) + macros.timedelta(hours=1))).int_timestamp * 1000 }} "
+                    "GROUP BY imp.campaign_id, imp.device_type"
+                ),
+            },
+            params={"database": DATABASE, "summary_path": HOURLY_SUMMARY_PATH},
+        )
 
-    register_partition = KubernetesPodOperator(
-        task_id="register_partition",
-        name="register-partition",
-        namespace="airflow",
-        image="apache/airflow:2.9.3-python3.12",
-        cmds=["python", "-c"],
-        arguments=[PARTITION_REPAIR_SCRIPT],
-        env_vars={
-            "AWS_REGION": REGION,
-            "DATABASE": DATABASE,
-            "ATHENA_OUTPUT": ATHENA_OUTPUT,
-            "TABLE": "ad_hourly_summary",
-        },
-        service_account_name="airflow-scheduler",
-        get_logs=True,
-        is_delete_operator_pod=True,
-    )
+        register_partition = PythonOperator(
+            task_id="register_partition",
+            python_callable=_repair_partitions,
+            op_kwargs={
+                "region": REGION,
+                "database": DATABASE,
+                "output": ATHENA_OUTPUT,
+                "table": "ad_hourly_summary",
+            },
+        )
 
     create_hourly_summary >> register_partition
