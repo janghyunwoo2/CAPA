@@ -80,9 +80,9 @@ helm install airflow apache-airflow/airflow \
 # Pod 상태 확인
 kubectl get pods -n airflow
 
-# Airflow 웹서버 접속
-kubectl port-forward svc/airflow-webserver 8080:8080 -n airflow
-# http://localhost:8080 접속
+# Airflow 웹서버 접속 (로컬 8081 → 클러스터 8080)
+kubectl port-forward svc/airflow-webserver 8081:8080 -n airflow
+# http://localhost:8081 접속
 ```
 
 ## 6. DAG 배포
