@@ -18,30 +18,28 @@
 - 자동 폴백: K8s 환경이 아니면 자동으로 `PythonOperator` 경로를 사용하도록 DAG 4개 모두에 K8s 감지 로직을 추가했습니다.
   - `USE_KPO` 미설정 시 `KUBERNETES_SERVICE_HOST`/`KUBERNETES_PORT` 존재 여부로 K8s 환경을 감지 → 미존재면 자동 폴백.
   - 수동 제어도 가능: `USE_KPO=1|0|true|false|yes|no`.
-- 수동 전용 DAG: `*_manual.py`는 `schedule=None`으로 수동 1회 트리거만 수행하며, 동일 Athena/파티션 로직을 로컬에서도 동작하도록 `boto3` 기반 실행 경로를 포함합니다.
+- 수동 전용 DAG: ad_hourly_summary_test.py, ad_daily_summary_test.py 는 schedule=None 으로 수동 1회 트리거만 수행하며, 동일 Athena/파티션 로직을 로컬에서도 동작하도록 boto3 기반 실행 경로를 포함합니다.
 
 ## 실행 방법(로컬 예시)
-- 스케줄러 실행(폴백 강제 옵션 포함):
 ```powershell
 # (선택) 폴백 강제: K8s가 아니면 기본적으로 자동 감지되지만, 필요 시 명시
 $env:USE_KPO=0
 uv run --project services/data_pipeline_t2 python -m airflow scheduler
 ```
-- 수동 트리거(논리시각 지정):
 ```powershell
-# 시간별 수동: KST 14:10 논리시각 → 대상 14:00 (10분 버퍼)
-uv run --project services/data_pipeline_t2 python -m airflow dags trigger ad_hourly_summary_manual -l "2026-03-04T14:10:00+09:00"
+- 시간별 수동: Asia/Seoul(KST) 기준으로 논리시각을 설정합니다. 예: 14:10 KST에 해당하는 데이터의 10분 버퍼를 포함하여 14:00를 대상으로 트리거합니다.
+uv run --project services/data_pipeline_t2 python -m airflow dags trigger ad_hourly_summary_test -l "2026-03-04T14:10:00+09:00"
 
-# 일별 수동: KST 02:00 논리시각 → 전일(00~23시)
-uv run --project services/data_pipeline_t2 python -m airflow dags trigger ad_daily_summary_manual -l "2026-03-04T02:00:00+09:00"
+- 일별 수동: Asia/Seoul(KST) 기준으로 논리시각을 설정합니다. 예: 02:00 KST에 해당하는 데이터를 전일의 00~23시 파티션으로 처리합니다.
+uv run --project services/data_pipeline_t2 python -m airflow dags trigger ad_daily_summary_test -l "2026-03-04T02:00:00+09:00"
 ```
 - DAG 런/태스크 로그 확인:
 ```powershell
 # 런 상태
-uv run --project services/data_pipeline_t2 python -m airflow dags list-runs -d ad_hourly_summary_manual -o table
+uv run --project services/data_pipeline_t2 python -m airflow dags list-runs -d ad_hourly_summary_test -o table
 
 # 태스크 로그
-uv run --project services/data_pipeline_t2 python -m airflow tasks logs ad_hourly_summary_manual create_hourly_summary "2026-03-04T14:10:00+09:00"
+uv run --project services/data_pipeline_t2 python -m airflow tasks logs ad_hourly_summary_test create_hourly_summary "2026-03-04T14:10:00+09:00"
 ```
 
 ## 내가 확인/조치해야 할 체크리스트
@@ -67,4 +65,4 @@ uv run --project services/data_pipeline_t2 python -m airflow tasks logs ad_hourl
 
 ## 참고
 - 시간/타임존: Airflow 2.x에서는 `DAG(..., timezone=...)` 미지원. `start_date`를 KST로 지정했고, 필요 시 `core.default_timezone=Asia/Seoul` 설정을 고려하세요.
-- 수동 세트 연결: `ad_daily_summary_manual`의 센서를 `external_dag_id="ad_hourly_summary_manual"`로 바꿔 수동 세트끼리만 의존시키는 것도 가능합니다.
+- 수동 세트 연결: `ad_daily_summary_test`의 센서를 `external_dag_id="ad_hourly_summary_test"`로 바꿔 수동 세트끼리만 의존시키는 것도 가능합니다.

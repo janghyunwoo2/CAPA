@@ -51,7 +51,7 @@ with DAG(
         task_id="athena_aggregation_pod",
         name="athena-agg-pod",
         namespace="airflow",
-        image="apache/airflow:2.9.3-python3.12",  # boto3가 이미 설치된 이미지 사용
+        image="apache/airflow:2.9.3-python3.14.2",  # boto3가 이미 설치된 이미지 사용
         cmds=["python", "-c"],
         arguments=[
             f"""

@@ -115,6 +115,35 @@ s3://<bucket>/raw/
  - CVR: 전환유형별 확률(예: `purchase` ~1–3%)
  - 전환 시간: 클릭 후 1분~7일 사이 무작위 지연
 
+### 5.1 노출/클릭/전환 확률의 상세 로직
+- 노출(Impressions)
+	- 기본 노출 수는 base_impressions(기본값 10000)이며, target_datetime의 시간대와 요일에 따라 traffic_multiplier를 곱해 결정됩니다.
+	- traffic_multiplier는 시간대(hour)별 패턴(hour_mult)과 요일(day_mult)를 곱한 값으로 계산됩니다. 예를 들어 점심시간대나 주말에 증가하는 흐름을 반영합니다.
+	- 따라서 특정 시점의 노출 수는 정적으로 결정되며, 실제로는 int(base_impressions * traffic_multiplier)로 산출됩니다.
+
+- 클릭(Clicks)
+	- 각 노출마다 클릭 확률은 광고 포맷별 CTR_RATES에서 정의된 범위에서 무작위로 추출된 CTR 값으로 결정됩니다.
+	- CTR은 ad_format에 따라
+		- display: 0.01~0.03, native: 0.02~0.04, video: 0.03~0.05, discount_coupon: 0.025~0.045
+	- 지역 가중치가 적용됩니다. delivery_region이 강남구 또는 서초구인 경우 CTR이 1.2배 증가합니다.
+	- 각 노출에 대해 rand() < CTR이 성립하면 클릭이 생성됩니다.
+	- 생성되는 클릭은 click_id, timestamp, landing_page_url 등 클릭 관련 필드를 포함합니다.
+
+- 전환(Conversions)
+	- 클릭이 존재하는 행에 대해 전환 확률이 결정됩니다. 먼저 conversion_type을 CONVERSION_TYPES에서 무작위로 선택합니다.
+	- 각 전환 유형에 대해 CVR_RATES는 (min, max) 형태의 값으로 정의됩니다.
+	- 현재 구현은 각 클릭 행에 대해 random.random() < cvr_max를 사용하여 전환 여부를 결정합니다. 즉, 전환 확률은 전환 유형의 최대값(cvr_max)으로 간주됩니다.
+	- 전환이 발생하면 전환 지연 시간은 클릭 시점으로부터 60초(1분)에서 7일 사이의 무작위 지연으로 계산됩니다.
+	- 전환 정보에는 conversion_type, conversion_value, product_id, quantity, store_id, attribution_window 등이 포함됩니다.
+
+- 요약 예시
+	- ad_format이 video이고 CTR 범위가 0.03~0.05라면 평균적으로 약 4%의 노출에서 클릭이 발생합니다(지역 가중치 적용 시 약 4.8%까지 증가 가능).
+	- 10000건의 노출 중 약 400건의 클릭이 예상되고, 이 중 conversion_type이 purchase일 경우 CVR 최대값(여기서는 예를 들어 0.03)을 확률로 사용한다면 약 12건의 전환이 발생할 수 있습니다. 실제 수치는 난수에 따라 달라집니다.
+
+- 주의 및 개선 제안
+	- 현재 CVR 계산은 각 전환 유형의 cvr_max를 확률 임계값으로 사용합니다. 이 값을 실제 CVR 범위로 샘플링하여 사용하도록 개선하는 것이 더 현실적인 분포를 제공합니다.
+	- 예: cvr = random.uniform(cvr_min, cvr_max); if random.random() < cvr: 생성
+
 ## 6) 결과 확인/모니터링
 
 - 완료 통계: 총 노출/클릭/전환, CTR/CVR, 시간대별 로그

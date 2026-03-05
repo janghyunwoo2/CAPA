@@ -1,5 +1,5 @@
 """
-DAG(수동 실행 전용): ad_daily_summary_manual
+DAG(수동 실행 전용): ad_daily_summary_test
 주기: 없음 (schedule=None)
 역할: hourly_summary 24개 집계 + conversion 원천 로그 조인 (수동 1회 트리거용)
 """
@@ -163,14 +163,14 @@ def _repair_partitions(database: str, output: str, region: str, table: str, **_)
         raise RuntimeError(f"Partition repair {st}")
 
 with DAG(
-    dag_id="ad_daily_summary_manual",
+    dag_id="04_ad_daily_summary_test",
     default_args=default_args,
     description="수동 실행: hourly_summary 집계 + conversion 조인하여 daily summary 생성",
     schedule=None,  # 수동 트리거 전용
     start_date=pendulum.datetime(2026, 2, 13, tz=pendulum.timezone("Asia/Seoul")),
     catchup=False,
     max_active_runs=1,
-    tags=["capa", "daily", "ad", "etl", "manual"],
+    tags=["capa", "daily", "ad", "etl", "test"],
 ) as dag:
 
     wait_for_hourly = ExternalTaskSensor(
@@ -188,7 +188,7 @@ with DAG(
             task_id="create_daily_summary",
             name="daily-summary-athena",
             namespace="airflow",
-            image="apache/airflow:2.9.3-python3.12",
+            image="apache/airflow:2.9.3-python3.14.2",
             cmds=["python", "-c"],
             arguments=[ATHENA_RUNNER_SCRIPT],
             env_vars={
@@ -225,7 +225,7 @@ with DAG(
             task_id="register_partition",
             name="daily-register-partition",
             namespace="airflow",
-            image="apache/airflow:2.9.3-python3.12",
+            image="apache/airflow:2.9.3-python3.14.2",
             cmds=["python", "-c"],
             arguments=[PARTITION_REPAIR_SCRIPT],
             env_vars={

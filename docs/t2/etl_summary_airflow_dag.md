@@ -334,7 +334,7 @@ from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperato
 
 repair = KubernetesPodOperator(
   task_id="repair_partitions",
-  image="apache/airflow:2.9.3-python3.12",
+    image="apache/airflow:2.9.3-python3.14.2",
   cmds=["python", "-c"],
   arguments=[
     "import boto3,os,time;\n"

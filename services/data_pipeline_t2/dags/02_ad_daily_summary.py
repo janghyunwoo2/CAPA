@@ -187,7 +187,7 @@ print(f"[DONE] Partition repair completed for {DATABASE}.{TABLE}")
 # DAG 정의
 # =============================================================================
 with DAG(
-    dag_id="ad_daily_summary",
+    dag_id="02_ad_daily_summary",
     default_args=default_args,
     description="매일 hourly_summary 집계 + conversion 조인하여 daily summary 생성",
     schedule="0 2 * * *",  # 매일 02:00 KST
@@ -230,7 +230,7 @@ with DAG(
             task_id="create_daily_summary",
             name="daily-summary-athena",
             namespace="airflow",
-            image="apache/airflow:2.9.3-python3.12",
+            image="apache/airflow:2.9.3-python3.14.2",
             cmds=["python", "-c"],
             arguments=[ATHENA_RUNNER_SCRIPT],
             env_vars={
@@ -301,7 +301,7 @@ with DAG(
             task_id="register_partition",
             name="daily-register-partition",
             namespace="airflow",
-            image="apache/airflow:2.9.3-python3.12",
+            image="apache/airflow:2.9.3-python3.14.2",
             cmds=["python", "-c"],
             arguments=[PARTITION_REPAIR_SCRIPT],
             env_vars={
