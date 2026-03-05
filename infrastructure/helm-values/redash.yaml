@@ -48,6 +48,8 @@ redis:
       node-type: core
 
 server:
+  env:
+    REDASH_GUNICORN_TIMEOUT: "120" # Athena Connection Test 대기시간 확보 (기본값 30s로는 타임아웃)
   resources:
     requests:
       cpu: 100m
@@ -80,29 +82,29 @@ scheduler:
 adhocWorker:
   resources:
     requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 200m
+      cpu: 100m
       memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi # OOMKill 방지: 큐 작업 처리 시 메모리 급증 대응
 
 scheduledWorker:
   resources:
     requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 200m
+      cpu: 100m
       memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi # OOMKill 방지
 
 genericWorker:
   resources:
     requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 200m
+      cpu: 100m
       memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi # OOMKill 방지
 
 service:
   type: ClusterIP
