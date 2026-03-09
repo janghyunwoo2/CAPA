@@ -1,0 +1,36 @@
+{
+  "enabledPlugins": {
+    "bkit@bkit-marketplace": true
+  },
+  "permissions": {
+    "allow": [
+      "Read(*)",
+      "Bash(python -m pytest *)",
+      "Bash(python -m mypy *)",
+      "Bash(python -m black *)",
+      "Bash(python -m isort *)",
+      "Bash(python -m bandit *)",
+      "Bash(terraform fmt *)",
+      "Bash(terraform validate)",
+      "Bash(terraform plan *)"
+    ],
+    "deny": [
+      "Bash(terraform apply *)",
+      "Bash(kubectl apply *)",
+      "Bash(git push *)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -m mypy services/ --ignore-missing-imports --no-implicit-optional 2>/dev/null || true"
+          }
+        ]
+      }
+    ]
+  }
+}
