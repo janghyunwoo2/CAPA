@@ -74,6 +74,9 @@ x-airflow-common:
     _PIP_ADDITIONAL_REQUIREMENTS: ${_PIP_ADDITIONAL_REQUIREMENTS:-matplotlib pandas seaborn pyarrow}
     # The following line can be used to set a custom config file, stored in the local config folder
     AIRFLOW_CONFIG: '/opt/airflow/config/airflow.cfg'
+    # ✅ Timezone 설정 (KST)
+    TZ: 'Asia/Seoul'
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: 'Asia/Seoul'
   volumes:
     # Mount entire dags directory to include all DAG files
     - ${AIRFLOW_PROJ_DIR:-.}/dags:/opt/airflow/dags

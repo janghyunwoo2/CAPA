@@ -60,6 +60,12 @@ PARTITION_FORMATS = {
     }
 }
 
+# INSERT OVERWRITE용 파티션 키 (year/month/day/hour 구조)
+PARTITION_KEYS = {
+    "ad_combined_log": ["year", "month", "day", "hour"],
+    "ad_combined_log_summary": ["year", "month", "day"]
+}
+
 # 재시도 설정
 MAX_RETRIES = 3
 RETRY_DELAY_SECONDS = 30

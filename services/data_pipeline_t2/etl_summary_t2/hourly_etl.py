@@ -9,7 +9,7 @@ import argparse
 from datetime import datetime, timedelta
 from typing import Optional
 
-from athena_utils import AthenaQueryExecutor, create_external_table, repair_table_partitions
+from athena_utils import AthenaQueryExecutor
 from config import DATABASE, S3_PATHS, PARTITION_FORMATS
 
 logging.basicConfig(level=logging.INFO)
@@ -32,15 +32,87 @@ class HourlyETL:
         else:
             current_hour = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
             self.target_hour = current_hour - timedelta(hours=1)
-            
+        
+        # 파티션 키 추출 (year/month/day/hour)
+        self.year = self.target_hour.strftime("%Y")
+        self.month = self.target_hour.strftime("%m")
+        self.day = self.target_hour.strftime("%d")
+        self.hour = self.target_hour.strftime("%H")
+        
         self.hour_str = self.target_hour.strftime(PARTITION_FORMATS["hourly"])
         
-        logger.info(f"Processing hour: {self.hour_str}")
+        logger.info(f"Processing hour: {self.hour_str} (Partition: {self.year}/{self.month}/{self.day}/{self.hour})")
         
-    def create_tables_if_not_exists(self):
-        """필요한 테이블이 없으면 생성"""
-        # ad_combined_log 테이블 생성
-        schema = """
+    def generate_hourly_etl_query(self) -> str:
+        """INSERT INTO 쿼리 생성 (dt 파티션 기반)"""
+        # 기존 테이블이 dt 파티션 사용 (year/month/day/hour가 아님)
+        query = f"""
+        SELECT 
+            imp.impression_id,
+            imp.user_id,
+            imp.ad_id,
+            imp.campaign_id,
+            imp.advertiser_id,
+            imp.platform,
+            imp.device_type,
+            imp.timestamp,
+            CASE WHEN clk.click_id IS NOT NULL THEN true ELSE false END AS is_click,
+            clk.timestamp AS click_timestamp,
+            '{self.hour_str}' AS dt
+        FROM {DATABASE}.impressions imp
+        LEFT JOIN {DATABASE}.clicks clk
+            ON imp.impression_id = clk.impression_id
+            AND clk.year = '{self.year}'
+            AND clk.month = '{self.month}'
+            AND clk.day = '{self.day}'
+            AND clk.hour = '{self.hour}'
+        WHERE imp.year = '{self.year}'
+            AND imp.month = '{self.month}'
+            AND imp.day = '{self.day}'
+            AND imp.hour = '{self.hour}'
+        """
+        
+        return query
+        
+    def _table_exists(self) -> bool:
+        """테이블 존재 여부 확인 (DESCRIBE 사용)"""
+        try:
+            # DESCRIBE는 테이블이 없으면 실패하고, 있으면 성공
+            check_query = f"DESCRIBE {DATABASE}.ad_combined_log"
+            query_id = self.executor.execute_query(check_query)
+            # 쿼리가 성공했다 = 테이블이 존재한다
+            logger.info("✅ Table ad_combined_log exists")
+            return True
+        except Exception as e:
+            # 쿼리가 실패했다 = 테이블이 없다
+            logger.info(f"❌ Table does not exist: {str(e)}")
+            return False
+    
+    def run(self):
+        """ETL 실행 (CTAS로 테이블 생성, INSERT OVERWRITE로 데이터 삽입)"""
+        try:
+            # 1. 테이블 존재 여부 확인
+            if not self._table_exists():
+                # 테이블이 없으면 CTAS로 생성 (1회만 실행)
+                logger.info("📌 Table does not exist, creating with CTAS...")
+                self._create_table_with_ctas()
+            else:
+                # 테이블이 있으면 INSERT OVERWRITE로 데이터 삽입
+                logger.info("✅ Table exists, inserting data with INSERT OVERWRITE...")
+                self._insert_data_overwrite()
+            
+            # 2. 처리 결과 확인
+            self._validate_results()
+            
+        except Exception as e:
+            logger.error(f"❌ Hourly ETL failed: {str(e)}")
+            raise
+    
+    def _create_table_with_ctas(self):
+        """테이블이 없을 때 CREATE EXTERNAL TABLE + INSERT로 생성 (dt 파티션)"""
+        # Step 1: EXTERNAL 테이블 생성 (dt 파티션 기반)
+        create_table_query = f"""
+        CREATE EXTERNAL TABLE IF NOT EXISTS {DATABASE}.ad_combined_log (
             impression_id STRING,
             user_id STRING,
             ad_id STRING,
@@ -51,144 +123,102 @@ class HourlyETL:
             timestamp BIGINT,
             is_click BOOLEAN,
             click_timestamp BIGINT
-        """
-        
-        query = create_external_table(
-            table_name="ad_combined_log",
-            schema=schema,
-            location=S3_PATHS["ad_combined_log"],
-            partition_keys=[("dt", "STRING")]
         )
-        
-        logger.info("Creating ad_combined_log table if not exists")
-        self.executor.execute_query(query)
-        
-    def generate_hourly_etl_query(self) -> str:
-        """시간별 ETL 쿼리 생성"""
-        # Raw 데이터의 파티션 정보
-        year = self.target_hour.strftime(PARTITION_FORMATS["raw"]["year"])
-        month = self.target_hour.strftime(PARTITION_FORMATS["raw"]["month"])
-        day = self.target_hour.strftime(PARTITION_FORMATS["raw"]["day"])
-        hour = self.target_hour.strftime(PARTITION_FORMATS["raw"]["hour"])
-        
-        # Unix timestamp 범위 (milliseconds)
-        start_ts = int(self.target_hour.timestamp() * 1000)
-        end_ts = int((self.target_hour + timedelta(hours=1)).timestamp() * 1000)
-        
-        query = f"""
-        INSERT OVERWRITE TABLE {DATABASE}.ad_combined_log
-        PARTITION (dt='{self.hour_str}')
-        SELECT 
-            imp.impression_id,
-            imp.user_id,
-            imp.ad_id,
-            imp.campaign_id,
-            imp.advertiser_id,
-            imp.platform,
-            imp.device_type,
-            imp.timestamp,
-            CASE WHEN clk.impression_id IS NOT NULL THEN true ELSE false END AS is_click,
-            clk.timestamp AS click_timestamp
-        FROM {DATABASE}.impressions imp
-        LEFT JOIN {DATABASE}.clicks clk
-            ON imp.impression_id = clk.impression_id
-            AND clk.year = '{year}'
-            AND clk.month = '{month}'
-            AND clk.day = '{day}'
-            AND clk.hour = '{hour}'
-        WHERE imp.year = '{year}'
-            AND imp.month = '{month}'
-            AND imp.day = '{day}'
-            AND imp.hour = '{hour}'
+        PARTITIONED BY (
+            dt STRING
+        )
+        STORED AS PARQUET
+        LOCATION '{S3_PATHS["ad_combined_log"]}'
+        TBLPROPERTIES (
+            'classification'='parquet',
+            'compressionType'='snappy'
+        )
         """
         
-        return query
+        logger.info(f"Creating external table {DATABASE}.ad_combined_log")
+        self.executor.execute_query(create_table_query)
+        logger.info("✅ Table created successfully")
         
-    def run(self):
-        """ETL 실행"""
+        # Step 2: 첫 번째 파티션 데이터 삽입
+        insert_query = f"""
+        INSERT INTO {DATABASE}.ad_combined_log
+        {self.generate_hourly_etl_query()}
+        """
+        
+        logger.info(f"Inserting first partition data for {self.hour_str}")
+        self.executor.execute_query(insert_query)
+        logger.info("✅ First partition data inserted")
+        
+        # Step 3: 파티션 등록
+        self._repair_partitions()
+    
+    def _insert_data_overwrite(self):
+        """기존 테이블에 DELETE + INSERT로 데이터 삽입 (dt 파티션 기반)"""
+        # Step 1: 기존 파티션 데이터 삭제 (dt 파티션 사용)
+        delete_query = f"""
+        DELETE FROM {DATABASE}.ad_combined_log
+        WHERE dt = '{self.hour_str}'
+        """
+        
+        logger.info(f"Deleting existing partition data for {self.hour_str}")
         try:
-            # 1. 테이블 생성 (필요시)
-            self.create_tables_if_not_exists()
-            
-            # 2. 임시 테이블로 CTAS 실행 (Athena에서 INSERT OVERWRITE 대신 사용)
-            temp_table = f"ad_combined_log_temp_{self.hour_str.replace('-', '_')}"
-            
-            # 임시 테이블 삭제
-            drop_query = f"DROP TABLE IF EXISTS {DATABASE}.{temp_table}"
-            self.executor.execute_query(drop_query)
-            
-            # CTAS 쿼리 생성 - 실제 테이블 구조에 맞게 수정
-            ctas_query = f"""
-            CREATE TABLE {DATABASE}.{temp_table}
-            WITH (
-                format = 'PARQUET',
-                write_compression = 'ZSTD',
-                external_location = '{S3_PATHS["ad_combined_log"]}dt={self.hour_str}/'
-            ) AS
-            SELECT 
-                imp.impression_id,
-                imp.user_id,
-                imp.ad_id,
-                imp.campaign_id,
-                imp.advertiser_id,
-                imp.platform,
-                imp.device_type,
-                imp.timestamp,
-                CASE WHEN clk.click_id IS NOT NULL THEN true ELSE false END AS is_click,
-                clk.timestamp AS click_timestamp
-            FROM {DATABASE}.impressions imp
-            LEFT JOIN {DATABASE}.clicks clk
-                ON imp.impression_id = clk.impression_id
-                AND clk.year = '{self.target_hour.strftime("%Y")}'
-                AND clk.month = '{self.target_hour.strftime("%m")}'
-                AND clk.day = '{self.target_hour.strftime("%d")}'
-                AND clk.hour = '{self.target_hour.strftime("%H")}'
-            WHERE imp.year = '{self.target_hour.strftime("%Y")}'
-                AND imp.month = '{self.target_hour.strftime("%m")}'
-                AND imp.day = '{self.target_hour.strftime("%d")}'
-                AND imp.hour = '{self.target_hour.strftime("%H")}'
-            """
-            
-            logger.info(f"Executing CTAS query for {self.hour_str}")
-            self.executor.execute_query(ctas_query)
-            
-            # 3. 임시 테이블 삭제
-            self.executor.execute_query(drop_query)
-            
-            # 4. 파티션 복구 (새 파티션 인식)
-            repair_query = repair_table_partitions("ad_combined_log")
-            logger.info("Repairing partitions")
-            self.executor.execute_query(repair_query)
-            
-            # 5. 처리 결과 확인
-            validation_query = f"""
-            SELECT 
-                COUNT(*) as total_impressions,
-                SUM(CASE WHEN is_click THEN 1 ELSE 0 END) as total_clicks,
-                CASE 
-                    WHEN COUNT(*) > 0 
-                    THEN CAST(SUM(CASE WHEN is_click THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) * 100
-                    ELSE 0.0
-                END as ctr
-            FROM {DATABASE}.ad_combined_log
-            WHERE dt = '{self.hour_str}'
-            """
-            
-            query_id = self.executor.execute_query(validation_query)
-            results = self.executor.get_query_results(query_id)
-            
-            if results:
-                result = results[0]
-                logger.info(
-                    f"Hourly ETL completed - "
-                    f"Impressions: {result.get('total_impressions', 0)}, "
-                    f"Clicks: {result.get('total_clicks', 0)}, "
-                    f"CTR: {float(result.get('ctr', 0)):.2f}%"
-                )
-            
+            self.executor.execute_query(delete_query)
+            logger.info("✅ Existing data deleted")
         except Exception as e:
-            logger.error(f"Hourly ETL failed: {str(e)}")
-            raise
+            # DELETE가 지원되지 않을 경우 경고 후 계속 진행
+            logger.warning(f"⚠️  DELETE not supported, attempting INSERT anyway: {str(e)}")
+        
+        # Step 2: 새 데이터 삽입
+        insert_query = f"""
+        INSERT INTO {DATABASE}.ad_combined_log
+        {self.generate_hourly_etl_query()}
+        """
+        
+        logger.info(f"Executing INSERT INTO for {self.hour_str}")
+        self.executor.execute_query(insert_query)
+        logger.info("✅ Data inserted successfully")
+        
+        # Step 3: 파티션 등록 (MSCK REPAIR TABLE)
+        self._repair_partitions()
+    
+    def _repair_partitions(self):
+        """S3의 데이터를 Glue 카탈로그에 파티션으로 등록"""
+        repair_query = f"MSCK REPAIR TABLE {DATABASE}.ad_combined_log"
+        
+        logger.info("Repairing partitions...")
+        try:
+            self.executor.execute_query(repair_query)
+            logger.info("✅ Partitions repaired successfully")
+        except Exception as e:
+            logger.warning(f"⚠️  Partition repair failed: {str(e)}")
+            # 파티션 수리 실패해도 계속 진행 (데이터는 있으므로)
+    
+    def _validate_results(self):
+        """처리 결과 확인"""
+        validation_query = f"""
+        SELECT 
+            COUNT(*) as total_impressions,
+            SUM(CASE WHEN is_click THEN 1 ELSE 0 END) as total_clicks,
+            CASE 
+                WHEN COUNT(*) > 0 
+                THEN CAST(SUM(CASE WHEN is_click THEN 1 ELSE 0 END) AS DOUBLE) / COUNT(*) * 100
+                ELSE 0.0
+            END as ctr
+        FROM {DATABASE}.ad_combined_log
+        WHERE dt = '{self.hour_str}'
+        """
+        
+        query_id = self.executor.execute_query(validation_query)
+        results = self.executor.get_query_results(query_id)
+        
+        if results:
+            result = results[0]
+            logger.info(
+                f"✅ Hourly ETL completed - "
+                f"Impressions: {result.get('total_impressions', 0)}, "
+                f"Clicks: {result.get('total_clicks', 0)}, "
+                f"CTR: {float(result.get('ctr', 0)):.2f}%"
+            )
 
 
 def main():
