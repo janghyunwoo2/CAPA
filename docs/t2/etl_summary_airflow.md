@@ -115,25 +115,3 @@ def heavy_processing():
     # 이 작업은 별도 Pod에서 실행됨
     pass
 ```
-
-## 현재 프로젝트에 적용하기
-
-... (원문 전체 내용 포함)
-
----
-
-## Airflow ↔ Redash 연동 (원문)
-
-<!-- 출처: docs/t2/aiflow_redash.md (철자: airflow_redash) -->
-
-# Airflow ↔ Redash 연동 가이드 (CAPA)
-
-## 한눈에 요약
-- Airflow: 배치 ETL 스케줄러/오케스트레이터 (로그 생성 X)
-- Redash: BI / 쿼리•대시보드 도구
-- 기본 관계: Airflow가 Athena(SQL)를 통해 S3에 분석용 데이터를 생성(Parquet, 파티션)하고 Glue 테이블로 노출하면, Redash는 그 Glue/Athena를 데이터 소스로 직접 조회.
-
-... (원문 전체 내용 포함)
-
----
-

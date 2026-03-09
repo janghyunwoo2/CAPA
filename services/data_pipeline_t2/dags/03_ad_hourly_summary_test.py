@@ -1,7 +1,7 @@
 """
 DAG(수동 실행 전용): ad_hourly_summary_test
 주기: 없음 (schedule=None)
-역할: ad_impression + ad_click → ad_hourly_summary 테이블 생성 (수동 1회 트리거용)
+역할: impressions + clicks → ad_combined_log 테이블 생성 (수동 1회 트리거용)
 """
 import os
 import pendulum
@@ -12,10 +12,10 @@ from datetime import timedelta
 import textwrap
 
 S3_BUCKET = "capa-data-lake-827913617635"
-DATABASE = "ad_log"
+DATABASE = "capa_ad_logs"
 ATHENA_OUTPUT = f"s3://{S3_BUCKET}/athena-results/"
 REGION = "ap-northeast-2"
-HOURLY_SUMMARY_PATH = f"s3://{S3_BUCKET}/summary/ad_hourly_summary"
+HOURLY_SUMMARY_PATH = f"s3://{S3_BUCKET}/summary/ad_combined_log"
 
 default_args = {
     "owner": "capa",
@@ -134,6 +134,7 @@ def _run_athena_query(database: str, output: str, region: str, query: str, tmp_t
 
     def run(sql: str, desc: str = ""):
         print(f"[Athena] {desc}")
+        print(f"[SQL] {sql[:500]}")
         resp = client.start_query_execution(
             QueryString=sql,
             QueryExecutionContext={'Database': database},
@@ -141,12 +142,15 @@ def _run_athena_query(database: str, output: str, region: str, query: str, tmp_t
         )
         qid = resp['QueryExecutionId']
         while True:
-            st = client.get_query_execution(QueryExecutionId=qid)['QueryExecution']['Status']['State']
+            status = client.get_query_execution(QueryExecutionId=qid)
+            st = status['QueryExecution']['Status']['State']
             if st in ['SUCCEEDED','FAILED','CANCELLED']:
                 break
             time.sleep(3)
         if st != 'SUCCEEDED':
-            raise RuntimeError(f"Athena query {st}")
+            reason = status['QueryExecution']['Status'].get('StateChangeReason', 'Unknown')
+            print(f"[Athena] FAILED - Reason: {reason}")
+            raise RuntimeError(f"Athena query {st}: {reason}")
 
     if tmp_table:
         try:
@@ -200,9 +204,9 @@ with DAG(
                 "AWS_REGION": REGION,
                 "DATABASE": DATABASE,
                 "ATHENA_OUTPUT": ATHENA_OUTPUT,
-                "TMP_TABLE": "ad_hourly_summary_tmp",
+                "TMP_TABLE": "ad_combined_log_tmp",
                 "QUERY": (
-                    "CREATE TABLE {{ params.database }}.ad_hourly_summary_tmp "
+                    "CREATE TABLE {{ params.database }}.ad_combined_log_tmp "
                     "WITH ( "
                     "  format = 'PARQUET', "
                     "  write_compression = 'ZSTD', "
@@ -213,28 +217,25 @@ with DAG(
                     "  imp.campaign_id, "
                     "  imp.device_type, "
                     "  '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y-%m-%d-%H\") }}' AS dt, "
-                    "  COUNT(DISTINCT imp.event_id) AS impressions, "
-                    "  COUNT(DISTINCT clk.event_id) AS clicks, "
+                    "  COUNT(DISTINCT imp.impression_id) AS impressions, "
+                    "  COUNT(DISTINCT clk.click_id) AS clicks, "
                     "  CASE "
-                    "    WHEN COUNT(DISTINCT imp.event_id) > 0 "
-                    "    THEN CAST(COUNT(DISTINCT clk.event_id) AS DOUBLE) "
-                    "         / CAST(COUNT(DISTINCT imp.event_id) AS DOUBLE) * 100 "
+                    "    WHEN COUNT(DISTINCT imp.impression_id) > 0 "
+                    "    THEN CAST(COUNT(DISTINCT clk.click_id) AS DOUBLE) "
+                    "         / CAST(COUNT(DISTINCT imp.impression_id) AS DOUBLE) * 100 "
                     "    ELSE 0.0 "
                     "  END AS ctr "
-                    "FROM {{ params.database }}.ad_events_raw AS imp "
-                    "LEFT JOIN {{ params.database }}.ad_events_raw AS clk "
-                    "  ON imp.campaign_id = clk.campaign_id "
-                    "  AND imp.user_id = clk.user_id "
-                    "  AND clk.event_type = 'click' "
+                    "FROM {{ params.database }}.impressions AS imp "
+                    "LEFT JOIN {{ params.database }}.clicks AS clk "
+                    "  ON imp.impression_id = clk.impression_id "
                     "  AND clk.year = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' "
                     "  AND clk.month = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' "
                     "  AND clk.day = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' "
-                    "WHERE imp.event_type = 'impression' "
-                    "  AND imp.year = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' "
+                    "  AND clk.hour = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%H\") }}' "
+                    "WHERE imp.year = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' "
                     "  AND imp.month = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' "
                     "  AND imp.day = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' "
-                    "  AND imp.timestamp >= {{ ((data_interval_end - macros.timedelta(minutes=10)).replace(minute=0, second=0, microsecond=0)).int_timestamp * 1000 }} "
-                    "  AND imp.timestamp < {{ (((data_interval_end - macros.timedelta(minutes=10)).replace(minute=0, second=0, microsecond=0) + macros.timedelta(hours=1))).int_timestamp * 1000 }} "
+                    "  AND imp.hour = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%H\") }}' "
                     "GROUP BY imp.campaign_id, imp.device_type"
                 ),
             },
@@ -258,7 +259,7 @@ with DAG(
                 "AWS_REGION": REGION,
                 "DATABASE": DATABASE,
                 "ATHENA_OUTPUT": ATHENA_OUTPUT,
-                "TABLE": "ad_hourly_summary",
+                "TABLE": "ad_combined_log",
             },
             service_account_name="airflow-scheduler",
             get_logs=True,
@@ -272,21 +273,19 @@ with DAG(
                 "region": REGION,
                 "database": DATABASE,
                 "output": ATHENA_OUTPUT,
-                "tmp_table": "ad_hourly_summary_tmp",
+                "tmp_table": "ad_combined_log_tmp",
                 "query": (
-                    "CREATE TABLE {{ params.database }}.ad_hourly_summary_tmp "
+                    "CREATE TABLE {{ params.database }}.ad_combined_log_tmp "
                     "WITH ( format = 'PARQUET', write_compression = 'ZSTD', "
                     "external_location = '{{ params.summary_path }}/dt={{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y-%m-%d-%H\") }}/' ) AS "
                     "SELECT imp.campaign_id, imp.device_type, "
                     "'{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y-%m-%d-%H\") }}' AS dt, "
-                    "COUNT(DISTINCT imp.event_id) AS impressions, COUNT(DISTINCT clk.event_id) AS clicks, "
-                    "CASE WHEN COUNT(DISTINCT imp.event_id) > 0 THEN CAST(COUNT(DISTINCT clk.event_id) AS DOUBLE) / CAST(COUNT(DISTINCT imp.event_id) AS DOUBLE) * 100 ELSE 0.0 END AS ctr "
-                    "FROM {{ params.database }}.ad_events_raw AS imp LEFT JOIN {{ params.database }}.ad_events_raw AS clk "
-                    "ON imp.campaign_id = clk.campaign_id AND imp.user_id = clk.user_id AND clk.event_type = 'click' "
-                    "AND clk.year='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' AND clk.month='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' AND clk.day='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' "
-                    "WHERE imp.event_type = 'impression' AND imp.year='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' AND imp.month='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' AND imp.day='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' "
-                    "AND imp.timestamp >= {{ ((data_interval_end - macros.timedelta(minutes=10)).replace(minute=0, second=0, microsecond=0)).int_timestamp * 1000 }} "
-                    "AND imp.timestamp < {{ (((data_interval_end - macros.timedelta(minutes=10)).replace(minute=0, second=0, microsecond=0) + macros.timedelta(hours=1))).int_timestamp * 1000 }} "
+                    "COUNT(DISTINCT imp.impression_id) AS impressions, COUNT(DISTINCT clk.click_id) AS clicks, "
+                    "CASE WHEN COUNT(DISTINCT imp.impression_id) > 0 THEN CAST(COUNT(DISTINCT clk.click_id) AS DOUBLE) / CAST(COUNT(DISTINCT imp.impression_id) AS DOUBLE) * 100 ELSE 0.0 END AS ctr "
+                    "FROM {{ params.database }}.impressions AS imp LEFT JOIN {{ params.database }}.clicks AS clk "
+                    "ON imp.impression_id = clk.impression_id "
+                    "AND clk.year='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' AND clk.month='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' AND clk.day='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' AND clk.hour='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%H\") }}' "
+                    "WHERE imp.year='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' AND imp.month='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' AND imp.day='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' AND imp.hour='{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%H\") }}' "
                     "GROUP BY imp.campaign_id, imp.device_type"
                 ),
             },
@@ -300,7 +299,7 @@ with DAG(
                 "region": REGION,
                 "database": DATABASE,
                 "output": ATHENA_OUTPUT,
-                "table": "ad_hourly_summary",
+                "table": "ad_combined_log",
             },
         )
 

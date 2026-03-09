@@ -13,7 +13,7 @@ from datetime import timedelta
 import textwrap
 
 S3_BUCKET = "capa-data-lake-827913617635"
-DATABASE = "ad_log"
+DATABASE = "capa_ad_logs"
 ATHENA_OUTPUT = f"s3://{S3_BUCKET}/athena-results/"
 REGION = "ap-northeast-2"
 HOURLY_SUMMARY_PATH = f"s3://{S3_BUCKET}/summary/ad_hourly_summary"
@@ -175,7 +175,7 @@ with DAG(
 
     wait_for_hourly = ExternalTaskSensor(
         task_id="wait_for_hourly_summary",
-        external_dag_id="ad_hourly_summary",
+        external_dag_id="03_ad_hourly_summary_test",
         external_task_id="register_partition",
         execution_delta=timedelta(hours=3),
         timeout=3600,
