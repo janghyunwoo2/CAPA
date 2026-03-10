@@ -249,4 +249,5 @@ pyproject.toml
 # bkit 런타임/스냅샷/로컬 상태 (로컬 임시 파일)
 .bkit/runtime/
 .bkit/snapshots/
+.bkit/snapshots/*
 .bkit/state/memory.json
