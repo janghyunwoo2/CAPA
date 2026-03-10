@@ -29,7 +29,7 @@ class AdDataProcessor:
         다음 작업을 수행합니다:
         1. raw 로그 읽기 (Parquet)
         2. 일별·광고별 집계 (impression, click, conversion 카운트)
-        3. 평균 비용 계산 (avg_bid_price, avg_cpc)
+        3. 평균 비용 계산 (avg_cpc)
         4. 파생 지표 계산 (ctr, conversion_rate)
         5. 메트릭 저장 (Parquet)
         
@@ -65,14 +65,7 @@ class AdDataProcessor:
             .rename('conversions')
         )
 
-        # 평균 입찰가, 평균 cpc
-        avg_bid = (
-            df[df.bid_price.notnull()]
-            .groupby(["ad_id", "date"])['bid_price']
-            .mean()
-            .rename('avg_bid_price')
-        )
-
+        # 평균 cpc
         avg_cpc = (
             df[df.cpc_cost.notnull()]
             .groupby(["ad_id", "date"])['cpc_cost']
@@ -81,7 +74,7 @@ class AdDataProcessor:
         )
 
         # 합치기
-        metrics = pd.concat([impressions, clicks, conversions, avg_bid, avg_cpc], axis=1).fillna(0)
+        metrics = pd.concat([impressions, clicks, conversions, avg_cpc], axis=1).fillna(0)
 
         # 파생 지표
         metrics['ctr'] = metrics.apply(lambda r: (r['clicks'] / r['impressions']) if r['impressions'] > 0 else 0.0, axis=1)

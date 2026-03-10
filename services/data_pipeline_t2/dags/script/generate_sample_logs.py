@@ -34,7 +34,6 @@ class AdLogGenerator:
         event_type = np.random.choice(
             ["impression", "click", "conversion"], p=[0.8, 0.15, 0.05]
         )
-        bid_price = None
         cpc_cost = None
         conversion_type = None
 
@@ -43,7 +42,7 @@ class AdLogGenerator:
         user_id = str(uuid.uuid4())
 
         if event_type == "impression":
-            bid_price = round(float(np.random.uniform(0.1, 5.0)), 4)
+            pass
         elif event_type == "click":
             # 클릭 시의 실제 비용: second-price 경향 시뮬레이션
             cpc_cost = round(float(np.random.uniform(0.05, 3.0)), 4)
@@ -59,7 +58,6 @@ class AdLogGenerator:
             "ad_id": ad_id,
             "campaign_id": campaign_id,
             "user_id": user_id,
-            "bid_price": bid_price,
             "cpc_cost": cpc_cost,
             "conversion_type": conversion_type,
         }

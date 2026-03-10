@@ -1,11 +1,11 @@
 # CAPA T2 데이터 파이프라인 (로컬 개발 & Airflow 통합)
 
-이 폴더(`src/data_pipeline_t2/`)는 로컬 환경에서 CAPA 데이터 파이프라인을 개발하고, Apache Airflow로 스케줄링/조율하기 위한 모든 리소스를 포함합니다.
+이 폴더(`services/data_pipeline_t2/`)는 로컬 환경에서 CAPA 데이터 파이프라인을 개발하고, Apache Airflow로 스케줄링/조율하기 위한 모든 리소스를 포함합니다.
 
 ## 폴더 구조
 
 ```
-src/data_pipeline_t2/
+services/data_pipeline_t2/
 ├── __init__.py                  # 패키지 초기화
 ├── generate_sample_logs.py      # Step 1: 샘플 광고 로그 생성
 ├── processor.py                 # Step 2: 로그 집계 & 메트릭 계산
@@ -31,10 +31,10 @@ src/data_pipeline_t2/
 cd c:\Users\Dell5371\Desktop\projects\CAPA
 
 # uv 의존성 설치 (처음 한 번만)
-uv sync --project src/data_pipeline_t2
+uv sync --project services/data_pipeline_t2
 
 # 각 단계 순차 실행
-cd src/data_pipeline_t2
+cd services/data_pipeline_t2
 uv run python generate_sample_logs.py
 uv run python processor.py
 uv run python analyzer.py
@@ -48,23 +48,23 @@ uv run python visualize.py
 cd c:\Users\Dell5371\Desktop\projects\CAPA
 
 # uv 환경 설정
-uv sync --project src/data_pipeline_t2
+uv sync --project services/data_pipeline_t2
 
 # Airflow 초기화
 $env:AIRFLOW_HOME = "$PWD\.airflow_t2"
-uv run --project src/data_pipeline_t2 airflow db init
-uv run --project src/data_pipeline_t2 airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com
+uv run --project services/data_pipeline_t2 python -m airflow db init
+uv run --project services/data_pipeline_t2 python -m airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com
 
 # DAG 배치
 mkdir -Force .airflow_t2\dags
-Copy-Item src\data_pipeline_t2\airflow_dag.py .airflow_t2\dags\
+Copy-Item services\data_pipeline_t2\airflow_dag.py .airflow_t2\dags\
 
 # 웹서버 & 스케줄러 실행 (각각 다른 터미널)
-uv run --project src/data_pipeline_t2 airflow webserver -p 8080
-uv run --project src/data_pipeline_t2 airflow scheduler
+uv run --project services/data_pipeline_t2 python -m airflow api-server -p 8081
+uv run --project services/data_pipeline_t2 python -m airflow scheduler
 
 # 웹 UI에서 capa_t2_pipeline DAG 찾아 실행
-# http://localhost:8080
+# http://localhost:8081
 ```
 
 **더 자세한 가이드**: [RUN_AIRFLOW.md](RUN_AIRFLOW.md)

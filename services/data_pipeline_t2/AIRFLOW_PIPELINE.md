@@ -106,7 +106,7 @@ airflow scheduler &
 # 2. 웹 서버 시작
 airflow webui
 
-# 3. 브라우저에서 http://localhost:8080 접속
+# 3. 브라우저에서 http://localhost:8081 접속
 # 4. DAG 목록에서 "capa_t2_pipeline" 찾기
 # 5. "Trigger DAG" 버튼 클릭
 ```
@@ -164,25 +164,45 @@ data/
     └── top5_ads_ctr.png          # 상위 5개 광고 비교 차트
 ```
 
-## 🔧 DAG 스케줄 설정
+## 🔧 DAG 스케줄 설정 (KST, Airflow 2.4+)
 
-### 매일 오전 2시 자동 실행
+### 매일 오전 2시 자동 실행 (KST)
 
 ```python
-# airflow_dag.py 내 schedule_interval 수정
-schedule_interval="0 2 * * *"  # Cron format (UTC)
+import pendulum
+from airflow import DAG
+
+with DAG(
+  dag_id="capa_t2_pipeline",
+  schedule="0 2 * * *",  # 02:00 KST
+  start_date=pendulum.datetime(2026, 2, 10, tz=pendulum.timezone("Asia/Seoul")),
+  catchup=False,
+):
+  ...
 ```
 
-### 매주 일요일 자동 실행
+### 매주 일요일 자동 실행 (KST)
 
 ```python
-schedule_interval="0 2 * * 0"  # 매주 일요일 오전 2시
+with DAG(
+  dag_id="capa_t2_pipeline_weekly",
+  schedule="0 2 * * 0",  # 매주 일요일 02:00 KST
+  start_date=pendulum.datetime(2026, 2, 10, tz=pendulum.timezone("Asia/Seoul")),
+  catchup=False,
+):
+  ...
 ```
 
-### 수동 실행만 (기본값)
+### 수동 실행만 (기본값, KST 고정)
 
 ```python
-schedule_interval=None  # 수동으로 Trigger DAG
+with DAG(
+  dag_id="capa_t2_pipeline_manual",
+  schedule=None,  # 수동 Trigger
+  start_date=pendulum.datetime(2026, 2, 10, tz=pendulum.timezone("Asia/Seoul")),
+  catchup=False,
+):
+  ...
 ```
 
 ## 🐛 문제 해결
