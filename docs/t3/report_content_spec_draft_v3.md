@@ -1,4 +1,4 @@
-# Report Generator - 리포트 콘텐츠 상세 스펙 (v3 최종)
+# Report Generator - 리포트 콘텐츠 상세 스펙 (v3 최종) 
 
 **작성일**: 2026-03-09
 **작성자**: Developer
