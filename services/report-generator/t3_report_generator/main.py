@@ -148,6 +148,8 @@ def generate_report(date: datetime = None) -> str:
         markdown = markdown_builder.build(
             date=date,
             daily_data=daily_data,
+            start_date_str=daily_start_str,
+            end_date_str=daily_end_str,
             weekly_list=weekly_list,
             monthly_data=monthly_data,
         )
@@ -214,7 +216,17 @@ if __name__ == "__main__":
         result = main()
 
     if result["status"] == "success":
+        # 터미널에 출력
         print(result["markdown"])
+        
+        # 파일로도 자동 저장 (예: report_2026-03-02.md)
+        filename = f"report_{result['date']}.md"
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(result["markdown"])
+            print(f"\n[안내] 보고서가 파일로도 저장되었습니다: {filename}")
+        except Exception as e:
+            print(f"\n[주의] 파일 저장 중 오류 발생: {e}", file=sys.stderr)
     else:
         print(f"Error: {result['error']}", file=sys.stderr)
         sys.exit(1)

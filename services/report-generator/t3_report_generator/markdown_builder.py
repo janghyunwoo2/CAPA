@@ -19,7 +19,7 @@ def format_number(value: Any, is_percentage: bool = False) -> str:
             return f"{value:,.0f}"
         if value >= 1000:
             return f"{value:,.0f}"
-        return f"{value:.2f}" if isinstance(value, float) else f"{value}"
+        return f"{int(value):,}" if isinstance(value, float) and value == int(value) else f"{value:.2f}" if isinstance(value, float) else f"{value}"
     except (ValueError, TypeError):
         return str(value)
 
@@ -49,6 +49,26 @@ def calculate_change_rate(current: float, previous: float, is_percentage: bool =
         return "N/A"
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    """빈 문자열, None 등을 안전하게 float으로 변환합니다."""
+    if value is None or value == "":
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    """빈 문자열, None 등을 안전하게 int로 변환합니다."""
+    if value is None or value == "":
+        return default
+    try:
+        return int(float(value))
+    except (ValueError, TypeError):
+        return default
+
+
 def format_executive_summary(data: dict[str, Any], prev_data: dict[str, Any] = None) -> str:
     """Executive Summary (경영진 요약)를 생성합니다."""
     md = "## Executive Summary (경영진 요약)\n\n"
@@ -59,19 +79,19 @@ def format_executive_summary(data: dict[str, Any], prev_data: dict[str, Any] = N
     md += "|---|---|---|\n"
 
     # 필요한 필드 추출
-    revenue = float(data.get("revenue", 0))
-    cost = float(data.get("cost", 0))
-    roas = float(data.get("roas", 0))
-    ctr = float(data.get("ctr", 0))
-    conversions = int(data.get("conversions", 0))
+    revenue = _safe_float(data.get("revenue", 0))
+    cost = _safe_float(data.get("cost", 0))
+    roas = _safe_float(data.get("roas", 0))
+    ctr = _safe_float(data.get("ctr", 0))
+    conversions = _safe_int(data.get("conversions", 0))
 
-    prev_revenue = float(prev_data.get("revenue", 0)) if prev_data else 0
-    prev_cost = float(prev_data.get("cost", 0)) if prev_data else 0
-    prev_roas = float(prev_data.get("roas", 0)) if prev_data else 0
-    prev_ctr = float(prev_data.get("ctr", 0)) if prev_data else 0
-    prev_conversions = int(prev_data.get("conversions", 0)) if prev_data else 0
+    prev_revenue = _safe_float(prev_data.get("revenue", 0)) if prev_data else 0
+    prev_cost = _safe_float(prev_data.get("cost", 0)) if prev_data else 0
+    prev_roas = _safe_float(prev_data.get("roas", 0)) if prev_data else 0
+    prev_ctr = _safe_float(prev_data.get("ctr", 0)) if prev_data else 0
+    prev_conversions = _safe_int(prev_data.get("conversions", 0)) if prev_data else 0
 
-    md += f"| 총 매출 | {format_currency(revenue)} | {calculate_change_rate(revenue, prev_revenue)} |\n"
+    md += f"| 광고 기여 매출 | {format_currency(revenue)} | {calculate_change_rate(revenue, prev_revenue)} |\n"
     md += f"| 총 ROAS | {format_number(roas, True)} | {calculate_change_rate(roas, prev_roas, is_percentage=True)} |\n"
     md += f"| 총 CTR | {format_number(ctr, True)} | {calculate_change_rate(ctr, prev_ctr, is_percentage=True)} |\n"
     md += f"| 총 전환 | {conversions:,}건 | {calculate_change_rate(conversions, prev_conversions)} |\n"
@@ -81,12 +101,12 @@ def format_executive_summary(data: dict[str, Any], prev_data: dict[str, Any] = N
     md += "| 노출 | 클릭 | 광고비 | 순이익 |\n"
     md += "|---|---|---|---|\n"
 
-    impressions = int(data.get("impressions", 0))
-    clicks = int(data.get("clicks", 0))
+    impressions = _safe_int(data.get("impressions", 0))
+    clicks = _safe_int(data.get("clicks", 0))
     net_profit = revenue - cost
 
-    prev_impressions = int(prev_data.get("impressions", 0)) if prev_data else 0
-    prev_clicks = int(prev_data.get("clicks", 0)) if prev_data else 0
+    prev_impressions = _safe_int(prev_data.get("impressions", 0)) if prev_data else 0
+    prev_clicks = _safe_int(prev_data.get("clicks", 0)) if prev_data else 0
     prev_net_profit = prev_revenue - prev_cost if prev_data else 0
 
     md += f"| {impressions:,}회 ({calculate_change_rate(impressions, prev_impressions)}) | "
@@ -107,7 +127,7 @@ def format_kpi_detail(data: dict[str, Any], prev_data: dict[str, Any] = None) ->
         ("노출", "impressions", False),
         ("클릭", "clicks", False),
         ("전환", "conversions", False),
-        ("매출", "revenue", "currency"),
+        ("광고 기여 매출", "revenue", "currency"),
         ("광고비", "cost", "currency"),
         ("**순이익**", None, "net_profit"),
         ("CTR", "ctr", True),
@@ -118,8 +138,8 @@ def format_kpi_detail(data: dict[str, Any], prev_data: dict[str, Any] = None) ->
 
     for label, key, format_type in metrics:
         if key is None:  # net_profit 계산
-            curr_val = float(data.get("revenue", 0)) - float(data.get("cost", 0))
-            prev_val = float(prev_data.get("revenue", 0)) - float(prev_data.get("cost", 0)) if prev_data else 0
+            curr_val = _safe_float(data.get("revenue", 0)) - _safe_float(data.get("cost", 0))
+            prev_val = _safe_float(prev_data.get("revenue", 0)) - _safe_float(prev_data.get("cost", 0)) if prev_data else 0
         else:
             curr_val = data.get(key, 0)
             prev_val = prev_data.get(key, 0) if prev_data else 0
@@ -142,7 +162,7 @@ def format_kpi_detail(data: dict[str, Any], prev_data: dict[str, Any] = None) ->
             prev_str = format_number(prev_val, False) if prev_data else "N/A"
             change_str = f"+{format_number(float(curr_val) - float(prev_val), False)}" if prev_data and prev_val else "-"
 
-        change_rate = calculate_change_rate(float(curr_val), float(prev_val)) if prev_data and prev_val else "-"
+        change_rate = calculate_change_rate(_safe_float(curr_val), _safe_float(prev_val)) if prev_data and prev_val else "-"
 
         if key == "cpc" or key == "roas" or key == "ctr" or key == "cvr":
             md += f"| {label} | {curr_str} | {prev_str} | - | {change_rate} |\n"
@@ -156,7 +176,7 @@ def format_daily_trend(daily_data: list[dict[str, Any]]) -> str:
     """일별 트렌드를 생성합니다."""
     md = "## 일별 트렌드\n\n"
     md += "### 일별 상세 테이블\n\n"
-    md += "| 날짜 | 요일 | 노출 | 클릭 | 전환 | 매출 | 광고비 | CTR | ROAS |\n"
+    md += "| 날짜 | 요일 | 노출 | 클릭 | 전환 | 광고 기여 매출 | 광고비 | CTR | ROAS |\n"
     md += "|---|---|---|---|---|---|---|---|---|\n"
 
     day_map = ["월", "화", "수", "목", "금", "토", "일"]
@@ -169,13 +189,13 @@ def format_daily_trend(daily_data: list[dict[str, Any]]) -> str:
         except:
             day_name = "?"
 
-        impressions = int(record.get("impressions", 0))
-        clicks = int(record.get("clicks", 0))
-        conversions = int(record.get("conversions", 0))
-        revenue = float(record.get("revenue", 0))
-        cost = float(record.get("cost", 0))
-        ctr = float(record.get("ctr", 0))
-        roas = float(record.get("roas", 0))
+        impressions = _safe_int(record.get("impressions", 0))
+        clicks = _safe_int(record.get("clicks", 0))
+        conversions = _safe_int(record.get("conversions", 0))
+        revenue = _safe_float(record.get("revenue", 0))
+        cost = _safe_float(record.get("cost", 0))
+        ctr = _safe_float(record.get("ctr", 0))
+        roas = _safe_float(record.get("roas", 0))
 
         md += f"| {date_str} | {day_name} | {impressions:,} | {clicks:,} | {conversions:,} | "
         md += f"{format_currency(revenue)} | {format_currency(cost)} | {format_number(ctr, True)} | {format_number(roas, True)} |\n"
@@ -186,19 +206,19 @@ def format_daily_trend(daily_data: list[dict[str, Any]]) -> str:
 def format_category_performance(categories: list[dict[str, Any]]) -> str:
     """카테고리별 성과를 생성합니다."""
     md = "## 카테고리별 성과\n\n"
-    md += "| 순위 | 카테고리 | 노출 | 클릭 | 전환 | 매출(원) | 광고비(원) | CTR | CVR | ROAS | 매출 변화 |\n"
+    md += "| 순위 | 카테고리 | 노출 | 클릭 | 전환 | 광고 기여 매출(원) | 광고비(원) | CTR | CVR | ROAS | 매출 변화 |\n"
     md += "|---|---|---|---|---|---|---|---|---|---|---|\n"
 
     for i, cat in enumerate(categories, 1):
         category = cat.get("category", "")
-        impressions = int(cat.get("impressions", 0))
-        clicks = int(cat.get("clicks", 0))
-        conversions = int(cat.get("conversions", 0))
-        revenue = float(cat.get("revenue", 0))
-        cost = float(cat.get("cost", 0))
-        ctr = float(cat.get("ctr", 0))
-        cvr = float(cat.get("cvr", 0))
-        roas = float(cat.get("roas", 0))
+        impressions = _safe_int(cat.get("impressions", 0))
+        clicks = _safe_int(cat.get("clicks", 0))
+        conversions = _safe_int(cat.get("conversions", 0))
+        revenue = _safe_float(cat.get("revenue", 0))
+        cost = _safe_float(cat.get("cost", 0))
+        ctr = _safe_float(cat.get("ctr", 0))
+        cvr = _safe_float(cat.get("cvr", 0))
+        roas = _safe_float(cat.get("roas", 0))
 
         md += f"| {i} | {category} | {impressions:,} | {clicks:,} | {conversions:,} | "
         md += f"{format_currency(revenue)} | {format_currency(cost)} | {format_number(ctr, True)} | "
@@ -212,35 +232,35 @@ def format_shop_performance(top10: list[dict[str, Any]], bottom10: list[dict[str
     md = "## 상점별 성과\n\n"
 
     md += "### Top 10 상점 (매출 기준)\n\n"
-    md += "| 순위 | 상점 ID | 카테고리 | 노출 | 클릭 | 전환 | 매출(원) | CTR | ROAS | 매출 변화 |\n"
+    md += "| 순위 | 상점 ID | 카테고리 | 노출 | 클릭 | 전환 | 광고 기여 매출(원) | CTR | ROAS | 매출 변화 |\n"
     md += "|---|---|---|---|---|---|---|---|---|---|\n"
 
     for i, shop in enumerate(top10, 1):
         shop_id = shop.get("shop_id", "")
         category = shop.get("category", "")
-        impressions = int(shop.get("impressions", 0))
-        clicks = int(shop.get("clicks", 0))
-        conversions = int(shop.get("conversions", 0))
-        revenue = float(shop.get("revenue", 0))
-        ctr = float(shop.get("ctr", 0))
-        roas = float(shop.get("roas", 0))
+        impressions = _safe_int(shop.get("impressions", 0))
+        clicks = _safe_int(shop.get("clicks", 0))
+        conversions = _safe_int(shop.get("conversions", 0))
+        revenue = _safe_float(shop.get("revenue", 0))
+        ctr = _safe_float(shop.get("ctr", 0))
+        roas = _safe_float(shop.get("roas", 0))
 
         md += f"| {i} | {shop_id} | {category} | {impressions:,} | {clicks:,} | {conversions:,} | "
         md += f"{format_currency(revenue)} | {format_number(ctr, True)} | {format_number(roas, True)} | +0.0% |\n"
 
     md += "\n### Bottom 10 상점 (ROAS 기준, 최소 노출 100건)\n\n"
-    md += "| 순위 | 상점 ID | 카테고리 | 노출 | 클릭 | 전환 | 매출(원) | CTR | ROAS | 상태 |\n"
+    md += "| 순위 | 상점 ID | 카테고리 | 노출 | 클릭 | 전환 | 광고 기여 매출(원) | CTR | ROAS | 상태 |\n"
     md += "|---|---|---|---|---|---|---|---|---|---|\n"
 
     for i, shop in enumerate(bottom10, 1):
         shop_id = shop.get("shop_id", "")
         category = shop.get("category", "")
-        impressions = int(shop.get("impressions", 0))
-        clicks = int(shop.get("clicks", 0))
-        conversions = int(shop.get("conversions", 0))
-        revenue = float(shop.get("revenue", 0))
-        ctr = float(shop.get("ctr", 0))
-        roas = float(shop.get("roas", 0))
+        impressions = _safe_int(shop.get("impressions", 0))
+        clicks = _safe_int(shop.get("clicks", 0))
+        conversions = _safe_int(shop.get("conversions", 0))
+        revenue = _safe_float(shop.get("revenue", 0))
+        ctr = _safe_float(shop.get("ctr", 0))
+        roas = _safe_float(shop.get("roas", 0))
 
         status = "손실" if roas < 100 else "요주의" if roas < 150 else "개선 중"
 
@@ -274,7 +294,7 @@ def format_funnel(funnel_data: list[dict[str, Any]]) -> str:
 
     for record in funnel_data:
         stage = record.get("conversion_type", "")
-        count = int(record.get("count", 0))
+        count = _safe_int(record.get("count", 0))
         md += f"| {stage} | {count:,} | - | - | - |\n"
 
     return md
@@ -283,6 +303,8 @@ def format_funnel(funnel_data: list[dict[str, Any]]) -> str:
 def build(
     date: datetime,
     daily_data: dict[str, Any],
+    start_date_str: str = "",
+    end_date_str: str = "",
     weekly_list: list[dict[str, Any]] = None,
     monthly_data: dict[str, Any] = None,
 ) -> str:
@@ -291,6 +313,8 @@ def build(
     Args:
         date: 보고서 생성 날짜
         daily_data: 일간 데이터 (get_daily_kpi 반환값)
+        start_date_str: 데이터 집계 시작일
+        end_date_str: 데이터 집계 종료일
         weekly_list: 주간 데이터 리스트 (get_weekly_list 반환값)
         monthly_data: 월간 데이터 (카테고리별, 상점별, 퍼널)
 
@@ -298,11 +322,15 @@ def build(
         최종 마크다운 문자열
     """
     md = f"# CAPA 광고 성과 보고서\n\n"
-    md += f"**생성 일시**: {date.strftime('%Y-%m-%d %H:%M')} KST\n\n"
+    actual_run_time = datetime.now()
+    md += f"**생성 일시**: {actual_run_time.strftime('%Y-%m-%d %H:%M')} KST\n\n"
     md += "---\n\n"
 
-    # === 일간 섹션 (항상 포함) ===
-    md += "## 일간\n\n"
+    # === 일간 및 누적 섹션 ===
+    md += "## 일간 (당월 누적 실적)\n\n"
+    if start_date_str and end_date_str:
+        md += f"> **💡 집계 기준**: {start_date_str} ~ {end_date_str} (당월 누적 실적)\n"
+        md += "> *전기 대비 수치는 지난달 같은 기간과의 비교입니다.*\n\n"
     md += format_executive_summary(
         daily_data["summary"],
         daily_data.get("prev_summary"),

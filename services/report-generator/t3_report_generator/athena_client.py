@@ -1,7 +1,7 @@
 """AWS Athena 쿼리 클라이언트 모듈.
 
 문서 스펙에 맞는 일간/주간/월간 보고서 데이터를 Athena에서 조회합니다.
-Glue 테이블: capa_db.ad_events_raw
+Glue 테이블: capa_ad_logs.ad_combined_log_summary
 
 구조:
 - get_daily_kpi(start_date, end_date): 누적 KPI 조회
@@ -29,7 +29,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 # Athena 설정
 ATHENA_S3_OUTPUT: str = os.environ.get(
-    "ATHENA_S3_OUTPUT", "s3://capa-logs-dev-ap-northeast-2/athena-results/"
+    "ATHENA_S3_OUTPUT", "s3://capa-data-lake-827913617635/athena-results/"
 )
 GLUE_DATABASE: str = os.environ.get("GLUE_DATABASE", "capa_ad_logs")
 GLUE_TABLE: str = os.environ.get("GLUE_TABLE", "ad_combined_log_summary")
@@ -44,6 +44,49 @@ def _get_client() -> "boto3.client":
     return boto3.client(
         "athena",
         region_name=os.environ.get("AWS_REGION", "ap-northeast-2"),
+    )
+
+
+def _build_partition_filter(start_date: str, end_date: str) -> str:
+    """날짜 범위에 대한 파티션 키(year/month/day) 필터 조건을 생성합니다.
+
+    파티션 프루닝을 통해 Athena 스캔 비용을 절감합니다.
+    단순 범위: 같은 월 내의 경우 간단한 조건으로 처리합니다.
+
+    Args:
+        start_date: 시작 날짜 (YYYY-MM-DD)
+        end_date: 종료 날짜 (YYYY-MM-DD)
+
+    Returns:
+        WHERE 절에 추가할 파티션 조건 문자열
+    """
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+
+    # 단일 날짜
+    if start == end:
+        return (
+            f"year = '{start.strftime('%Y')}' "
+            f"AND month = '{start.strftime('%m')}' "
+            f"AND day = '{start.strftime('%d')}'"
+        )
+
+    # 같은 연월 내
+    if start.year == end.year and start.month == end.month:
+        return (
+            f"year = '{start.strftime('%Y')}' "
+            f"AND month = '{start.strftime('%m')}' "
+            f"AND day BETWEEN '{start.strftime('%d')}' AND '{end.strftime('%d')}'"
+        )
+
+    # 여러 달에 걸치는 경우: impression_timestamp 기반만 사용 (범위가 넓으면 파티션 조건이 복잡해짐)
+    return (
+        f"(year > '{start.strftime('%Y')}' OR "
+        f"(year = '{start.strftime('%Y')}' AND month > '{start.strftime('%m')}') OR "
+        f"(year = '{start.strftime('%Y')}' AND month = '{start.strftime('%m')}' AND day >= '{start.strftime('%d')}')) "
+        f"AND (year < '{end.strftime('%Y')}' OR "
+        f"(year = '{end.strftime('%Y')}' AND month < '{end.strftime('%m')}') OR "
+        f"(year = '{end.strftime('%Y')}' AND month = '{end.strftime('%m')}' AND day <= '{end.strftime('%d')}'))"
     )
 
 
@@ -159,20 +202,22 @@ def get_daily_kpi(start_date: str, end_date: str) -> dict[str, Any]:
     prev_end = datetime.strptime(start_date, "%Y-%m-%d") - timedelta(days=1)
     prev_start = prev_end.replace(day=1)
 
+    _part = _build_partition_filter(start_date, end_date)
+
     sql_kpi = f"""
     SELECT
         COUNT(DISTINCT impression_id) AS impressions,
         SUM(CAST(is_click AS INT)) AS clicks,
-        SUM(CAST(is_conversion AS INT)) AS conversions,
-        SUM(cost_per_click) AS cost,
-        SUM(conversion_value) AS revenue,
+        COUNT(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN 1 END) AS conversions,
+        SUM(COALESCE(cost_per_impression, 0) + COALESCE(cost_per_click, 0)) AS cost,
+        SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) AS revenue,
         ROUND(
             CAST(SUM(CAST(is_click AS INT)) AS DOUBLE)
             / NULLIF(COUNT(DISTINCT impression_id), 0) * 100,
             2
         ) AS ctr,
         ROUND(
-            CAST(SUM(CAST(is_conversion AS INT)) AS DOUBLE)
+            CAST(COUNT(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN 1 END) AS DOUBLE)
             / NULLIF(SUM(CAST(is_click AS INT)), 0) * 100,
             2
         ) AS cvr,
@@ -182,28 +227,33 @@ def get_daily_kpi(start_date: str, end_date: str) -> dict[str, Any]:
             2
         ) AS cpc,
         ROUND(
-            SUM(conversion_value) / NULLIF(SUM(cost_per_click), 0) * 100,
+            SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) / NULLIF(SUM(COALESCE(cost_per_impression, 0) + COALESCE(cost_per_click, 0)), 0) * 100,
             2
         ) AS roas
     FROM {GLUE_DATABASE}.{GLUE_TABLE}
-    WHERE DATE(CAST(from_unixtime(impression_timestamp / 1000) AS timestamp))
+    WHERE {_part}
+      AND DATE(CAST(from_unixtime(impression_timestamp / 1000000000) AS timestamp))
           BETWEEN CAST('{start_date}' AS date) AND CAST('{end_date}' AS date)
     """
+
+    _prev_start_str = prev_start.strftime('%Y-%m-%d')
+    _prev_end_str = prev_end.strftime('%Y-%m-%d')
+    _prev_part = _build_partition_filter(_prev_start_str, _prev_end_str)
 
     sql_prev = f"""
     SELECT
         COUNT(DISTINCT impression_id) AS impressions,
         SUM(CAST(is_click AS INT)) AS clicks,
-        SUM(CAST(is_conversion AS INT)) AS conversions,
-        SUM(cost_per_click) AS cost,
-        SUM(conversion_value) AS revenue,
+        COUNT(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN 1 END) AS conversions,
+        SUM(COALESCE(cost_per_impression, 0) + COALESCE(cost_per_click, 0)) AS cost,
+        SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) AS revenue,
         ROUND(
             CAST(SUM(CAST(is_click AS INT)) AS DOUBLE)
             / NULLIF(COUNT(DISTINCT impression_id), 0) * 100,
             2
         ) AS ctr,
         ROUND(
-            CAST(SUM(CAST(is_conversion AS INT)) AS DOUBLE)
+            CAST(COUNT(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN 1 END) AS DOUBLE)
             / NULLIF(SUM(CAST(is_click AS INT)), 0) * 100,
             2
         ) AS cvr,
@@ -213,12 +263,13 @@ def get_daily_kpi(start_date: str, end_date: str) -> dict[str, Any]:
             2
         ) AS cpc,
         ROUND(
-            SUM(conversion_value) / NULLIF(SUM(cost_per_click), 0) * 100,
+            SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) / NULLIF(SUM(COALESCE(cost_per_impression, 0) + COALESCE(cost_per_click, 0)), 0) * 100,
             2
         ) AS roas
     FROM {GLUE_DATABASE}.{GLUE_TABLE}
-    WHERE DATE(CAST(from_unixtime(impression_timestamp / 1000) AS timestamp))
-          BETWEEN CAST('{prev_start.strftime("%Y-%m-%d")}' AS date) AND CAST('{prev_end.strftime("%Y-%m-%d")}' AS date)
+    WHERE {_prev_part}
+      AND DATE(CAST(from_unixtime(impression_timestamp / 1000000000) AS timestamp))
+          BETWEEN CAST('{_prev_start_str}' AS date) AND CAST('{_prev_end_str}' AS date)
     """
 
     df_kpi = execute_query(sql_kpi)
@@ -227,25 +278,26 @@ def get_daily_kpi(start_date: str, end_date: str) -> dict[str, Any]:
     # 2. 일별 분해 조회
     sql_daily = f"""
     SELECT
-        DATE(CAST(from_unixtime(impression_timestamp / 1000) AS timestamp)) AS date,
+        DATE(CAST(from_unixtime(impression_timestamp / 1000000000) AS timestamp)) AS date,
         COUNT(DISTINCT impression_id) AS impressions,
         SUM(CAST(is_click AS INT)) AS clicks,
-        SUM(CAST(is_conversion AS INT)) AS conversions,
-        SUM(conversion_value) AS revenue,
-        SUM(cost_per_click) AS cost,
+        COUNT(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN 1 END) AS conversions,
+        SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) AS revenue,
+        SUM(COALESCE(cost_per_impression, 0) + COALESCE(cost_per_click, 0)) AS cost,
         ROUND(
             CAST(SUM(CAST(is_click AS INT)) AS DOUBLE)
             / NULLIF(COUNT(DISTINCT impression_id), 0) * 100,
             2
         ) AS ctr,
         ROUND(
-            SUM(conversion_value) / NULLIF(SUM(cost_per_click), 0) * 100,
+            SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) / NULLIF(SUM(COALESCE(cost_per_impression, 0) + COALESCE(cost_per_click, 0)), 0) * 100,
             2
         ) AS roas
     FROM {GLUE_DATABASE}.{GLUE_TABLE}
-    WHERE DATE(CAST(from_unixtime(impression_timestamp / 1000) AS timestamp))
+    WHERE {_part}
+      AND DATE(CAST(from_unixtime(impression_timestamp / 1000000000) AS timestamp))
           BETWEEN CAST('{start_date}' AS date) AND CAST('{end_date}' AS date)
-    GROUP BY DATE(CAST(from_unixtime(impression_timestamp / 1000) AS timestamp))
+    GROUP BY DATE(CAST(from_unixtime(impression_timestamp / 1000000000) AS timestamp))
     ORDER BY date ASC
     """
 
@@ -364,30 +416,32 @@ def get_weekly_list(month_start: str, end_date: str) -> list[dict[str, Any]]:
 
 def get_category_performance(start_date: str, end_date: str) -> list[dict[str, Any]]:
     """카테고리별 성과를 조회합니다 (매출 내림차순)."""
+    _part = _build_partition_filter(start_date, end_date)
     sql = f"""
     SELECT
         food_category AS category,
         COUNT(DISTINCT impression_id) AS impressions,
         SUM(CAST(is_click AS INT)) AS clicks,
-        SUM(CAST(is_conversion AS INT)) AS conversions,
-        SUM(conversion_value) AS revenue,
-        SUM(cost_per_click) AS cost,
+        COUNT(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN 1 END) AS conversions,
+        SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) AS revenue,
+        SUM(COALESCE(cost_per_impression, 0) + COALESCE(cost_per_click, 0)) AS cost,
         ROUND(
             CAST(SUM(CAST(is_click AS INT)) AS DOUBLE)
             / NULLIF(COUNT(DISTINCT impression_id), 0) * 100,
             2
         ) AS ctr,
         ROUND(
-            CAST(SUM(CAST(is_conversion AS INT)) AS DOUBLE)
+            CAST(COUNT(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN 1 END) AS DOUBLE)
             / NULLIF(SUM(CAST(is_click AS INT)), 0) * 100,
             2
         ) AS cvr,
         ROUND(
-            SUM(conversion_value) / NULLIF(SUM(cost_per_click), 0) * 100,
+            SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) / NULLIF(SUM(COALESCE(cost_per_impression, 0) + COALESCE(cost_per_click, 0)), 0) * 100,
             2
         ) AS roas
     FROM {GLUE_DATABASE}.{GLUE_TABLE}
-    WHERE DATE(CAST(from_unixtime(impression_timestamp / 1000) AS timestamp))
+    WHERE {_part}
+      AND DATE(CAST(from_unixtime(impression_timestamp / 1000000000) AS timestamp))
           BETWEEN CAST('{start_date}' AS date) AND CAST('{end_date}' AS date)
     GROUP BY food_category
     ORDER BY revenue DESC
@@ -398,25 +452,27 @@ def get_category_performance(start_date: str, end_date: str) -> list[dict[str, A
 
 def get_shop_top10(start_date: str, end_date: str) -> list[dict[str, Any]]:
     """Top 10 상점을 조회합니다 (매출 기준)."""
+    _part = _build_partition_filter(start_date, end_date)
     sql = f"""
     SELECT
         store_id AS shop_id,
         food_category AS category,
         COUNT(DISTINCT impression_id) AS impressions,
         SUM(CAST(is_click AS INT)) AS clicks,
-        SUM(CAST(is_conversion AS INT)) AS conversions,
-        SUM(conversion_value) AS revenue,
+        COUNT(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN 1 END) AS conversions,
+        SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) AS revenue,
         ROUND(
             CAST(SUM(CAST(is_click AS INT)) AS DOUBLE)
             / NULLIF(COUNT(DISTINCT impression_id), 0) * 100,
             2
         ) AS ctr,
         ROUND(
-            SUM(conversion_value) / NULLIF(SUM(cost_per_click), 0) * 100,
+            SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) / NULLIF(SUM(COALESCE(cost_per_impression, 0) + COALESCE(cost_per_click, 0)), 0) * 100,
             2
         ) AS roas
     FROM {GLUE_DATABASE}.{GLUE_TABLE}
-    WHERE DATE(CAST(from_unixtime(impression_timestamp / 1000) AS timestamp))
+    WHERE {_part}
+      AND DATE(CAST(from_unixtime(impression_timestamp / 1000000000) AS timestamp))
           BETWEEN CAST('{start_date}' AS date) AND CAST('{end_date}' AS date)
     GROUP BY store_id, food_category
     ORDER BY revenue DESC
@@ -428,25 +484,27 @@ def get_shop_top10(start_date: str, end_date: str) -> list[dict[str, Any]]:
 
 def get_shop_bottom10(start_date: str, end_date: str) -> list[dict[str, Any]]:
     """Bottom 10 상점을 조회합니다 (ROAS 기준, 최소 노출 100건)."""
+    _part = _build_partition_filter(start_date, end_date)
     sql = f"""
     SELECT
         store_id AS shop_id,
         food_category AS category,
         COUNT(DISTINCT impression_id) AS impressions,
         SUM(CAST(is_click AS INT)) AS clicks,
-        SUM(CAST(is_conversion AS INT)) AS conversions,
-        SUM(conversion_value) AS revenue,
+        COUNT(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN 1 END) AS conversions,
+        SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) AS revenue,
         ROUND(
             CAST(SUM(CAST(is_click AS INT)) AS DOUBLE)
             / NULLIF(COUNT(DISTINCT impression_id), 0) * 100,
             2
         ) AS ctr,
         ROUND(
-            SUM(conversion_value) / NULLIF(SUM(cost_per_click), 0) * 100,
+            SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) / NULLIF(SUM(COALESCE(cost_per_impression, 0) + COALESCE(cost_per_click, 0)), 0) * 100,
             2
         ) AS roas
     FROM {GLUE_DATABASE}.{GLUE_TABLE}
-    WHERE DATE(CAST(from_unixtime(impression_timestamp / 1000) AS timestamp))
+    WHERE {_part}
+      AND DATE(CAST(from_unixtime(impression_timestamp / 1000000000) AS timestamp))
           BETWEEN CAST('{start_date}' AS date) AND CAST('{end_date}' AS date)
     GROUP BY store_id, food_category
     HAVING COUNT(DISTINCT impression_id) >= 100
@@ -459,12 +517,14 @@ def get_shop_bottom10(start_date: str, end_date: str) -> list[dict[str, Any]]:
 
 def get_funnel_data(start_date: str, end_date: str) -> dict[str, Any]:
     """전환 퍼널 데이터를 조회합니다."""
+    _part = _build_partition_filter(start_date, end_date)
     sql = f"""
     SELECT
         conversion_type,
         SUM(CAST(is_conversion AS INT)) AS count
     FROM {GLUE_DATABASE}.{GLUE_TABLE}
-    WHERE DATE(CAST(from_unixtime(impression_timestamp / 1000) AS timestamp))
+    WHERE {_part}
+      AND DATE(CAST(from_unixtime(impression_timestamp / 1000000000) AS timestamp))
           BETWEEN CAST('{start_date}' AS date) AND CAST('{end_date}' AS date)
     GROUP BY conversion_type
     ORDER BY conversion_type
