@@ -16,7 +16,8 @@ S3_BUCKET = "capa-data-lake-827913617635"
 DATABASE = "capa_ad_logs"
 ATHENA_OUTPUT = f"s3://{S3_BUCKET}/athena-results/"
 REGION = "ap-northeast-2"
-HOURLY_SUMMARY_PATH = f"s3://{S3_BUCKET}/summary/ad_combined_log"
+# ✅ 테이블명과 경로 일치
+HOURLY_SUMMARY_PATH = f"s3://{S3_BUCKET}/ad_combined_log"
 
 default_args = {
     "owner": "capa",

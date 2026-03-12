@@ -55,33 +55,69 @@ def run_daily(target_date: str = None):
 
 
 def run_backfill(start_date: str, end_date: str, etl_type: str):
-    """과거 데이터 재처리 (백필)"""
+    """과거 데이터 재처리 (백필)
+    
+    ✅ Daily 백필 시 자동으로 hourly 백필을 먼저 실행
+    """
     try:
         start = datetime.strptime(start_date, "%Y-%m-%d")
         end = datetime.strptime(end_date, "%Y-%m-%d")
         
+        # 📌 Daily 백필 요청 시, 자동으로 hourly 백필을 먼저 실행
+        if etl_type == "daily":
+            logger.warning("⚠️  Daily 백필 요청 감지")
+            logger.info("📌 자동으로 hourly 백필을 먼저 실행합니다...")
+            logger.info(f"   기간: {start_date} ~ {end_date}")
+            
+            # 1단계: Hourly 백필 실행
+            logger.info("\n" + "="*60)
+            logger.info("🔄 STEP 1: Hourly 백필 실행 중...")
+            logger.info("="*60)
+            run_backfill(start_date, end_date, "hourly")
+            
+            logger.info("\n" + "="*60)
+            logger.info("✅ Hourly 백필 완료")
+            logger.info("="*60 + "\n")
+        
         if etl_type == "hourly":
             # 시간별 백필
+            logger.info("🔄 Hourly 백필 시작...")
             current = start
+            count = 0
+            total = (end - start).days * 24 + 24
+            
             while current <= end:
                 for hour in range(24):
+                    count += 1
                     hour_dt = current.replace(hour=hour)
-                    logger.info(f"Backfilling hourly: {hour_dt.strftime('%Y-%m-%d-%H')}")
+                    logger.info(f"[{count}/{total}] Backfilling hourly: {hour_dt.strftime('%Y-%m-%d-%H')}")
                     etl = HourlyETL(hour_dt)
                     etl.run()
                 current = current.replace(day=current.day + 1)
                 
         elif etl_type == "daily":
             # 일별 백필
+            logger.info("\n" + "="*60)
+            logger.info("🔄 STEP 2: Daily 백필 실행 중...")
+            logger.info("="*60)
+            
             current = start
+            count = 0
+            total = (end - start).days + 1
+            
             while current <= end:
-                logger.info(f"Backfilling daily: {current.strftime('%Y-%m-%d')}")
+                count += 1
+                logger.info(f"[{count}/{total}] Backfilling daily: {current.strftime('%Y-%m-%d')}")
                 etl = DailyETL(current)
                 etl.run()
                 current = current.replace(day=current.day + 1)
+            
+            logger.info("\n" + "="*60)
+            logger.info("✅ Daily 백필 완료")
+            logger.info("="*60)
                 
     except Exception as e:
-        logger.error(f"Backfill failed: {str(e)}")
+        logger.error(f"❌ Backfill failed: {str(e)}")
         sys.exit(1)
 
 
