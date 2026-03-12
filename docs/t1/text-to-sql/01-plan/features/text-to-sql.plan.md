@@ -20,7 +20,71 @@
 
 ---
 
+## ⚠️ 인프라 현황 (구현 전 반드시 참조)
+
+> 이 플랜은 **현재 구축된 EKS 인프라 위에서** 구현한다.
+> 아래 명세는 `infrastructure/terraform/11-k8s-apps.tf` 실제 코드 기반이며, 새 코드 작성 시 이 값들을 기준으로 맞춰야 한다.
+
+### 서비스 네임스페이스 및 클러스터 DNS
+
+| 서비스 | K8s Namespace | 클러스터 내부 DNS | 포트 |
+|--------|--------------|-----------------|------|
+| vanna-api | `vanna` | `vanna-api.vanna.svc.cluster.local` | `8000` |
+| slack-bot | `slack-bot` | `slack-bot.slack-bot.svc.cluster.local` | `3000` |
+| ChromaDB | `chromadb` | `chromadb.chromadb.svc.cluster.local` | `8000` |
+| Redash | `redash` | `redash.redash.svc.cluster.local` | **`5000`** (Helm values 기준) |
+
+### 실제 ENV 변수명 (Terraform이 주입하는 이름 = 코드에서 사용할 이름)
+
+| 역할 | ENV 이름 (코드 기준) | 실제 값 | 출처 |
+|------|---------------------|---------|------|
+| ChromaDB 호스트 | `CHROMA_HOST` | `chromadb.chromadb.svc.cluster.local` | 11-k8s-apps.tf |
+| ChromaDB 포트 | `CHROMA_PORT` | `8000` | 11-k8s-apps.tf |
+| Athena S3 경로 | `S3_STAGING_DIR` | `s3://{버킷명}/athena-results/` | 11-k8s-apps.tf |
+| Athena DB | `ATHENA_DATABASE` | `capa_db` | 11-k8s-apps.tf |
+| Anthropic 키 | `ANTHROPIC_API_KEY` | K8s Secret `vanna-secrets` key=`anthropic-api-key` | 11-k8s-apps.tf |
+| Slack Bot 토큰 | `SLACK_BOT_TOKEN` | K8s Secret `slack-bot-secrets` key=`slack-bot-token` | 11-k8s-apps.tf |
+| Slack App 토큰 | `SLACK_APP_TOKEN` | K8s Secret `slack-bot-secrets` key=`slack-app-token` | 11-k8s-apps.tf |
+
+> **❌ 사용하지 말 것**: `CHROMADB_HOST`, `ATHENA_S3_STAGING_DIR` — Terraform이 주입하지 않는 이름이므로 코드에서 사용하면 `KeyError` 발생.
+
+### 신규 추가 필요한 ENV (Text-to-SQL 구현 때 Terraform에 추가)
+
+| ENV 이름 | 값 | 추가 위치 |
+|---------|---|----------|
+| `REDASH_BASE_URL` | `http://redash.redash.svc.cluster.local:5000` | 11-k8s-apps.tf (vanna-api env) |
+| `REDASH_API_KEY` | K8s Secret `vanna-secrets` key=`redash-api-key` | 11-k8s-apps.tf |
+| `REDASH_DATA_SOURCE_ID` | `1` | 11-k8s-apps.tf |
+| `REDASH_ENABLED` | `true` | 11-k8s-apps.tf |
+| `REDASH_QUERY_TIMEOUT_SEC` | `300` | 11-k8s-apps.tf |
+| `REDASH_POLL_INTERVAL_SEC` | `3` | 11-k8s-apps.tf |
+| `ATHENA_WORKGROUP` | `capa-text2sql-wg` (신설) 또는 `capa-workgroup` (기존) | 11-k8s-apps.tf |
+| `MPLBACKEND` | `Agg` | 11-k8s-apps.tf |
+| `INTERNAL_API_TOKEN` | K8s Secret `vanna-secrets` key=`internal-api-token` | 11-k8s-apps.tf |
+| `VANNA_API_URL` | `http://vanna-api.vanna.svc.cluster.local:8000` | 11-k8s-apps.tf (slack-bot env) |
+
+### 시크릿 관리 방식
+
+```
+terraform.tfvars (Git 제외, .gitignore 등록)
+    ↓ terraform apply
+K8s Secret (kubernetes_secret 리소스)
+    ↓
+Pod ENV (value_from.secret_key_ref)
+    ↓
+코드에서 os.environ["ENV_NAME"]으로 읽기
+```
+
+**text-to-sql 신규 추가 키** (`terraform.tfvars`에 추가 후 `variables.tf` 변수 선언 필요):
+```
+redash_api_key     = "..."          # Redash Admin > Settings > API Key
+internal_api_token = "capa-internal-..."  # openssl rand -hex 32
+```
+
+---
+
 ## 1. 배경 및 목적
+
 
 ### 1.1 문제 정의 (기존 MVP)
 
@@ -83,6 +147,7 @@ Slack → vanna-api /query
 | FR-09  | **실패 투명성**: 오류 시 오류 정보 + 사용된 프롬프트를 Slack에 함께 전달                                                                                                                                                                                                | DableTalk               |
 | FR-10  | **History 저장**: 질문-SQL-결과 쌍을 로컬 파일 또는 DB에 저장 (성공/실패 모두)                                                                                                                                                                                          | DableTalk               |
 | FR-11  | **기존 Athena 직접 경로 유지**: `REDASH_ENABLED` 플래그로 롤백 경로 보존                                                                                                                                                                                              | 안정성                  |
+| FR-21  | **Slack 피드백 버튼**: 슬랙 응답에 👍/👎 버튼 추가 → 긍정 피드백(👍) 시 질문-SQL 쌍을 ChromaDB에 축적 (FR-16 피드백 루프의 트리거)                                                                                                                                  | 물어보새                |
 
 #### Phase 2: RAG 품질 강화
 
@@ -101,7 +166,6 @@ Slack → vanna-api /query
 | ID    | 요구사항                                                                   | 출처        |
 | ----- | -------------------------------------------------------------------------- | ----------- |
 | FR-20 | 멀티턴 대화 지원: 이전 대화 맥락 유지 ("연령대별로 나눠줘" 같은 후속 질문) | InsightLens |
-| FR-21 | Slack 긍정/부정 피드백 버튼 → 정답 쿼리 ChromaDB 축적                     | 물어보새    |
 
 ### 2.2 비기능 요구사항
 
