@@ -8,8 +8,8 @@ import argparse
 import logging
 from datetime import datetime
 
-from hourly_etl import HourlyETL
-from daily_etl import DailyETL
+from .hourly_etl import HourlyETL
+from .daily_etl import DailyETL
 
 logging.basicConfig(
     level=logging.INFO,

@@ -579,30 +579,44 @@ except Exception as e:
 
 ## 트러블슈팅
 
-### ❌ ModuleNotFoundError: No module named 'etl_summary_t2'
+### ❌ ModuleNotFoundError: No module named 'etl_summary_t2' 또는 'athena_utils'
 
 ```
 Error: ModuleNotFoundError: No module named 'etl_summary_t2'
+# 또는
+Error: ModuleNotFoundError: No module named 'athena_utils'
 ```
 
 **원인**: 현재 디렉토리가 잘못됨 또는 패키지가 설치되지 않음
 
-**해결책**:
+**해결책 1: pip install -e . (권장)**
 ```powershell
 # 1. 올바른 디렉토리로 이동 (매우 중요!)
 cd C:\Users\Dell5371\Desktop\projects\CAPA\services\data_pipeline_t2
 
-# 2. 패키지 설치 (처음 1회만)
+# 2. 패키지 설치 (처음 1회만) - pyproject.toml 사용
 pip install -e .
 
-# 3. 다시 명령 실행
+# 3. 다시 명령 실행 (PYTHONPATH 설정 불필요!)
 python -m etl_summary_t2.run_etl hourly
+# 또는 직접 명령어 사용
+etl-summary-t2 hourly
+```
+
+**해결책 2: PYTHONPATH 설정 (임시)**
+```powershell
+# services/data_pipeline_t2 디렉토리에서
+$env:PYTHONPATH=".\etl_summary_t2"
+python -m etl_summary_t2.run_etl backfill --start-date 2026-03-01 --end-date 2026-03-10 --type daily
 ```
 
 **확인 방법**:
 ```powershell
 # 패키지가 제대로 설치되었는지 확인
 python -c "import etl_summary_t2; print('✅ OK')"
+
+# 설치된 패키지 확인
+pip show etl-summary-t2
 
 # 현재 디렉토리 확인
 pwd  # 또는 cd

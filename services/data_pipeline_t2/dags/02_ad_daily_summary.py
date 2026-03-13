@@ -21,12 +21,8 @@ from airflow.providers.standard.operators.python import PythonOperator
 from airflow.sensors.external_task import ExternalTaskSensor
 from datetime import datetime, timedelta
 
-# etl_summary_t2 모듈 import를 위해 경로 추가
-ETL_PATH = str(Path(__file__).parent.parent / "etl_summary_t2")
-if ETL_PATH not in sys.path:
-    sys.path.insert(0, ETL_PATH)
-
-from daily_etl import DailyETL
+# 독립 ETL 모듈 import (dags/etl_modules 내부에 위치)
+from etl_modules.daily_etl import DailyETL
 
 # =============================================================================
 # 설정
@@ -70,7 +66,7 @@ with DAG(
     dag_id="02_ad_daily_summary",
     default_args=default_args,
     description="etl_summary_t2의 DailyETL을 호출하여 daily summary 생성",
-    schedule_interval="0 1 * * *",  # 매일 01:00
+    schedule="0 1 * * *",  # 매일 01:00
     start_date=pendulum.datetime(2026, 2, 13, tz=pendulum.timezone("Asia/Seoul")),
     catchup=False,
     max_active_runs=1,
@@ -83,6 +79,5 @@ with DAG(
     run_etl = PythonOperator(
         task_id="run_daily_etl",
         python_callable=run_daily_etl,
-        provide_context=True,
     )
 

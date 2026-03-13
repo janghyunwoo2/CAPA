@@ -4,6 +4,7 @@ DAG(수동 실행 전용): ad_hourly_summary_test
 역할: impressions + clicks → ad_combined_log 테이블 생성 (수동 1회 트리거용)
 """
 import os
+import sys
 import pendulum
 import pytz
 from airflow import DAG
@@ -11,6 +12,11 @@ from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperato
 from airflow.providers.standard.operators.python import PythonOperator
 from datetime import timedelta, timezone
 import textwrap
+
+# etl_summary_t2 패키지 경로 추가
+ETL_PACKAGE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'etl_summary_t2')
+if ETL_PACKAGE_PATH not in sys.path:
+    sys.path.insert(0, os.path.dirname(ETL_PACKAGE_PATH))
 
 S3_BUCKET = "capa-data-lake-827913617635"
 DATABASE = "capa_ad_logs"
@@ -27,64 +33,32 @@ default_args = {
     "execution_timeout": timedelta(minutes=30),
 }
 
-ATHENA_RUNNER_SCRIPT = textwrap.dedent("""
-import boto3
-import time
+ETL_RUNNER_SCRIPT = textwrap.dedent("""
+import sys
 import os
+sys.path.insert(0, '/opt/airflow/services/data_pipeline_t2')
 
-REGION = os.environ.get('AWS_REGION', 'ap-northeast-2')
-DATABASE = os.environ['DATABASE']
-ATHENA_OUTPUT = os.environ['ATHENA_OUTPUT']
-QUERY = os.environ['QUERY']
-TMP_TABLE = os.environ.get('TMP_TABLE', '')
+from datetime import datetime
+from dateutil.parser import parse
+import pendulum
+from etl_summary_t2.hourly_etl import HourlyETL
+import logging
 
-client = boto3.client('athena', region_name=REGION)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def run_query(sql, description=""):
-    print(f"[Athena] {description}")
-    print(f"[SQL] {sql[:500]}...")
-    response = client.start_query_execution(
-        QueryString=sql,
-        QueryExecutionContext={'Database': DATABASE},
-        ResultConfiguration={'OutputLocation': ATHENA_OUTPUT}
-    )
-    qid = response['QueryExecutionId']
-    print(f"[Athena] Query ID: {qid}")
+# 환경변수에서 날짜 가져오기
+TARGET_HOUR = os.environ['TARGET_HOUR']  # 2026-03-12 15:00:00+09:00 형식
+dt_str = parse(TARGET_HOUR)
+dt_kst = pendulum.instance(dt_str).in_timezone('Asia/Seoul')
 
-    while True:
-        status = client.get_query_execution(QueryExecutionId=qid)
-        state = status['QueryExecution']['Status']['State']
-        if state in ['SUCCEEDED', 'FAILED', 'CANCELLED']:
-            break
-        time.sleep(3)
+logger.info(f"Running HourlyETL for: {dt_kst.strftime('%Y-%m-%d %H:00:00')} KST")
 
-    if state != 'SUCCEEDED':
-        reason = status['QueryExecution']['Status'].get('StateChangeReason', 'Unknown')
-        raise Exception(f"Query {state}: {reason}")
+# HourlyETL 실행
+etl = HourlyETL(target_hour=dt_kst)
+etl.run()
 
-    stats = status['QueryExecution'].get('Statistics', {})
-    scanned = stats.get('DataScannedInBytes', 0)
-    print(f"[Athena] SUCCESS - Scanned: {scanned / 1024 / 1024:.2f} MB")
-    return qid
-
-# 1. 기존 임시 테이블 삭제 (idempotency)
-if TMP_TABLE:
-    try:
-        run_query(f"DROP TABLE IF EXISTS {DATABASE}.{TMP_TABLE}", "Drop tmp table")
-    except Exception as e:
-        print(f"[WARN] Drop tmp table failed (may not exist): {e}")
-
-# 2. 메인 쿼리 실행
-run_query(QUERY, "Main query execution")
-
-# 3. 임시 테이블 삭제 (Glue 카탈로그 정리)
-if TMP_TABLE:
-    try:
-        run_query(f"DROP TABLE IF EXISTS {DATABASE}.{TMP_TABLE}", "Cleanup tmp table")
-    except Exception as e:
-        print(f"[WARN] Cleanup failed: {e}")
-
-print("[DONE] Hourly summary completed successfully")
+logger.info("HourlyETL completed successfully")
 """)
 
 PARTITION_REPAIR_SCRIPT = textwrap.dedent("""
@@ -129,6 +103,31 @@ def _use_kpo() -> bool:
     return bool(os.getenv("KUBERNETES_SERVICE_HOST") and os.getenv("KUBERNETES_PORT"))
 
 USE_KPO = _use_kpo()
+
+def _run_hourly_etl(**context):
+    """etl_summary_t2의 HourlyETL 실행"""
+    from etl_summary_t2.hourly_etl import HourlyETL
+    from datetime import datetime
+    import logging
+    
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    
+    # context에서 데이터 추출 (UTC)
+    dt_utc = context.get('data_interval_end')
+    if not dt_utc:
+        raise ValueError("data_interval_end not found in context")
+    
+    # UTC → KST 변환
+    dt_kst = pendulum.instance(dt_utc).in_timezone('Asia/Seoul')
+    
+    logger.info(f"Running HourlyETL for: {dt_kst.strftime('%Y-%m-%d %H:00:00')} KST")
+    
+    # HourlyETL 실행
+    etl = HourlyETL(target_hour=dt_kst)
+    etl.run()
+    
+    logger.info("HourlyETL completed successfully")
 
 def _run_athena_query(
     database: str,
@@ -267,57 +266,38 @@ with DAG(
     if USE_KPO:
         create_hourly_summary = KubernetesPodOperator(
             task_id="create_hourly_summary",
-            name="hourly-summary-athena",
+            name="hourly-summary-etl",
             namespace="airflow",
-            image="apache/airflow:3.1.7",  # ✅ 이미지 버전 업그레이드
+            image="apache/airflow:3.1.7",  # ✅ etl_summary_t2 패키지가 포함된 커스텀 이미지 사용 권장
             cmds=["python", "-c"],
-            arguments=[ATHENA_RUNNER_SCRIPT],
+            arguments=[ETL_RUNNER_SCRIPT],
             env_vars={
                 "AWS_REGION": REGION,
-                "DATABASE": DATABASE,
-                "ATHENA_OUTPUT": ATHENA_OUTPUT,
-                "TMP_TABLE": "ad_combined_log_tmp",
-                "QUERY": (
-                    "CREATE TABLE {{ params.database }}.ad_combined_log_tmp "
-                    "WITH ( "
-                    "  format = 'PARQUET', "
-                    "  write_compression = 'ZSTD', "
-                    "  external_location = '{{ params.summary_path }}"
-                    "/year={{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}/month={{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}/day={{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}/hour={{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%H\") }}/' "
-                    ") AS "
-                    "SELECT "
-                    "  imp.campaign_id, "
-                    "  imp.device_type, "
-                    "  '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y-%m-%d-%H\") }}' AS dt, "
-                    "  COUNT(DISTINCT imp.impression_id) AS impressions, "
-                    "  COUNT(DISTINCT clk.click_id) AS clicks, "
-                    "  CASE "
-                    "    WHEN COUNT(DISTINCT imp.impression_id) > 0 "
-                    "    THEN CAST(COUNT(DISTINCT clk.click_id) AS DOUBLE) "
-                    "         / CAST(COUNT(DISTINCT imp.impression_id) AS DOUBLE) * 100 "
-                    "    ELSE 0.0 "
-                    "  END AS ctr "
-                    "FROM {{ params.database }}.impressions AS imp "
-                    "LEFT JOIN {{ params.database }}.clicks AS clk "
-                    "  ON imp.impression_id = clk.impression_id "
-                    "  AND clk.year = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' "
-                    "  AND clk.month = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' "
-                    "  AND clk.day = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' "
-                    "  AND clk.hour = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%H\") }}' "
-                    "WHERE imp.year = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%Y\") }}' "
-                    "  AND imp.month = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%m\") }}' "
-                    "  AND imp.day = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%d\") }}' "
-                    "  AND imp.hour = '{{ (data_interval_end - macros.timedelta(minutes=10)).strftime(\"%H\") }}' "
-                    "GROUP BY imp.campaign_id, imp.device_type"
-                ),
-            },
-            params={
-                "database": DATABASE,
-                "summary_path": HOURLY_SUMMARY_PATH,
+                "AWS_ACCESS_KEY_ID": "{{ var.value.aws_access_key_id }}",
+                "AWS_SECRET_ACCESS_KEY": "{{ var.value.aws_secret_access_key }}",
+                # UTC → KST 변환 후 TARGET_HOUR 전달
+                "TARGET_HOUR": "{{ pendulum.instance(data_interval_end).in_timezone('Asia/Seoul').strftime('%Y-%m-%d %H:00:00+09:00') }}",
             },
             service_account_name="airflow-scheduler",
             get_logs=True,
             is_delete_operator_pod=True,
+            # etl_summary_t2 패키지를 포함하는 볼륨 마운트 (옵션)
+            volumes=[
+                {
+                    "name": "etl-code",
+                    "hostPath": {
+                        "path": "/opt/airflow/services/data_pipeline_t2",
+                        "type": "Directory"
+                    }
+                }
+            ],
+            volume_mounts=[
+                {
+                    "name": "etl-code", 
+                    "mountPath": "/opt/airflow/services/data_pipeline_t2",
+                    "readOnly": True
+                }
+            ],
         )
 
         register_partition = KubernetesPodOperator(
@@ -338,19 +318,13 @@ with DAG(
             is_delete_operator_pod=True,
         )
     else:
+        # etl_summary_t2 패키지를 직접 사용
         create_hourly_summary = PythonOperator(
             task_id="create_hourly_summary",
-            python_callable=_run_athena_query,
-            op_kwargs={
-                "region": REGION,
-                "database": DATABASE,
-                "output": ATHENA_OUTPUT,
-                "tmp_table": "ad_combined_log_tmp",
-                "summary_path": HOURLY_SUMMARY_PATH,  # ✅ summary_path 추가
-                # ✅ query 제거 - 함수 내에서 context 기반으로 동적 생성
-            },
+            python_callable=_run_hourly_etl,
         )
-
+        
+        # ETL이 이미 파티션을 처리하므로 register_partition은 선택적
         register_partition = PythonOperator(
             task_id="register_partition",
             python_callable=_repair_partitions,

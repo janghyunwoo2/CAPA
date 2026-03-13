@@ -4,6 +4,7 @@ DAG(수동 실행 전용): ad_daily_summary_test
 역할: hourly_summary 24개 집계 + conversion 원천 로그 조인 (수동 1회 트리거용)
 """
 import os
+import sys
 import pendulum
 from airflow import DAG
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
@@ -11,6 +12,11 @@ from airflow.providers.standard.operators.python import PythonOperator
 from airflow.sensors.external_task import ExternalTaskSensor
 from datetime import timedelta
 import textwrap
+
+# etl_summary_t2 패키지 경로 추가
+ETL_PACKAGE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'etl_summary_t2')
+if ETL_PACKAGE_PATH not in sys.path:
+    sys.path.insert(0, os.path.dirname(ETL_PACKAGE_PATH))
 
 S3_BUCKET = "capa-data-lake-827913617635"
 DATABASE = "capa_ad_logs"
@@ -28,56 +34,30 @@ default_args = {
     "execution_timeout": timedelta(minutes=60),
 }
 
-ATHENA_RUNNER_SCRIPT = textwrap.dedent("""
-import boto3
-import time
+ETL_RUNNER_SCRIPT = textwrap.dedent("""
+import sys
 import os
+sys.path.insert(0, '/opt/airflow/services/data_pipeline_t2')
 
-REGION = os.environ.get('AWS_REGION', 'ap-northeast-2')
-DATABASE = os.environ['DATABASE']
-ATHENA_OUTPUT = os.environ['ATHENA_OUTPUT']
-QUERIES = os.environ['QUERIES'].split('|||')
+from datetime import datetime, date
+from dateutil.parser import parse
+from etl_summary_t2.daily_etl import DailyETL
+import logging
 
-client = boto3.client('athena', region_name=REGION)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def run_query(sql, step_num=0):
-    sql = sql.strip()
-    if not sql:
-        return
-    print(f"\n{'='*60}")
-    print(f"[Step {step_num}] Executing query...")
-    print(f"[SQL] {sql[:500]}...")
-    print(f"{'='*60}")
+# 환경변수에서 날짜 가져오기
+TARGET_DATE = os.environ['TARGET_DATE']  # 2026-03-12 형식
+target_date = datetime.strptime(TARGET_DATE, '%Y-%m-%d').date()
 
-    response = client.start_query_execution(
-        QueryString=sql,
-        QueryExecutionContext={'Database': DATABASE},
-        ResultConfiguration={'OutputLocation': ATHENA_OUTPUT}
-    )
-    qid = response['QueryExecutionId']
-    print(f"[Athena] Query ID: {qid}")
+logger.info(f"Running DailyETL for: {target_date}")
 
-    while True:
-        status = client.get_query_execution(QueryExecutionId=qid)
-        state = status['QueryExecution']['Status']['State']
-        if state in ['SUCCEEDED', 'FAILED', 'CANCELLED']:
-            break
-        time.sleep(3)
+# DailyETL 실행
+etl = DailyETL(target_date=target_date)
+etl.run()
 
-    if state != 'SUCCEEDED':
-        reason = status['QueryExecution']['Status'].get('StateChangeReason', 'Unknown')
-        raise Exception(f"Query {state}: {reason}")
-
-    stats = status['QueryExecution'].get('Statistics', {})
-    scanned = stats.get('DataScannedInBytes', 0)
-    runtime = stats.get('TotalExecutionTimeInMillis', 0)
-    print(f"[Athena] SUCCESS - Scanned: {scanned / 1024 / 1024:.2f} MB, Time: {runtime}ms")
-    return qid
-
-for i, query in enumerate(QUERIES):
-    run_query(query, i + 1)
-
-print("\n[DONE] All queries completed successfully")
+logger.info("DailyETL completed successfully")
 """)
 
 PARTITION_REPAIR_SCRIPT = textwrap.dedent("""
@@ -121,6 +101,32 @@ def _use_kpo() -> bool:
     return bool(os.getenv("KUBERNETES_SERVICE_HOST") and os.getenv("KUBERNETES_PORT"))
 
 USE_KPO = _use_kpo()
+
+def _run_daily_etl(**context):
+    """etl_summary_t2의 DailyETL 실행"""
+    from etl_summary_t2.daily_etl import DailyETL
+    from datetime import datetime
+    import logging
+    
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    
+    # context에서 데이터 추출 (UTC)
+    dt_utc = context.get('data_interval_end')
+    if not dt_utc:
+        raise ValueError("data_interval_end not found in context")
+    
+    # UTC → KST 변환 후 전날 날짜 계산 (데일리는 전날 데이터 처리)
+    dt_kst = pendulum.instance(dt_utc).in_timezone('Asia/Seoul')
+    target_date = dt_kst.subtract(days=1).date()
+    
+    logger.info(f"Running DailyETL for: {target_date}")
+    
+    # DailyETL 실행
+    etl = DailyETL(target_date=target_date)
+    etl.run()
+    
+    logger.info("DailyETL completed successfully")
 
 def _run_athena_queries(database: str, output: str, region: str, queries: str, **_):
     import boto3, time
@@ -187,39 +193,38 @@ with DAG(
     if USE_KPO:
         create_daily_summary = KubernetesPodOperator(
             task_id="create_daily_summary",
-            name="daily-summary-athena",
+            name="daily-summary-etl",
             namespace="airflow",
-            image="apache/airflow:2.9.3-python3.14.2",
+            image="apache/airflow:3.1.7",  # ✅ etl_summary_t2 패키지가 포함된 커스텀 이미지 사용 권장
             cmds=["python", "-c"],
-            arguments=[ATHENA_RUNNER_SCRIPT],
+            arguments=[ETL_RUNNER_SCRIPT],
             env_vars={
                 "AWS_REGION": REGION,
-                "DATABASE": DATABASE,
-                "ATHENA_OUTPUT": ATHENA_OUTPUT,
-                "QUERIES": (
-                    "DROP TABLE IF EXISTS {{ params.database }}.ad_daily_summary_tmp"
-                    "|||"
-                    "CREATE TABLE {{ params.database }}.ad_daily_summary_tmp WITH ( format = 'PARQUET', write_compression = 'ZSTD', "
-                    "external_location = '{{ params.daily_path }}/ds={{ params.target_date }}/' ) AS "
-                    "WITH hourly_agg AS ( SELECT campaign_id, device_type, SUM(impressions) AS impressions, SUM(clicks) AS clicks "
-                    "FROM {{ params.database }}.ad_hourly_summary WHERE dt >= '{{ params.target_date }}-00' AND dt <= '{{ params.target_date }}-23' GROUP BY campaign_id, device_type ), "
-                    "conversion_agg AS ( SELECT campaign_id, device_type, COUNT(DISTINCT event_id) AS conversions FROM {{ params.database }}.ad_events_raw "
-                    "WHERE event_type = 'conversion' AND year='{{ params.target_date[:4] }}' AND month='{{ params.target_date[5:7] }}' AND day='{{ params.target_date[8:10] }}' GROUP BY campaign_id, device_type ) "
-                    "SELECT h.campaign_id, h.device_type, '{{ params.target_date }}' AS ds, h.impressions, h.clicks, COALESCE(c.conversions, 0) AS conversions, "
-                    "CASE WHEN h.impressions > 0 THEN CAST(h.clicks AS DOUBLE) / CAST(h.impressions AS DOUBLE) * 100 ELSE 0.0 END AS ctr, "
-                    "CASE WHEN h.clicks > 0 THEN CAST(COALESCE(c.conversions, 0) AS DOUBLE) / CAST(h.clicks AS DOUBLE) * 100 ELSE 0.0 END AS cvr FROM hourly_agg h LEFT JOIN conversion_agg c ON h.campaign_id = c.campaign_id AND h.device_type = c.device_type"
-                    "|||"
-                    "DROP TABLE IF EXISTS {{ params.database }}.ad_daily_summary_tmp"
-                ),
-            },
-            params={
-                "database": DATABASE,
-                "daily_path": DAILY_SUMMARY_PATH,
-                "target_date": "{{ (data_interval_end - macros.timedelta(days=1)).strftime('%Y-%m-%d') }}",
+                "AWS_ACCESS_KEY_ID": "{{ var.value.aws_access_key_id }}",
+                "AWS_SECRET_ACCESS_KEY": "{{ var.value.aws_secret_access_key }}",
+                # 전날 날짜를 TARGET_DATE로 전달
+                "TARGET_DATE": "{{ (data_interval_end - macros.timedelta(days=1)).strftime('%Y-%m-%d') }}",
             },
             service_account_name="airflow-scheduler",
             get_logs=True,
             is_delete_operator_pod=True,
+            # etl_summary_t2 패키지를 포함하는 볼륨 마운트 (옵션)
+            volumes=[
+                {
+                    "name": "etl-code",
+                    "hostPath": {
+                        "path": "/opt/airflow/services/data_pipeline_t2",
+                        "type": "Directory"
+                    }
+                }
+            ],
+            volume_mounts=[
+                {
+                    "name": "etl-code", 
+                    "mountPath": "/opt/airflow/services/data_pipeline_t2",
+                    "readOnly": True
+                }
+            ],
         )
 
         register_partition = KubernetesPodOperator(
@@ -255,36 +260,13 @@ with DAG(
             is_delete_operator_pod=True,
         )
     else:
+        # etl_summary_t2 패키지를 직접 사용
         create_daily_summary = PythonOperator(
             task_id="create_daily_summary",
-            python_callable=_run_athena_queries,
-            op_kwargs={
-                "region": REGION,
-                "database": DATABASE,
-                "output": ATHENA_OUTPUT,
-                "queries": (
-                    "DROP TABLE IF EXISTS {{ params.database }}.ad_daily_summary_tmp"
-                    "|||"
-                    "CREATE TABLE {{ params.database }}.ad_daily_summary_tmp WITH ( format = 'PARQUET', write_compression = 'ZSTD', "
-                    "external_location = '{{ params.daily_path }}/ds={{ params.target_date }}/' ) AS "
-                    "WITH hourly_agg AS ( SELECT campaign_id, device_type, SUM(impressions) AS impressions, SUM(clicks) AS clicks "
-                    "FROM {{ params.database }}.ad_hourly_summary WHERE dt >= '{{ params.target_date }}-00' AND dt <= '{{ params.target_date }}-23' GROUP BY campaign_id, device_type ), "
-                    "conversion_agg AS ( SELECT campaign_id, device_type, COUNT(DISTINCT event_id) AS conversions FROM {{ params.database }}.ad_events_raw "
-                    "WHERE event_type = 'conversion' AND year='{{ params.target_date[:4] }}' AND month='{{ params.target_date[5:7] }}' AND day='{{ params.target_date[8:10] }}' GROUP BY campaign_id, device_type ) "
-                    "SELECT h.campaign_id, h.device_type, '{{ params.target_date }}' AS ds, h.impressions, h.clicks, COALESCE(c.conversions, 0) AS conversions, "
-                    "CASE WHEN h.impressions > 0 THEN CAST(h.clicks AS DOUBLE) / CAST(h.impressions AS DOUBLE) * 100 ELSE 0.0 END AS ctr, "
-                    "CASE WHEN h.clicks > 0 THEN CAST(COALESCE(c.conversions, 0) AS DOUBLE) / CAST(h.clicks AS DOUBLE) * 100 ELSE 0.0 END AS cvr FROM hourly_agg h LEFT JOIN conversion_agg c ON h.campaign_id = c.campaign_id AND h.device_type = c.device_type"
-                    "|||"
-                    "DROP TABLE IF EXISTS {{ params.database }}.ad_daily_summary_tmp"
-                ),
-            },
-            params={
-                "database": DATABASE,
-                "daily_path": DAILY_SUMMARY_PATH,
-                "target_date": "{{ (data_interval_end - macros.timedelta(days=1)).strftime('%Y-%m-%d') }}",
-            },
+            python_callable=_run_daily_etl,
         )
 
+        # ETL이 이미 파티션을 처리하므로 register_partition은 선택적
         register_partition = PythonOperator(
             task_id="register_partition",
             python_callable=_repair_partitions,
@@ -292,7 +274,7 @@ with DAG(
                 "region": REGION,
                 "database": DATABASE,
                 "output": ATHENA_OUTPUT,
-                "table": "ad_daily_summary",
+                "table": "ad_combined_log_summary",
             },
         )
 

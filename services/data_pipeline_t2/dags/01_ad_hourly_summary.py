@@ -19,12 +19,8 @@ from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 from datetime import datetime, timedelta
 
-# etl_summary_t2 모듈 import를 위해 경로 추가
-ETL_PATH = str(Path(__file__).parent.parent / "etl_summary_t2")
-if ETL_PATH not in sys.path:
-    sys.path.insert(0, ETL_PATH)
-
-from hourly_etl import HourlyETL
+# 독립 ETL 모듈 import (dags/etl_modules 내부에 위치)
+from etl_modules.hourly_etl import HourlyETL
 
 # =============================================================================
 # 설정
@@ -74,7 +70,7 @@ with DAG(
     dag_id="01_ad_hourly_summary",
     default_args=default_args,
     description="etl_summary_t2의 HourlyETL을 호출하여 hourly summary 생성",
-    schedule_interval="0 * * * *",  # 매 정각
+    schedule="0 * * * *",  # 매 정각
     start_date=pendulum.datetime(2026, 2, 13, tz=pendulum.timezone("Asia/Seoul")),
     catchup=False,
     max_active_runs=1,
@@ -85,5 +81,4 @@ with DAG(
     run_etl = PythonOperator(
         task_id="run_hourly_etl",
         python_callable=run_hourly_etl,
-        provide_context=True,
     )
