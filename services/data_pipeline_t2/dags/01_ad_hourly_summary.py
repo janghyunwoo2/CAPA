@@ -94,12 +94,17 @@ with DAG(
     default_args=default_args,
     description="etl_summary_t2의 HourlyETL을 호출하여 hourly summary 생성",
 <<<<<<< HEAD
+<<<<<<< HEAD
     schedule="10 * * * *",  # 매시간 10분
     start_date=pendulum.datetime(2026, 2, 13, tz="UTC"),  # UTC로 변경
 =======
     schedule="0 * * * *",  # 매 정각
     start_date=pendulum.datetime(2026, 2, 13, tz=pendulum.timezone("Asia/Seoul")),
 >>>>>>> 5ba5ed0 (Feat : airflow ETL 테스트중)
+=======
+    schedule="10 * * * *",  # 매시간 10분
+    start_date=pendulum.datetime(2026, 2, 13, tz="UTC"),  # UTC로 변경
+>>>>>>> 21d6c56 (Feat : airflow ETL 테스트 완료.)
     catchup=False,
     max_active_runs=1,
     tags=["capa", "hourly", "ad", "etl"],

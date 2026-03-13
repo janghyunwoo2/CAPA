@@ -3,15 +3,20 @@ DAG(수동 실행 전용): ad_daily_summary_test
 주기: 없음 (schedule=None)
 역할: hourly_summary 24개 집계 + conversion 원천 로그 조인 (수동 1회 트리거용)
 """
+<<<<<<< HEAD
 import sys
 import os
+=======
+>>>>>>> 21d6c56 (Feat : airflow ETL 테스트 완료.)
 import sys
+import os
 import pendulum
 from pathlib import Path
 from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 from datetime import datetime, timedelta
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 # 독립 ETL 모듈 import (dags/etl_modules 내부에 위치)
 from etl_modules.daily_etl import DailyETL
@@ -29,6 +34,10 @@ REGION = "ap-northeast-2"
 HOURLY_SUMMARY_PATH = f"s3://{S3_BUCKET}/ad_combined_log"
 DAILY_SUMMARY_PATH = f"s3://{S3_BUCKET}/ad_combined_log_summary"
 >>>>>>> 5ba5ed0 (Feat : airflow ETL 테스트중)
+=======
+# 독립 ETL 모듈 import (dags/etl_modules 내부에 위치)
+from etl_modules.daily_etl import DailyETL
+>>>>>>> 21d6c56 (Feat : airflow ETL 테스트 완료.)
 
 # =============================================================================
 # 설정
@@ -41,6 +50,7 @@ default_args = {
     "execution_timeout": timedelta(minutes=60),
 }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 # =============================================================================
 # Task Functions
@@ -208,6 +218,38 @@ def _repair_partitions(database: str, output: str, region: str, table: str, **_)
     if st != 'SUCCEEDED':
         raise RuntimeError(f"Partition repair {st}")
 >>>>>>> 5ba5ed0 (Feat : airflow ETL 테스트중)
+=======
+# =============================================================================
+# Task Functions
+# =============================================================================
+
+def run_daily_etl(**context):
+    """
+    etl_summary_t2의 DailyETL을 실행
+    테스트용이므로 항상 어제 날짜(KST) 기준으로 실행
+    """
+    try:
+        # 항상 어제 KST 날짜 사용 (수동 테스트 전용)
+        dt_kst = pendulum.now('Asia/Seoul').subtract(days=1)
+        
+        # 디버깅을 위한 상세 로그
+        print(f"[DEBUG] Yesterday KST time: {dt_kst}")
+        print(f"[DEBUG] Date: {dt_kst.date()}")
+        
+        # context에서 data_interval_start가 있으면 정보만 출력
+        if "data_interval_start" in context and context["data_interval_start"]:
+            dt_utc = context["data_interval_start"]
+            print(f"[DEBUG] data_interval_start (UTC): {dt_utc}")
+            print(f"[DEBUG] Using yesterday KST date instead for manual test")
+        
+        print(f"[INFO] Running DailyETL for {dt_kst.date()}")
+        etl = DailyETL(target_date=dt_kst)
+        etl.run()
+        print(f"[SUCCESS] DailyETL completed successfully")
+    except Exception as e:
+        print(f"[ERROR] DailyETL failed: {str(e)}")
+        raise
+>>>>>>> 21d6c56 (Feat : airflow ETL 테스트 완료.)
 
 # =============================================================================
 # DAG 정의
@@ -228,6 +270,7 @@ with DAG(
         task_id="run_daily_etl",
         python_callable=run_daily_etl,
     )
+<<<<<<< HEAD
 <<<<<<< HEAD
 =======
 
@@ -340,3 +383,5 @@ with DAG(
 
     wait_for_hourly >> create_daily_summary >> register_partition >> trigger_report
 >>>>>>> 5ba5ed0 (Feat : airflow ETL 테스트중)
+=======
+>>>>>>> 21d6c56 (Feat : airflow ETL 테스트 완료.)

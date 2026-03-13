@@ -4,15 +4,20 @@ DAG(수동 실행 전용): ad_hourly_summary_test
 역할: impressions + clicks → ad_combined_log 테이블 생성 (수동 1회 트리거용)
 참고: 프로덕션 DAG(01_ad_hourly_summary)는 매시간 실행, 이 DAG는 테스트/디버깅용
 """
+<<<<<<< HEAD
 import sys
 import os
+=======
+>>>>>>> 21d6c56 (Feat : airflow ETL 테스트 완료.)
 import sys
+import os
 import pendulum
 from pathlib import Path
 from airflow import DAG
 from airflow.providers.standard.operators.python import PythonOperator
 from datetime import datetime, timedelta
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 # 독립 ETL 모듈 import (dags/etl_modules 내부에 위치)
 from etl_modules.hourly_etl import HourlyETL
@@ -29,6 +34,10 @@ REGION = "ap-northeast-2"
 # ✅ 테이블명과 경로 일치
 HOURLY_SUMMARY_PATH = f"s3://{S3_BUCKET}/ad_combined_log"
 >>>>>>> 5ba5ed0 (Feat : airflow ETL 테스트중)
+=======
+# 독립 ETL 모듈 import (dags/etl_modules 내부에 위치)
+from etl_modules.hourly_etl import HourlyETL
+>>>>>>> 21d6c56 (Feat : airflow ETL 테스트 완료.)
 
 # =============================================================================
 # 설정
@@ -41,6 +50,7 @@ default_args = {
     "execution_timeout": timedelta(minutes=30),
 }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 # =============================================================================
 # Task Functions
@@ -81,117 +91,19 @@ ETL_RUNNER_SCRIPT = textwrap.dedent("""
 import sys
 import os
 sys.path.insert(0, '/opt/airflow/services/data_pipeline_t2')
+=======
+# =============================================================================
+# Task Functions
+# =============================================================================
+>>>>>>> 21d6c56 (Feat : airflow ETL 테스트 완료.)
 
-from datetime import datetime
-from dateutil.parser import parse
-import pendulum
-from etl_summary_t2.hourly_etl import HourlyETL
-import logging
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# 환경변수에서 날짜 가져오기
-TARGET_HOUR = os.environ['TARGET_HOUR']  # 2026-03-12 15:00:00+09:00 형식
-dt_str = parse(TARGET_HOUR)
-dt_kst = pendulum.instance(dt_str).in_timezone('Asia/Seoul')
-
-logger.info(f"Running HourlyETL for: {dt_kst.strftime('%Y-%m-%d %H:00:00')} KST")
-
-# HourlyETL 실행
-etl = HourlyETL(target_hour=dt_kst)
-etl.run()
-
-logger.info("HourlyETL completed successfully")
-""")
-
-PARTITION_REPAIR_SCRIPT = textwrap.dedent("""
-import boto3
-import time
-import os
-
-REGION = os.environ.get('AWS_REGION', 'ap-northeast-2')
-DATABASE = os.environ['DATABASE']
-ATHENA_OUTPUT = os.environ['ATHENA_OUTPUT']
-TABLE = os.environ['TABLE']
-
-client = boto3.client('athena', region_name=REGION)
-
-sql = f"MSCK REPAIR TABLE {DATABASE}.{TABLE}"
-print(f"[Athena] Registering partitions: {sql}")
-response = client.start_query_execution(
-    QueryString=sql,
-    QueryExecutionContext={'Database': DATABASE},
-    ResultConfiguration={'OutputLocation': ATHENA_OUTPUT}
-)
-qid = response['QueryExecutionId']
-while True:
-    status = client.get_query_execution(QueryExecutionId=qid)
-    state = status['QueryExecution']['Status']['State']
-    if state in ['SUCCEEDED', 'FAILED', 'CANCELLED']:
-        break
-    time.sleep(3)
-
-if state != 'SUCCEEDED':
-    reason = status['QueryExecution']['Status'].get('StateChangeReason', 'Unknown')
-    raise Exception(f"Partition repair {state}: {reason}")
-
-print(f"[DONE] Partition repair completed")
-""")
-
-def _use_kpo() -> bool:
-    val = os.getenv("USE_KPO")
-    if val is not None:
-        return val.lower() in ("1", "true", "yes")
-    # 자동 감지: in-cluster 환경 변수 존재 시 KPO 사용
-    return bool(os.getenv("KUBERNETES_SERVICE_HOST") and os.getenv("KUBERNETES_PORT"))
-
-USE_KPO = _use_kpo()
-
-def _run_hourly_etl(**context):
-    """etl_summary_t2의 HourlyETL 실행"""
-    from etl_summary_t2.hourly_etl import HourlyETL
-    from datetime import datetime
-    import logging
-    
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
-    
-    # context에서 데이터 추출 (UTC)
-    dt_utc = context.get('data_interval_end')
-    if not dt_utc:
-        raise ValueError("data_interval_end not found in context")
-    
-    # UTC → KST 변환
-    dt_kst = pendulum.instance(dt_utc).in_timezone('Asia/Seoul')
-    
-    logger.info(f"Running HourlyETL for: {dt_kst.strftime('%Y-%m-%d %H:00:00')} KST")
-    
-    # HourlyETL 실행
-    etl = HourlyETL(target_hour=dt_kst)
-    etl.run()
-    
-    logger.info("HourlyETL completed successfully")
-
-def _run_athena_query(
-    database: str,
-    output: str,
-    region: str,
-    tmp_table: str | None = None,
-    summary_path: str | None = None,
-    **context
-):
+def run_hourly_etl(**context):
     """
-    Athena 쿼리 실행 함수 (context 기반 동적 쿼리 생성)
-    
-    Args:
-        database: Athena 데이터베이스
-        output: Athena 결과 저장 위치
-        region: AWS 리전
-        tmp_table: 임시 테이블명
-        summary_path: S3 summary 경로
-        **context: Airflow context (data_interval_end 포함)
+    etl_summary_t2의 HourlyETL을 실행
+    - 수동 실행: 현재 시간(KST) 기준으로 실행
+    - 스케줄 실행(없음): data_interval_start 사용하지만 이 DAG는 수동 전용
     """
+<<<<<<< HEAD
     import boto3, time
     from datetime import timezone, timedelta
     
@@ -296,6 +208,32 @@ def _repair_partitions(database: str, output: str, region: str, table: str, **_)
     if st != 'SUCCEEDED':
         raise RuntimeError(f"Partition repair {st}")
 >>>>>>> 5ba5ed0 (Feat : airflow ETL 테스트중)
+=======
+    try:
+        # 현재 시간에서 1시간 전으로 설정 (수동 테스트 전용)
+        current_kst = pendulum.now('Asia/Seoul')
+        dt_kst = current_kst.subtract(hours=1).replace(minute=0, second=0, microsecond=0)
+        
+        # 디버깅을 위한 상세 로그
+        print(f"[DEBUG] Current KST time: {current_kst}")
+        print(f"[DEBUG] ETL Target KST time: {dt_kst} (현재 시간 - 1시간)")
+        print(f"[DEBUG] Hour: {dt_kst.hour}, Date: {dt_kst.date()}")
+        
+        # context에서 data_interval_start가 있으면 UTC->KST 변환
+        if "data_interval_start" in context and context["data_interval_start"]:
+            dt_utc = context["data_interval_start"]
+            print(f"[DEBUG] data_interval_start (UTC): {dt_utc}")
+            # 만약 data_interval_start가 있더라도 수동 테스트에서는 현재 시간 사용
+            print(f"[DEBUG] Using current KST time instead for manual test")
+        
+        print(f"[INFO] Running HourlyETL for {dt_kst}")
+        etl = HourlyETL(target_hour=dt_kst)
+        etl.run()
+        print(f"[SUCCESS] HourlyETL completed successfully for hour={dt_kst.hour}")
+    except Exception as e:
+        print(f"[ERROR] HourlyETL failed: {str(e)}")
+        raise
+>>>>>>> 21d6c56 (Feat : airflow ETL 테스트 완료.)
 
 # =============================================================================
 # DAG 정의
@@ -310,6 +248,7 @@ with DAG(
     max_active_runs=1,
     tags=["capa", "hourly", "ad", "etl", "test"],
 ) as dag:
+<<<<<<< HEAD
 <<<<<<< HEAD
 
     # Task: HourlyETL 실행
@@ -393,3 +332,11 @@ with DAG(
 
     create_hourly_summary >> register_partition
 >>>>>>> 5ba5ed0 (Feat : airflow ETL 테스트중)
+=======
+
+    # Task: HourlyETL 실행
+    run_etl = PythonOperator(
+        task_id="run_hourly_etl",
+        python_callable=run_hourly_etl,
+    )
+>>>>>>> 21d6c56 (Feat : airflow ETL 테스트 완료.)
