@@ -75,7 +75,8 @@
      │            Redash                namespace: redash │
      │  POST /api/queries  → query_id = 42         │
      │  POST /api/queries/42/results → job polling │
-     │  결과 영속화 + 차트 시각화                   │
+     │  결과 영속화 + 전체 결과 영구 링크 제공      │
+     │  (차트 시각화는 Phase 3 FR-23에서 구현)     │
      │  Public URL: https://redash.capa.internal   │
      └────────────────────────────────────────────┘
            │ QueryResponse
