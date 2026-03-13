@@ -7,7 +7,7 @@
 | **Feature** | text-to-sql |
 | **작성일** | 2026-03-12 |
 | **담당** | t1 |
-| **Phase** | Design |
+| **Phase** | Design — **Phase 1 (핵심 기능) 범위** |
 | **참고 문서** | `docs/t1/text-to-sql/01-plan/features/text-to-sql.plan.md` |
 | **팀 작성** | text-to-sql-design 팀 (4 에이전트 병렬) |
 
@@ -26,8 +26,10 @@
 
 ### 1.1 범위
 
+본 설계서는 **Phase 1 (핵심 기능) 범위만** 다룬다. Phase 2 이후 설계는 Phase 1 완료 및 Gap Analysis ≥ 90% 달성 후 별도 작성한다.
+
 본 설계서는 CAPA 프로젝트의 `vanna-api` 서비스를 개선하는 Text-To-SQL 기능의 기술 설계를 다룬다.
-Plan 문서에서 정의한 11개 기능 요구사항(FR-01~FR-11)과 6개 비기능 요구사항(NFR-01~NFR-06)을 구현하기 위한 아키텍처, API, 데이터 모델, 보안 설계를 포함한다.
+Plan 문서에서 정의한 15개 기능 요구사항(FR-01~FR-11, FR-13a, FR-14a, FR-15a, FR-21)과 8개 비기능 요구사항(NFR-01~NFR-08)을 구현하기 위한 아키텍처, API, 데이터 모델, 보안 설계를 포함한다.
 
 ### 1.2 설계 원칙
 
@@ -210,6 +212,8 @@ Step 1~6 동일
 
 ```
 Step N 실패
+→ HistoryRecorder 호출하지 않음 (실패 쿼리는 저장 제외 — FR-10)
+→ logger.error()로 실패 정보만 서버 로그에 기록
 → QueryResponse.error = {
     failed_step: N,
     step_name: "SQL검증",
@@ -219,6 +223,7 @@ Step N 실패
   }
 → Slack Block Kit: ❌ 실패 단계 + 오류 메시지 + 생성된 SQL 노출
 ```
+> 실패 쿼리 분석이 필요하면 서버 로그를 활용한다. 별도 저장소 기록은 Phase 3(FR-22)에서 구현한다.
 
 ### 2.5 자가학습 피드백 루프
 
@@ -228,13 +233,13 @@ Step N 실패
 Slack 👍 클릭
   → POST /feedback (positive)
   → FeedbackManager.record_positive()
-    → History DB 저장 (feedback=positive)
+    → History DB 업데이트 (feedback=positive, feedback_at=now)
     → vanna.train(question=refined_question, sql=generated_sql)
     → ChromaDB sql-qa 컬렉션에 추가
 
 Slack 👎 클릭
   → POST /feedback (negative)
-  → History DB 저장만 (feedback=negative, 학습 제외)
+  → History DB 업데이트만 (feedback=negative, feedback_at=now, 학습 제외)
 ```
 
 #### 2.5.2 Airflow DAG 기반 주기적 학습 (Phase 2)
@@ -256,7 +261,117 @@ capa_chromadb_refresh (매주 월요일 09:00 KST)
 | 3차 | 해시 중복 제거 | SQL 정규화 후 SHA-256 중복 방지 |
 | 4차 | Airflow 배치 | 주기적 일괄 검증 |
 
-### 2.6 Phase 1 → Phase 2 전환 포인트
+### 2.6 slack-bot 수정 명세
+
+> **현재 상태**: `services/slack-bot/app.py` MVP 코드는 vanna-api의 응답에서 `answer` 필드만 꺼내 출력하며, 에러 처리·타임아웃·보안 측면에서 Text-to-SQL 요구사항을 충족하지 못함.
+> 아래 항목은 Plan §7 Phase 1 구현과 함께 **반드시 수정**해야 하는 사항이다.
+
+#### 2.6.1 수정 항목 목록
+
+| 항목 | 현재 (AS-IS) | 수정 후 (TO-BE) | 관련 요구사항 |
+|------|-------------|----------------|-------------|
+| **HTTP timeout** | `timeout=60` | `timeout=310` 이상 | NFR-06 |
+| **에러 표시** | `f"AI 서버 응답 오류 ({status_code})"` | `error.error_code` + `error.message` 파싱 후 안내 | FR-09 |
+| **예외 노출** | `say(f"... {e}")` — 내부 정보 직접 노출 | 일반화된 안내 메시지, `logger.error()`로만 기록 | SEC-07 |
+| **차트 이미지** | 미구현 | `chart_image_base64` → Base64 디코딩 → `files.upload_v2` | FR-08b |
+| **Redash 링크** | 미구현 | `redash_url` → Section Block으로 링크 노출 | FR-08 |
+| **인증 헤더** | 미구현 | `X-Internal-Token: {INTERNAL_API_TOKEN}` 헤더 추가 | SEC-17 |
+| **피드백 버튼** | 미구현 | 정상 응답 하단 👍/👎 Block Kit + Interaction 콜백 | FR-21 |
+
+#### 2.6.2 Slack 응답 Block Kit 구조 (TO-BE)
+
+**정상 응답 (`status_code == 200`)**:
+```python
+# 1. 텍스트 블록 (AI 분석)
+{
+    "type": "section",
+    "text": {"type": "mrkdwn", "text": f"✅ *{refined_question}*\n\n{answer}"}
+}
+
+# 2. 차트 이미지 (chart_image_base64 있을 때만)
+files.upload_v2(
+    channels=channel_id,
+    content=base64.b64decode(chart_image_base64),
+    filename="chart.png",
+    title="분석 차트"
+)
+
+# 3. Redash 링크 (redash_url 있을 때만)
+{
+    "type": "section",
+    "text": {"type": "mrkdwn", "text": f"🔗 <{redash_url}|Redash에서 전체 결과 보기>"}
+}
+
+# 4. SQL 코드 블록
+{
+    "type": "section",
+    "text": {"type": "mrkdwn", "text": f"```{sql}```"}
+}
+
+# 5. 피드백 버튼
+{
+    "type": "actions",
+    "elements": [
+        {"type": "button", "text": {"type": "plain_text", "text": "👍 좋아요"},
+         "action_id": "feedback_positive", "value": query_id},
+        {"type": "button", "text": {"type": "plain_text", "text": "👎 별로예요"},
+         "action_id": "feedback_negative", "value": query_id}
+    ]
+}
+```
+
+**오류 응답 (`status_code != 200`)**:
+```python
+error = response.json().get("error", {})
+error_code = error.get("error_code", "UNKNOWN_ERROR")
+message = error.get("message", "알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+
+say(blocks=[{
+    "type": "section",
+    "text": {"type": "mrkdwn", "text": f"❌ *오류가 발생했습니다*\n{message}"}
+}])
+# error_code는 logger.error()로만 기록, Slack 채널에 노출하지 않음
+```
+
+**네트워크 예외 (`except Exception`)**:
+```python
+except Exception as e:
+    logger.error(f"vanna-api 연동 오류: {e}")  # 상세 정보는 로그에만
+    say("⚠️ AI 서버와 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+    # str(e) Slack 직접 노출 금지 (SEC-07)
+```
+
+#### 2.6.3 Interaction 콜백 엔드포인트 (피드백 버튼)
+
+```python
+@app.action("feedback_positive")
+def handle_positive_feedback(ack, body, client):
+    ack()
+    history_id = body["actions"][0]["value"]
+    slack_user_id = body["user"]["id"]
+    requests.post(
+        f"{VANNA_API_URL}/feedback",
+        json={"history_id": history_id, "feedback": "positive", "slack_user_id": slack_user_id},
+        headers={"X-Internal-Token": INTERNAL_API_TOKEN},
+        timeout=10
+    )
+
+@app.action("feedback_negative")
+def handle_negative_feedback(ack, body, client):
+    ack()
+    history_id = body["actions"][0]["value"]
+    slack_user_id = body["user"]["id"]
+    requests.post(
+        f"{VANNA_API_URL}/feedback",
+        json={"history_id": history_id, "feedback": "negative", "slack_user_id": slack_user_id},
+        headers={"X-Internal-Token": INTERNAL_API_TOKEN},
+        timeout=10
+    )
+```
+
+---
+
+### 2.7 Phase 1 → Phase 2 전환 포인트
 
 | 컴포넌트 | Phase 1 | Phase 2 |
 |----------|---------|---------|
@@ -282,7 +397,7 @@ capa_chromadb_refresh (매주 월요일 09:00 KST)
 | GET | `/history` | 쿼리 이력 조회 (FR-10) | Bearer Token | Phase 1 |
 | GET | `/training-data` | 학습 데이터 조회 | Admin API Key | Phase 1 |
 
-> **FR-21 Phase 결정**: Plan §2.1에서 FR-21이 Phase 3으로 분류되어 있으나, 피드백 루프 없이는 ChromaDB 자가학습이 동작하지 않아 시스템 핵심 가치가 훼손된다. POST /feedback 엔드포인트는 단순 콜백 처리로 구현 복잡도가 낮으므로 **Phase 1에서 구현**하는 것으로 Design 단계에서 결정한다. (Plan §3.3의 피드백 루프 설명도 Phase 1 수준으로 기술되어 있어 Design과 일치)
+> **FR-21 Phase**: Plan §2.1에서 FR-21은 **Phase 1**으로 분류되어 있으며 본 설계서와 일치한다. 피드백 루프 없이는 ChromaDB 자가학습이 동작하지 않아 Phase 1 포함이 필수적이다.
 
 ### 3.2 Request/Response 스키마
 
@@ -568,7 +683,9 @@ class TrainDataType(str, Enum):
 
 ```python
 class QueryHistoryRecord(BaseModel):
-    """FR-10 쿼리 이력"""
+    """FR-10 쿼리 이력 — 성공한 쿼리만 저장 (피드백 루프 데이터 축적 목적)
+    실패 쿼리 분석은 Phase 3(FR-22)에서 별도 구현
+    """
     history_id: str
     timestamp: datetime
     slack_user_id: str  # 저장 시 해시 처리 (PII)
@@ -579,8 +696,6 @@ class QueryHistoryRecord(BaseModel):
     keywords: list[str] = []  # 추출된 도메인 키워드 (04-data-model.md 동기화)
     generated_sql: Optional[str] = None
     sql_validated: Optional[bool] = None
-    success: bool
-    error_code: Optional[str] = None
     row_count: Optional[int] = None
     redash_query_id: Optional[int] = None
     redash_url: Optional[str] = None

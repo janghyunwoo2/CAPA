@@ -145,27 +145,31 @@ Slack → vanna-api /query
 | FR-08  | **AI 분석 + 응답**: 결과를 AI로 분석하여 인사이트 생성, Slack에 AI 분석 텍스트 + matplotlib 차트 이미지(인라인) + Redash 링크 전달                                                                                                                                      | 요구사항                |
 | FR-08b | **matplotlib 차트 생성**: AI 분석 결과 데이터를 `io.BytesIO` 버퍼로 Bar/Line 차트 PNG 렌더링 → Base64 인코딩하여 `QueryResponse.chart_image_base64`로 반환. slack-bot이 수신 후 Slack `files.upload_v2` API로 인라인 이미지 전달 (vanna-api에 Slack 의존성 없음) | 요구사항                |
 | FR-09  | **실패 투명성**: 오류 시 오류 정보 + 사용된 프롬프트를 Slack에 함께 전달                                                                                                                                                                                                | DableTalk               |
-| FR-10  | **History 저장**: 질문-SQL-결과 쌍을 로컬 파일 또는 DB에 저장 (성공/실패 모두)                                                                                                                                                                                          | DableTalk               |
+| FR-10  | **History 저장**: 성공한 쿼리의 질문-SQL-결과 쌍을 로컬 파일에 저장. 피드백 루프 데이터 축적이 목적이므로 실패 쿼리는 저장하지 않음 (실패 쿼리 분석은 Phase 3에서 구현)                                                                                                                                                                                          | DableTalk               |
 | FR-11  | **기존 Athena 직접 경로 유지**: `REDASH_ENABLED` 플래그로 롤백 경로 보존                                                                                                                                                                                              | 안정성                  |
-| FR-21  | **Slack 피드백 버튼**: 슬랙 응답에 👍/👎 버튼 추가 → 긍정 피드백(👍) 시 질문-SQL 쌍을 ChromaDB에 축적 (FR-16 피드백 루프의 트리거)                                                                                                                                  | 물어보새                |
+| FR-21  | **Slack 피드백 버튼**: 슬랙 응답에 👍/👎 버튼 추가. Phase 1에서는 👍 클릭 시 즉시 `vanna.train()` 호출 → ChromaDB 바로 추가. Phase 2(FR-16)에서는 즉시 학습을 폐기하고 DynamoDB 저장 후 Airflow DAG(FR-18) 배치 검증으로 전환. 버튼 UI 자체는 두 Phase 모두 동일하게 유지 | 물어보새                |
+| FR-13a | **ChromaDB 초기 시딩 (비즈니스 용어)**: CTR, ROAS, CVR 등 광고 도메인 표준 용어를 ChromaDB에 1회 적재. 없으면 SQL 품질 보장 불가. (FR-13의 초기 적재 부분 — 지속 관리 체계는 Phase 2에서 구축) | 물어보새 |
+| FR-14a | **ChromaDB 초기 시딩 (Athena 특화 지식)**: Presto SQL 방언, 날짜 함수, 파티션 조건 필수 규칙을 ChromaDB에 1회 적재. (FR-14의 초기 적재 부분 — 신규 규칙 추가 체계는 Phase 2에서 구축) | DableTalk |
+| FR-15a | **ChromaDB 초기 시딩 (정책 데이터)**: CTR/ROAS/CVR 계산식, 코드값 매핑 규칙을 ChromaDB에 1회 적재. (FR-15의 초기 적재 부분 — 정책 변경 자동 반영 체계는 Phase 2에서 구축) | InsightLens |
 
 #### Phase 2: RAG 품질 강화
 
 | ID    | 요구사항                                                                                                | 출처                    |
 | ----- | ------------------------------------------------------------------------------------------------------- | ----------------------- |
 | FR-12 | **3단계 RAG 파이프라인**: 벡터 유사도 검색 → Reranker 재평가 → LLM 최종 선별 (0개도 허용)       | InsightLens             |
-| FR-13 | **비즈니스 용어 사전**: CTR, ROAS, CVR, 노출수, 클릭률 등 광고 도메인 표준 용어를 ChromaDB에 학습 | 물어보새                |
-| FR-14 | **Athena 특화 지식**: Presto SQL 방언, 날짜 함수, 파티션 조건 필수 규칙을 ChromaDB에 학습         | DableTalk               |
-| FR-15 | **정책 데이터 관리**: CTR/ROAS/CVR 계산식, 코드값 매핑 규칙을 ChromaDB documentation으로 관리     | InsightLens             |
-| FR-16 | **피드백 루프**: 사용자가 슬랙에서 검증한(👍) 질문-SQL 쌍만 선별 추가 (FR-21) | `vanna.train(question=, sql=)` | InsightLens + DableTalk |
+| FR-13 | **비즈니스 용어 사전 지속 관리**: Phase 1에서 초기 시딩(FR-13a) 이후, 신규 용어 추가 및 업데이트 자동화 체계 구축 | 물어보새                |
+| FR-14 | **Athena 특화 지식 지속 관리**: Phase 1에서 초기 시딩(FR-14a) 이후, 신규 규칙 추가 자동화 체계 구축 | DableTalk               |
+| FR-15 | **정책 데이터 지속 관리**: Phase 1에서 초기 시딩(FR-15a) 이후, 정책 변경 시 ChromaDB 자동 반영 체계 구축 | InsightLens             |
+| FR-16 | **피드백 루프 품질 제어**: FR-21(Phase 1)의 👍 버튼은 그대로 유지하되, 즉시 학습 방식을 폐기하고 FR-18 Airflow DAG을 통한 검증(EXPLAIN + 중복 제거) 후 통과한 질문-SQL 쌍만 `vanna.train()` 배치 실행. Phase 1의 즉시 학습 대비 데이터 품질 보장 | InsightLens + DableTalk |
 | FR-17 | **중복 쿼리 방지**: SQL 해시 기반으로 Redash 기존 쿼리 탐색 후 재사용                             | 운영 안정성             |
-| FR-18 | **Airflow DAG 연동**: 주기적 ChromaDB 학습 데이터 최신화 파이프라인                               | 물어보새                |
+| FR-18 | **Airflow DAG 연동**: 주기적 ChromaDB 학습 데이터 최신화 파이프라인. FR-16과 세트로 동작. 매주 월요일 09:00 KST 실행 → ① 긍정 피드백 추출 → ② EXPLAIN 재검증 + 중복 제거 → ③ 검증된 쌍만 학습 → ④ 신규 비즈니스 용어/정책 반영 | 물어보새                |
 
 #### Phase 3: UX 고도화 (선택적)
 
 | ID    | 요구사항                                                                   | 출처        |
 | ----- | -------------------------------------------------------------------------- | ----------- |
 | FR-20 | 멀티턴 대화 지원: 이전 대화 맥락 유지 ("연령대별로 나눠줘" 같은 후속 질문) | InsightLens |
+| FR-22 | **실패 쿼리 이력 저장**: 파이프라인 실패 쿼리도 별도 저장소에 기록하여 자주 실패하는 질문 패턴 분석 및 ChromaDB 학습 데이터 개선에 활용. Phase 1에서는 로그로만 기록 | 운영 안정성 |
 
 ### 2.2 비기능 요구사항
 
@@ -251,17 +255,22 @@ Slack → vanna-api /query
   - Base64 디코딩 → Slack files.upload_v2 호출 → 인라인 이미지 전달
     │
     ▼ Step 11
+[History 저장 (FR-10)]
+  - 쿼리 완료 시 자동 저장 (사용자 개입 없음)
+  - 성공한 쿼리만 query_history.jsonl에 기록 (실패 쿼리는 로그만 기록, Phase 3(FR-22) 구현 예정)
+    │
+    ▼ Step 12 [slack-bot]
 [Slack 응답]
   - AI 분석 텍스트 (최대 10행 데이터 요약)
   - matplotlib 차트 이미지 (Slack 인라인 표시)
   - Redash 쿼리 링크 ({REDASH_PUBLIC_URL}/queries/{query_id})
   - 사용된 SQL 첨부
     │
-    ▼ Step 12
-[피드백 루프 기반 History 저장 (FR-21)]
+    ▼ Step 13 [slack-bot]
+[피드백 버튼 제공 (FR-21)]
   - Slack 하단 긍정/부정(👍/👎) 버튼(Block Kit) 제공
-  - 사용자가 👍(정답) 클릭 시에만 History DB(DynamoDB 등)에 질문-SQL-결과 쌍 저장
-  - 저장과 동시에 `vanna.train(question=, sql=)` 호출 → 고품질 데이터만 ChromaDB 선별 축적
+  - 👍 클릭 → POST /feedback (positive) → History DB feedback 필드 갱신 + vanna.train() 호출 → ChromaDB 학습
+  - 👎 클릭 → POST /feedback (negative) → History DB feedback 필드 갱신만 (학습 제외)
 ```
 
 ### 3.2 컴포넌트 변경 범위
@@ -361,8 +370,18 @@ Slack → vanna-api /query
    - `QueryResponse` 스키마에 `chart_image_base64: Optional[str]` 필드 추가
 4. `requirements.txt` 업데이트 (`httpx`, `sqlglot`, `matplotlib`)
 5. `terraform/11-k8s-apps.tf` 업데이트
-6. `slack-bot/app.py` Redash 링크 블록 추가
-7. ChromaDB 초기 학습 데이터 추가 (비즈니스 용어, Athena 규칙, 정책 데이터)
+6. `slack-bot/app.py` 수정 (현재 MVP 코드 기준 필수 수정 사항)
+   - **[NFR-06] timeout 60초 → 310초 이상 상향**: 현재 `requests.post(..., timeout=60)` 설정은 Redash 폴링 최대 300초를 수용하지 못해 정상 쿼리도 중간에 끊김. 반드시 수정
+   - **[FR-08b] 차트 이미지 전달**: `QueryResponse.chart_image_base64` 수신 후 Base64 디코딩 → Slack `files.upload_v2` API 호출로 인라인 이미지 전달
+   - **[FR-08] Redash 링크 Block Kit 블록 추가**: `QueryResponse.redash_url` 수신 후 Slack Section Block으로 링크 노출
+   - **[FR-09] 구조화된 에러 응답 파싱**: 현재 `status_code`만 찍는 방식에서 `error_code` + `message` 필드를 파싱해 Slack에 의미 있는 오류 안내로 교체
+   - **[SEC-07] 예외 메시지 직접 노출 금지**: 현재 `say(f"... {e}")` 패턴이 내부 IP·스택 트레이스를 Slack 채널에 노출. 일반화된 안내 메시지로 교체 (§5 즉시 수정 사항)
+   - **[SEC-17] X-Internal-Token 헤더 추가**: vanna-api 호출 시 `X-Internal-Token` 헤더 포함
+   - **[FR-21] 👍/👎 피드백 버튼 Block Kit 추가 및 Interaction 콜백 처리**: 정상 응답 하단에 피드백 버튼 블록 추가, 버튼 클릭 시 `POST /feedback` 호출
+7. ChromaDB 초기 학습 데이터 시딩 (FR-13a, FR-14a, FR-15a)
+   - 비즈니스 용어: CTR, ROAS, CVR 등 광고 도메인 표준 용어
+   - Athena 특화 규칙: 파티션 조건, 날짜 함수, SELECT 전용 정책
+   - 정책 데이터: 코드값 매핑, 테이블 선택 기준, 계산식
 
 ### Phase 2 (RAG 품질 강화)
 
@@ -680,7 +699,7 @@ tests/
 | T4 | 의존성 업데이트                              | `requirements.txt`                        | NFR-04                              | 0.5일     | 없음   |
 | T5 | Terraform 환경 변수 설정                     | `infrastructure/terraform/11-k8s-apps.tf` | SEC-01                              | 1일       | 없음   |
 | T6 | Slack Bot Redash 링크 블록                   | `services/slack-bot/app.py`               | FR-08                               | 1일       | T2     |
-| T7 | ChromaDB 초기 학습 데이터 시딩               | 학습 스크립트 (신규)                        | FR-13, FR-14, FR-15                 | 1.5일     | 없음   |
+| T7 | ChromaDB 초기 학습 데이터 시딩               | 학습 스크립트 (신규)                        | FR-13a, FR-14a, FR-15a              | 1.5일     | 없음   |
 
 ### 12.2 Phase 1 일정 (총 11일, 약 2.5주)
 
