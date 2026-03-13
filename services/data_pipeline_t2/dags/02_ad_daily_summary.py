@@ -74,7 +74,11 @@ with DAG(
     dag_id="02_ad_daily_summary",
     default_args=default_args,
     description="etl_summary_t2의 DailyETL을 호출하여 daily summary 생성",
+<<<<<<< HEAD
     schedule="0 2 * * *",  # 매일 02:00
+=======
+    schedule="0 1 * * *",  # 매일 01:00
+>>>>>>> 5ba5ed0 (Feat : airflow ETL 테스트중)
     start_date=pendulum.datetime(2026, 2, 13, tz=pendulum.timezone("Asia/Seoul")),
     catchup=False,
     max_active_runs=1,
