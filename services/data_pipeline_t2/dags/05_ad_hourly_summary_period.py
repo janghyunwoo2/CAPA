@@ -33,7 +33,7 @@ default_args = {
     "depends_on_past": False,
     "retries": 2,
     "retry_delay": timedelta(minutes=5),
-    "execution_timeout": timedelta(minutes=30),
+    "execution_timeout": timedelta(hours=4),  # S3 업로드 지연 고려하여 4시간으로 증가
 }
 
 ETL_RUNNER_SCRIPT = textwrap.dedent("""

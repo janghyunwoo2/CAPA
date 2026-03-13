@@ -43,9 +43,32 @@ def run_hourly_etl(**context):
     data_interval_start를 기반으로 target_hour 설정
     """
     try:
-        dt = context["data_interval_start"]
-        print(f"[INFO] Running HourlyETL for {dt}")
-        etl = HourlyETL(target_hour=dt)
+        # Airflow context 디버깅
+        print("[DEBUG] Airflow Context Info:")
+        print(f"  - logical_date: {context.get('logical_date')}")
+        print(f"  - data_interval_start: {context.get('data_interval_start')}")
+        print(f"  - data_interval_end: {context.get('data_interval_end')}")
+        print(f"  - execution_date: {context.get('execution_date')}")
+        print(f"  - ds: {context.get('ds')}")
+        print(f"  - ts: {context.get('ts')}")
+        
+        # data_interval_start가 처리해야 할 시간의 시작점
+        # 예: 12:10 실행 → data_interval_start는 11:00이어야 함
+        # 하지만 schedule이 정각이 아닌 10분으로 변경되면서 data_interval_start가 현재 시간으로 설정됨
+        # 따라서 1시간을 빼서 이전 시간 데이터를 처리하도록 수정
+        dt_utc = context["data_interval_start"]
+        dt_kst = pendulum.instance(dt_utc).in_timezone('Asia/Seoul')
+        
+        # 실제 처리할 시간: data_interval_start - 1시간
+        target_hour_kst = dt_kst.subtract(hours=1)
+        
+        print(f"\n[INFO] DAG Schedule Info:")
+        print(f"  - data_interval_start (KST): {dt_kst.format('YYYY-MM-DD HH:00')}")
+        print(f"  - Target hour for processing: {target_hour_kst.format('YYYY-MM-DD HH:00')} (previous hour)")
+        print(f"  - Data interval (UTC): {dt_utc} ~ {context['data_interval_end']}")
+        print(f"  - Data interval (KST): {dt_kst} ~ {pendulum.instance(context['data_interval_end']).in_timezone('Asia/Seoul')}")
+        
+        etl = HourlyETL(target_hour=target_hour_kst)
         etl.run()
         print(f"[SUCCESS] HourlyETL completed successfully")
     except Exception as e:
@@ -70,8 +93,8 @@ with DAG(
     dag_id="01_ad_hourly_summary",
     default_args=default_args,
     description="etl_summary_t2의 HourlyETL을 호출하여 hourly summary 생성",
-    schedule="0 * * * *",  # 매 정각
-    start_date=pendulum.datetime(2026, 2, 13, tz=pendulum.timezone("Asia/Seoul")),
+    schedule="10 * * * *",  # 매시간 10분
+    start_date=pendulum.datetime(2026, 2, 13, tz="UTC"),  # UTC로 변경
     catchup=False,
     max_active_runs=1,
     tags=["capa", "hourly", "ad", "etl"],

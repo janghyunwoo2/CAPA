@@ -46,9 +46,17 @@ def run_daily_etl(**context):
     data_interval_start를 기반으로 target_date 설정
     """
     try:
-        dt = context["data_interval_start"]
-        print(f"[INFO] Running DailyETL for {dt}")
-        etl = DailyETL(target_date=dt)
+        # UTC to KST 변환
+        dt_utc = context["data_interval_start"]
+        dt_kst = pendulum.instance(dt_utc).in_timezone('Asia/Seoul')
+        
+        # 전일 날짜로 변경 (완전한 24시간 데이터를 처리하기 위함)
+        target_date = dt_kst.subtract(days=1)
+        print(f"[INFO] UTC time: {dt_utc}, KST time: {dt_kst}")
+        print(f"[INFO] Processing previous day: {target_date}")
+        print(f"[INFO] Running DailyETL for {target_date}")
+        
+        etl = DailyETL(target_date=target_date)
         etl.run()
         print(f"[SUCCESS] DailyETL completed successfully")
     except Exception as e:
@@ -66,7 +74,7 @@ with DAG(
     dag_id="02_ad_daily_summary",
     default_args=default_args,
     description="etl_summary_t2의 DailyETL을 호출하여 daily summary 생성",
-    schedule="0 1 * * *",  # 매일 01:00
+    schedule="0 2 * * *",  # 매일 02:00
     start_date=pendulum.datetime(2026, 2, 13, tz=pendulum.timezone("Asia/Seoul")),
     catchup=False,
     max_active_runs=1,
