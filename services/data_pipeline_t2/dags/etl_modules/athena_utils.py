@@ -44,7 +44,8 @@ class AthenaQueryExecutor:
                 response = self.client.start_query_execution(
                     QueryString=query,
                     QueryExecutionContext={'Database': database},
-                    ResultConfiguration={'OutputLocation': ATHENA_TEMP_RESULTS_PATH}
+                    ResultConfiguration={'OutputLocation': ATHENA_TEMP_RESULTS_PATH},
+                    WorkGroup='primary'  # primary 워크그룹 사용 (테라폼 워크그룹 설정 무시)
                 )
                 
                 query_id = response['QueryExecutionId']
