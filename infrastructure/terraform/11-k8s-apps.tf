@@ -31,6 +31,12 @@ resource "aws_ecr_repository" "report_generator" {
   lifecycle {
     prevent_destroy = false
   }
+
+  tags = {
+    Project     = "CAPA"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
 }
 
 output "report_generator_repository_url" {
@@ -62,6 +68,12 @@ resource "aws_iam_role" "report_generator" {
       }
     ]
   })
+
+  tags = {
+    Project     = "CAPA"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
 }
 
 # Report Generator IAM Policy (S3, Athena, CloudWatch)
@@ -346,6 +358,12 @@ resource "aws_ecr_repository" "vanna_api" {
   lifecycle {
     prevent_destroy = false
   }
+
+  tags = {
+    Project     = "CAPA"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
 }
 
 output "vanna_api_repository_url" {
@@ -377,6 +395,12 @@ resource "aws_iam_role" "vanna" {
       }
     ]
   })
+
+  tags = {
+    Project     = "CAPA"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
 }
 
 # Vanna AI IAM Policy (Athena, S3, Glue)
@@ -633,15 +657,28 @@ resource "kubernetes_deployment" "vanna_api" {
             }
           }
 
-          # 리소스 제한
+          # Redash 외부 접근 URL (차트 링크 생성용, Minor 6)
+          env {
+            name  = "REDASH_PUBLIC_URL"
+            value = var.redash_public_url
+          }
+
+          # 히스토리 저장 경로 (history_recorder.py)
+          # NFR-07: emptyDir 마운트 — Pod 재시작 시 이력 소실. 운영환경은 EFS PVC로 교체 필요
+          volume_mount {
+            name       = "data"
+            mount_path = "/data"
+          }
+
+          # 리소스 제한 (NFR-07: LLM 추론 메모리 1.5Gi 확보)
           resources {
             requests = {
               cpu    = "200m"
-              memory = "512Mi"
+              memory = "768Mi"
             }
             limits = {
               cpu    = "400m"
-              memory = "768Mi"
+              memory = "1.5Gi"
             }
           }
 
@@ -667,6 +704,12 @@ resource "kubernetes_deployment" "vanna_api" {
             timeout_seconds       = 10
             failure_threshold     = 3
           }
+        }
+
+        # /data emptyDir 볼륨 (NFR-07: 히스토리 저장. 운영환경은 EFS PVC로 교체 필요)
+        volume {
+          name = "data"
+          empty_dir {}
         }
 
         # 노드별 균등 배분 설정
@@ -721,6 +764,12 @@ resource "aws_ecr_repository" "slack_bot" {
 
   lifecycle {
     prevent_destroy = false
+  }
+
+  tags = {
+    Project     = "CAPA"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
   }
 }
 

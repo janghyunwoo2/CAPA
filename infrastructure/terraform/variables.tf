@@ -111,3 +111,21 @@ variable "internal_api_token" {
   default     = ""
 }
 
+# ------------------------------------------------------------------------------
+# Kubernetes Deployment Image Tag
+# ------------------------------------------------------------------------------
+variable "image_tag" {
+  description = "ECR 이미지 태그 (CI/CD 파이프라인에서 주입, 예: git SHA 또는 semver)"
+  type        = string
+  default     = "latest"
+}
+
+# ------------------------------------------------------------------------------
+# Redash Public URL
+# ------------------------------------------------------------------------------
+variable "redash_public_url" {
+  description = "Redash 외부 접근 URL (vanna-api가 차트 링크 생성 시 사용)"
+  type        = string
+  default     = ""
+}
+

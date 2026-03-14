@@ -144,56 +144,76 @@ COMMENT '광고 성과 일일 요약 (노출+클릭+전환 데이터)'
 DOCUMENTATION_BUSINESS_METRICS = """
 # 비즈니스 지표 (Business Metrics)
 
-## CTR (Click-Through Rate)
-- 정의: (클릭 수) / (노출 수)
-- 의미: 사용자가 광고를 본 후 클릭할 확률
-- 계산식: COUNT(is_click=true) / COUNT(*)
+## CTR (Click-Through Rate) — 퍼센트(%) 단위
+- 정의: (클릭 수) / (노출 수) * 100
+- 의미: 사용자가 광고를 본 후 클릭할 확률 (%)
+- Athena 계산식: ROUND(SUM(CAST(is_click AS INT)) * 100.0 / COUNT(*), 2) AS ctr_percent
+- 예시값: 2.35 (2.35%)
 
-## CVR (Conversion Rate)
-- 정의: (전환 수) / (클릭 수)
-- 의미: 클릭한 사용자 중 실제 전환까지 이르는 확률
-- 계산식: COUNT(is_conversion=true) / COUNT(is_click=true)
+## CVR (Conversion Rate) — 퍼센트(%) 단위
+- 정의: (전환 수) / (클릭 수) * 100
+- 의미: 클릭한 사용자 중 실제 전환까지 이르는 확률 (%)
+- Athena 계산식: ROUND(SUM(CAST(is_conversion AS INT)) * 100.0 / NULLIF(SUM(CAST(is_click AS INT)), 0), 2) AS cvr_percent
 - 주의: ad_combined_log_summary 테이블 필수 (conversion 데이터가 여기에만 있음)
+- NULLIF(분모, 0) 으로 클릭이 0인 경우 NULL 처리 필수
 
-## ROAS (Return On Ad Spend)
-- 정의: (전환 매출액) / (광고비 총액)
-- 의미: 1원의 광고비로 얼마의 매출을 얻었는가
-- 계산식: SUM(conversion_value) / (SUM(cost_per_impression) + SUM(cost_per_click))
+## ROAS (Return On Ad Spend) — 퍼센트(%) 단위
+- 정의: (전환 매출액) / (광고비 총액) * 100
+- 의미: 광고비 100원당 얼마의 매출을 얻었는가 (%)
+- 광고비 = cost_per_impression + cost_per_click
+- Athena 계산식: ROUND(SUM(conversion_value) / NULLIF(SUM(cost_per_impression + cost_per_click), 0) * 100, 2) AS roas_percent
+- 예시값: 250.0 (광고비 대비 250% 매출, 즉 2.5배 ROAS)
+- 주의: ad_combined_log_summary 테이블 필수 (conversion_value가 여기에만 있음)
 
 ## CPA (Cost Per Acquisition)
 - 정의: (광고비 총액) / (전환 수)
 - 의미: 하나의 전환을 얻기 위한 평균 광고비
-- 계산식: (SUM(cost_per_impression) + SUM(cost_per_click)) / COUNT(is_conversion=true)
+- Athena 계산식: ROUND(SUM(cost_per_impression + cost_per_click) / NULLIF(SUM(CAST(is_conversion AS INT)), 0), 2) AS cpa
 
 ## CPC (Cost Per Click)
 - 정의: (광고비 총액) / (클릭 수)
 - 의미: 하나의 클릭을 얻기 위한 평균 광고비
-- 계산식: SUM(cost_per_click) / COUNT(is_click=true)
+- Athena 계산식: ROUND(SUM(cost_per_click) / NULLIF(SUM(CAST(is_click AS INT)), 0), 2) AS cpc
 """
 
 DOCUMENTATION_ATHENA_RULES = """
 # Athena 쿼리 규칙 (Athena Query Rules)
+# Athena는 Presto/Trino SQL 방언을 사용합니다.
 
-## 파티션 조건
+## 파티션 조건 (필수 — 누락 시 풀스캔으로 비용 급증)
 - ad_combined_log 테이블: year, month, day, hour 파티션 필수
-  WHERE year='2026' AND month='03' AND day='14' AND hour='09'
+  단일 시점: WHERE year='2026' AND month='03' AND day='14' AND hour='09'
+  범위 조건: WHERE year='2026' AND month='03' AND day >= '08' AND day <= '14'
 - ad_combined_log_summary 테이블: year, month, day 파티션 필수
-  WHERE year='2026' AND month='03' AND day='14'
+  단일 날짜: WHERE year='2026' AND month='03' AND day='14'
+  범위 조건: WHERE year='2026' AND month='03' AND day BETWEEN '08' AND '14'
+- 항상 파티션 컬럼(year/month/day)을 WHERE 절 맨 앞에 위치
 
-## 날짜/시간 함수
-- UNIX 타임스탐프 변환: from_unixtime(impression_timestamp)
+## Presto SQL 방언 — 날짜/시간 함수
+- UNIX 타임스탐프 → TIMESTAMP: from_unixtime(impression_timestamp)
 - 날짜 추출: date(from_unixtime(impression_timestamp))
-- 시간 추출: hour(from_unixtime(impression_timestamp))
+- 시간대 추출: hour(from_unixtime(impression_timestamp))
+- 주 시작일 truncate: date_trunc('week', date(from_unixtime(impression_timestamp)))
+- 월 시작일 truncate: date_trunc('month', date(from_unixtime(impression_timestamp)))
+- 날짜 차이(일): date_diff('day', date('2026-03-01'), date('2026-03-14'))
+- 현재 날짜: current_date  (주의: Athena에서는 NOW() 대신 current_date 사용)
+- 날짜 포맷: date_format(from_unixtime(impression_timestamp), '%Y-%m-%d')
+
+## Presto SQL 방언 — 타입 캐스팅
+- BOOLEAN → INT: CAST(is_click AS INT)  (true=1, false=0)
+- STRING → BIGINT: CAST(year AS BIGINT)
+- NULL 안전 나눗셈: NULLIF(분모, 0) 사용 (0으로 나누기 방지)
 
 ## 제한사항
-- SELECT 전용 쿼리만 허용 (INSERT, UPDATE, DELETE 금지)
+- SELECT 전용 쿼리만 허용 (INSERT, UPDATE, DELETE, DROP 금지)
 - LIMIT 절은 반드시 최대 10,000 이하로 지정
-- 스캔 크기 제한: 최대 100GB
+- 스캔 크기 제한: 최대 1GB (Athena Workgroup 강제 설정)
 
 ## 비용 절감
-- 파티션 조건으로 스캔 범위 제한
+- 파티션 조건으로 스캔 범위 반드시 제한
 - 필요한 컬럼만 SELECT (SELECT * 지양)
-- 집계 쿼리는 GROUP BY 사용하여 중복 제거
+- 집계 쿼리는 GROUP BY 사용
+- 서브쿼리보다 WITH(CTE) 구문 선호
 """
 
 DOCUMENTATION_POLICY = """

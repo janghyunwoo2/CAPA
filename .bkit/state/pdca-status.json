@@ -1,6 +1,6 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-03-14T07:43:17.605Z",
+  "lastUpdated": "2026-03-14T08:19:16.630Z",
   "activeFeatures": [
     "pipeline",
     "middleware",
@@ -46,9 +46,9 @@
       "documents": {},
       "timestamps": {
         "started": "2026-03-14T07:26:30.305Z",
-        "lastUpdated": "2026-03-14T07:36:34.300Z"
+        "lastUpdated": "2026-03-14T08:19:16.630Z"
       },
-      "lastFile": "C:/Users/3571/Desktop/projects/CAPA/services/vanna-api/src/query_pipeline.py"
+      "lastFile": "C:/Users/3571/Desktop/projects/CAPA/services/vanna-api/scripts/seed_chromadb.py"
     },
     "scripts": {
       "phase": "do",
@@ -98,7 +98,7 @@
   "session": {
     "startedAt": "2026-03-11T00:00:00.000Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-03-14T07:43:17.605Z"
+    "lastActivity": "2026-03-14T08:19:16.630Z"
   },
   "history": [
     {
@@ -380,6 +380,18 @@
     {
       "timestamp": "2026-03-14T07:43:17.605Z",
       "feature": "CAPA",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T08:18:55.189Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T08:19:16.630Z",
+      "feature": "vanna-api",
       "phase": "do",
       "action": "updated"
     }
