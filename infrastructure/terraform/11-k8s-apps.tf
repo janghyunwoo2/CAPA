@@ -448,7 +448,7 @@ resource "kubernetes_service_account" "vanna_sa" {
   }
 }
 
-# Secret (Anthropic API Key)
+# Secret (Anthropic API Key, Redash API Key, Internal API Token)
 resource "kubernetes_secret" "vanna_secrets" {
   metadata {
     name      = "vanna-secrets"
@@ -456,7 +456,9 @@ resource "kubernetes_secret" "vanna_secrets" {
   }
 
   data = {
-    anthropic-api-key = var.anthropic_api_key
+    anthropic-api-key  = var.anthropic_api_key
+    redash-api-key     = var.redash_api_key
+    internal-api-token = var.internal_api_token
   }
 
   type = "Opaque"
@@ -577,6 +579,60 @@ resource "kubernetes_deployment" "vanna_api" {
             value = "INFO"
           }
 
+          # Redash 연동 ENV (Text-to-SQL)
+          env {
+            name  = "REDASH_BASE_URL"
+            value = "http://redash.redash.svc.cluster.local:5000"
+          }
+          env {
+            name = "REDASH_API_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.vanna_secrets.metadata[0].name
+                key  = "redash-api-key"
+              }
+            }
+          }
+          env {
+            name  = "REDASH_DATA_SOURCE_ID"
+            value = "1"
+          }
+          env {
+            name  = "REDASH_ENABLED"
+            value = "true"
+          }
+          env {
+            name  = "REDASH_QUERY_TIMEOUT_SEC"
+            value = "300"
+          }
+          env {
+            name  = "REDASH_POLL_INTERVAL_SEC"
+            value = "3"
+          }
+
+          # Athena Workgroup (Text-to-SQL 전용, 1GB 스캔 제한)
+          env {
+            name  = "ATHENA_WORKGROUP"
+            value = aws_athena_workgroup.text2sql.name
+          }
+
+          # Matplotlib headless 모드 (차트 생성용)
+          env {
+            name  = "MPLBACKEND"
+            value = "Agg"
+          }
+
+          # 내부 서비스 인증 토큰 (SEC-17)
+          env {
+            name = "INTERNAL_API_TOKEN"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.vanna_secrets.metadata[0].name
+                key  = "internal-api-token"
+              }
+            }
+          }
+
           # 리소스 제한
           resources {
             requests = {
@@ -684,8 +740,9 @@ resource "kubernetes_secret" "slack_bot_secrets" {
   }
 
   data = {
-    slack-bot-token = var.slack_bot_token
-    slack-app-token = var.slack_app_token
+    slack-bot-token    = var.slack_bot_token
+    slack-app-token    = var.slack_app_token
+    internal-api-token = var.internal_api_token
   }
 
   type = "Opaque"
@@ -791,6 +848,21 @@ resource "kubernetes_deployment" "slack_bot" {
             name  = "REPORT_API_URL"
             value = "http://report-generator.report.svc.cluster.local:8000"
           }
+          env {
+            name  = "VANNA_API_URL"
+            value = "http://vanna-api.vanna.svc.cluster.local:8000"
+          }
+
+          # 내부 서비스 인증 토큰 (SEC-17, vanna-api 호출용)
+          env {
+            name = "INTERNAL_API_TOKEN"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.slack_bot_secrets.metadata[0].name
+                key  = "internal-api-token"
+              }
+            }
+          }
 
           # 리소스 제한
           resources {
@@ -830,6 +902,34 @@ resource "kubernetes_deployment" "slack_bot" {
   }
 
   depends_on = [kubernetes_service.slack_bot, kubernetes_secret.slack_bot_secrets]
+}
+
+# =====================================================================================================================
+# Athena Workgroup (Text-to-SQL 전용)
+# 1GB 스캔 제한으로 비용 안전장치 확보 (Design §5.3)
+# =====================================================================================================================
+
+resource "aws_athena_workgroup" "text2sql" {
+  name = "capa-text2sql-wg"
+
+  configuration {
+    enforce_workgroup_configuration = true
+    bytes_scanned_cutoff_per_query  = 1073741824 # 1 GB
+
+    result_configuration {
+      output_location = "s3://${aws_s3_bucket.data_lake.bucket}/athena-results/text2sql/"
+
+      encryption_configuration {
+        encryption_option = "SSE_S3"
+      }
+    }
+  }
+
+  tags = {
+    Project     = "CAPA"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
 }
 
 # =====================================================================================================================

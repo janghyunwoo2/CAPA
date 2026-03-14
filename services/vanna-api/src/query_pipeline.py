@@ -1,0 +1,302 @@
+"""
+QueryPipeline — 11-Step 파이프라인 오케스트레이터
+설계 문서 §2.3 기준 (T1)
+
+Step 1.  IntentClassifier    → SQL_QUERY / GENERAL / OUT_OF_SCOPE
+Step 2.  QuestionRefiner     → 정제된 질문
+Step 3.  KeywordExtractor    → 도메인 키워드 리스트
+Step 4.  RAGRetriever        → 스키마 + Few-shot + 문서
+Step 5.  SQLGenerator        → Vanna + Claude SQL 생성
+Step 6.  SQLValidator        → EXPLAIN 검증 + sqlglot AST
+Step 7.  RedashQueryCreator  → Redash query_id 획득
+Step 8.  RedashExecutor      → 실행 + 폴링 대기
+Step 9.  ResultCollector     → rows/columns 수집
+Step 10. AIAnalyzer          → 인사이트 + 차트 유형 결정
+Step 10.5 ChartRenderer      → matplotlib PNG → Base64
+Step 11. HistoryRecorder     → 질문-SQL-결과 이력 저장
+"""
+
+import logging
+import os
+import uuid
+from datetime import datetime
+from typing import Any, Optional
+
+import boto3
+
+from .models.domain import IntentType, PipelineContext, PipelineError
+from .models.redash import RedashConfig
+from .pipeline.intent_classifier import IntentClassifier
+from .pipeline.question_refiner import QuestionRefiner
+from .pipeline.keyword_extractor import KeywordExtractor
+from .pipeline.rag_retriever import RAGRetriever
+from .pipeline.sql_generator import SQLGenerator, SQLGenerationError
+from .pipeline.sql_validator import SQLValidator
+from .pipeline.ai_analyzer import AIAnalyzer
+from .pipeline.chart_renderer import ChartRenderer
+from .redash_client import (
+    RedashClient,
+    RedashAPIError,
+    RedashTimeoutError,
+    run_athena_fallback,
+)
+from .history_recorder import HistoryRecorder
+
+logger = logging.getLogger(__name__)
+
+
+class QueryPipeline:
+    """11-Step Text-to-SQL 파이프라인 오케스트레이터"""
+
+    def __init__(
+        self,
+        vanna_instance: Any,
+        anthropic_api_key: str,
+        athena_client: Any,
+        database: str,
+        workgroup: str,
+        s3_staging_dir: str,
+        redash_config: Optional[RedashConfig] = None,
+        history_recorder: Optional[HistoryRecorder] = None,
+        llm_model: str = "claude-haiku-4-5-20251001",
+    ) -> None:
+        self._vanna = vanna_instance
+        self._api_key = anthropic_api_key
+        self._athena = athena_client
+        self._database = database
+        self._workgroup = workgroup
+        self._s3_staging_dir = s3_staging_dir
+        self._redash_config = redash_config
+        self._recorder = history_recorder or HistoryRecorder()
+        self._model = llm_model
+
+        # 컴포넌트 초기화
+        self._intent_classifier = IntentClassifier(api_key=anthropic_api_key, model=llm_model)
+        self._question_refiner = QuestionRefiner(api_key=anthropic_api_key, model=llm_model)
+        self._keyword_extractor = KeywordExtractor(api_key=anthropic_api_key, model=llm_model)
+        self._rag_retriever = RAGRetriever(vanna_instance=vanna_instance)
+        self._sql_generator = SQLGenerator(vanna_instance=vanna_instance)
+        self._sql_validator = SQLValidator(
+            athena_client=athena_client,
+            database=database,
+            workgroup=workgroup,
+            s3_staging_dir=s3_staging_dir,
+        )
+        self._ai_analyzer = AIAnalyzer(api_key=anthropic_api_key, model=llm_model)
+        self._chart_renderer = ChartRenderer()
+
+    async def run(
+        self,
+        question: str,
+        slack_user_id: str = "",
+        slack_channel_id: str = "",
+    ) -> PipelineContext:
+        """파이프라인을 실행하고 PipelineContext를 반환.
+        어느 단계에서 실패해도 ctx.error에 실패 정보를 담아 반환 (FR-09).
+        """
+        ctx = PipelineContext(
+            original_question=question,
+            slack_user_id=slack_user_id,
+            slack_channel_id=slack_channel_id,
+        )
+
+        # Step 1: 의도 분류
+        ctx.intent = self._intent_classifier.classify(question)
+        logger.info(f"Step 1 의도 분류: {ctx.intent}")
+
+        if ctx.intent == IntentType.OUT_OF_SCOPE:
+            ctx.error = PipelineError(
+                failed_step=1,
+                step_name="의도 분류",
+                error_code="INTENT_OUT_OF_SCOPE",
+                error_message="광고 데이터 분석과 관련된 질문만 답변할 수 있습니다.",
+            )
+            return ctx
+
+        if ctx.intent == IntentType.GENERAL:
+            ctx.error = PipelineError(
+                failed_step=1,
+                step_name="의도 분류",
+                error_code="INTENT_GENERAL",
+                error_message="데이터 조회가 필요하지 않은 질문입니다. 직접 답변이 필요하면 다시 질문해 주세요.",
+            )
+            return ctx
+
+        # Step 2: 질문 정제
+        ctx.refined_question = self._question_refiner.refine(question)
+        logger.info(f"Step 2 정제된 질문: {ctx.refined_question}")
+
+        # Step 3: 키워드 추출
+        ctx.keywords = self._keyword_extractor.extract(ctx.refined_question)
+        logger.info(f"Step 3 키워드: {ctx.keywords}")
+
+        # Step 4: RAG 검색
+        ctx.rag_context = self._rag_retriever.retrieve(
+            question=ctx.refined_question,
+            keywords=ctx.keywords,
+        )
+
+        # Step 5: SQL 생성
+        try:
+            ctx.generated_sql = self._sql_generator.generate(
+                question=ctx.refined_question,
+                rag_context=ctx.rag_context,
+            )
+        except SQLGenerationError as e:
+            logger.error(f"Step 5 SQL 생성 실패: {e}")
+            ctx.error = PipelineError(
+                failed_step=5,
+                step_name="SQL 생성",
+                error_code="SQL_GENERATION_FAILED",
+                error_message="SQL을 생성할 수 없습니다. 질문을 다시 표현해 주세요.",
+            )
+            return ctx
+
+        # Step 6: SQL 검증
+        ctx.validation_result = self._sql_validator.validate(ctx.generated_sql)
+        if not ctx.validation_result.is_valid:
+            logger.warning(f"Step 6 SQL 검증 실패: {ctx.validation_result.error_message}")
+            ctx.error = PipelineError(
+                failed_step=6,
+                step_name="SQL 검증",
+                error_code="SQL_VALIDATION_FAILED",
+                error_message=ctx.validation_result.error_message or "SQL 검증에 실패했습니다.",
+                generated_sql=ctx.generated_sql,
+            )
+            return ctx
+
+        validated_sql = ctx.validation_result.normalized_sql or ctx.generated_sql
+
+        # Step 7~9: Redash 실행 또는 Athena 폴백
+        redash_enabled = (
+            self._redash_config is not None
+            and self._redash_config.enabled
+            and os.getenv("REDASH_ENABLED", "true").lower() == "true"
+        )
+
+        if redash_enabled and self._redash_config:
+            ctx = await self._run_redash_steps(ctx, validated_sql)
+        else:
+            ctx = await self._run_athena_fallback(ctx, validated_sql)
+
+        if ctx.error:
+            return ctx
+
+        # Step 10: AI 분석
+        if ctx.query_results:
+            ctx.analysis = self._ai_analyzer.analyze(
+                question=ctx.refined_question or question,
+                sql=validated_sql,
+                query_results=ctx.query_results,
+            )
+
+            # Step 10.5: 차트 렌더링
+            if ctx.analysis and ctx.analysis.chart_type.value != "none":
+                ctx.chart_base64 = self._chart_renderer.render(
+                    query_results=ctx.query_results,
+                    chart_type=ctx.analysis.chart_type,
+                )
+
+        # Step 11: 이력 저장
+        try:
+            ctx.history_id = self._recorder.record(ctx)
+        except Exception as e:
+            logger.error(f"Step 11 이력 저장 실패 (사용자 영향 없음): {e}")
+
+        elapsed = (datetime.utcnow() - ctx.started_at).total_seconds()
+        logger.info(f"파이프라인 완료: {elapsed:.2f}초")
+        return ctx
+
+    async def _run_redash_steps(
+        self, ctx: PipelineContext, sql: str
+    ) -> PipelineContext:
+        """Step 7~9: Redash 경유 실행"""
+        redash = RedashClient(config=self._redash_config)  # type: ignore[arg-type]
+
+        # Step 7: Redash 쿼리 생성
+        try:
+            query_name = f"CAPA: {ctx.refined_question or ctx.original_question} [{datetime.utcnow().strftime('%Y-%m-%d %H:%M')}]"
+            ctx.redash_query_id = await redash.create_query(sql=sql, name=query_name)
+            ctx.redash_url = redash.build_public_url(ctx.redash_query_id)
+        except RedashAPIError as e:
+            logger.error(f"Step 7 Redash 쿼리 생성 실패: {e}")
+            ctx.error = PipelineError(
+                failed_step=7,
+                step_name="Redash 쿼리 생성",
+                error_code="REDASH_ERROR",
+                error_message="Redash에 쿼리를 저장하는 중 오류가 발생했습니다.",
+                generated_sql=sql,
+            )
+            return ctx
+
+        # Step 8: Redash 실행 + 폴링
+        try:
+            job_id = await redash.execute_query(ctx.redash_query_id)
+            ctx.redash_job_id = job_id
+            ctx.redash_query_result_id = await redash.poll_job(job_id)
+        except RedashTimeoutError:
+            ctx.error = PipelineError(
+                failed_step=8,
+                step_name="Redash 실행",
+                error_code="QUERY_TIMEOUT",
+                error_message="쿼리 실행 시간이 초과되었습니다 (300초). 조회 범위를 좁혀 다시 시도해 주세요.",
+                generated_sql=sql,
+            )
+            return ctx
+        except RedashAPIError as e:
+            logger.error(f"Step 8 Redash 실행 실패: {e}")
+            ctx.error = PipelineError(
+                failed_step=8,
+                step_name="Redash 실행",
+                error_code="REDASH_ERROR",
+                error_message="Redash 쿼리 실행 중 오류가 발생했습니다.",
+                generated_sql=sql,
+            )
+            return ctx
+
+        # Step 9: 결과 수집
+        try:
+            ctx.query_results = await redash.get_results(ctx.redash_query_id)
+        except RedashAPIError as e:
+            logger.error(f"Step 9 결과 수집 실패: {e}")
+            ctx.error = PipelineError(
+                failed_step=9,
+                step_name="결과 수집",
+                error_code="REDASH_ERROR",
+                error_message="쿼리 결과를 가져오는 중 오류가 발생했습니다.",
+                generated_sql=sql,
+            )
+
+        return ctx
+
+    async def _run_athena_fallback(
+        self, ctx: PipelineContext, sql: str
+    ) -> PipelineContext:
+        """Step 9 폴백: Athena 직접 실행 (REDASH_ENABLED=false)"""
+        try:
+            ctx.query_results = await run_athena_fallback(
+                sql=sql,
+                athena_client=self._athena,
+                database=self._database,
+                s3_staging_dir=self._s3_staging_dir,
+                workgroup=self._workgroup,
+            )
+        except RedashTimeoutError:
+            ctx.error = PipelineError(
+                failed_step=9,
+                step_name="Athena 직접 실행",
+                error_code="QUERY_TIMEOUT",
+                error_message="쿼리 실행 시간이 초과되었습니다. 조회 범위를 좁혀 다시 시도해 주세요.",
+                generated_sql=sql,
+            )
+        except RedashAPIError as e:
+            logger.error(f"Step 9 Athena 폴백 실패: {e}")
+            ctx.error = PipelineError(
+                failed_step=9,
+                step_name="Athena 직접 실행",
+                error_code="ATHENA_EXECUTION_FAILED",
+                error_message="데이터 조회 중 오류가 발생했습니다.",
+                generated_sql=sql,
+            )
+
+        return ctx

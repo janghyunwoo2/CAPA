@@ -1,9 +1,95 @@
 {
   "version": "2.0",
-  "lastUpdated": "2026-03-11T00:00:00.000Z",
-  "activeFeatures": [],
-  "primaryFeature": null,
-  "features": {},
+  "lastUpdated": "2026-03-14T07:43:17.605Z",
+  "activeFeatures": [
+    "pipeline",
+    "middleware",
+    "vanna-api",
+    "scripts",
+    "security",
+    "CAPA"
+  ],
+  "primaryFeature": "pipeline",
+  "features": {
+    "pipeline": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-14T07:26:03.891Z",
+        "lastUpdated": "2026-03-14T07:35:19.145Z"
+      },
+      "lastFile": "C:\\Users\\3571\\Desktop\\projects\\CAPA\\services\\vanna-api\\src\\pipeline\\input_validator.py"
+    },
+    "middleware": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-14T07:26:04.379Z",
+        "lastUpdated": "2026-03-14T07:35:23.754Z"
+      },
+      "lastFile": "C:\\Users\\3571\\Desktop\\projects\\CAPA\\services\\vanna-api\\src\\middleware\\auth.py"
+    },
+    "vanna-api": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-14T07:26:30.305Z",
+        "lastUpdated": "2026-03-14T07:36:34.300Z"
+      },
+      "lastFile": "C:/Users/3571/Desktop/projects/CAPA/services/vanna-api/src/query_pipeline.py"
+    },
+    "scripts": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-14T07:26:31.043Z",
+        "lastUpdated": "2026-03-14T07:31:48.701Z"
+      },
+      "lastFile": "C:\\Users\\3571\\Desktop\\projects\\CAPA\\services\\vanna-api\\scripts\\seed_chromadb.py"
+    },
+    "security": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-14T07:32:58.988Z",
+        "lastUpdated": "2026-03-14T07:34:42.434Z"
+      },
+      "lastFile": "C:\\Users\\3571\\Desktop\\projects\\CAPA\\services\\vanna-api\\src\\security\\input_validator.py"
+    },
+    "CAPA": {
+      "phase": "do",
+      "phaseNumber": 3,
+      "matchRate": null,
+      "iterationCount": 0,
+      "requirements": [],
+      "documents": {},
+      "timestamps": {
+        "started": "2026-03-14T07:41:22.951Z",
+        "lastUpdated": "2026-03-14T07:43:17.605Z"
+      },
+      "lastFile": "C:/Users/3571/Desktop/projects/CAPA/_tmp_write_slack.py"
+    }
+  },
   "pipeline": {
     "currentPhase": 1,
     "level": "Enterprise",
@@ -12,7 +98,290 @@
   "session": {
     "startedAt": "2026-03-11T00:00:00.000Z",
     "onboardingCompleted": false,
-    "lastActivity": "2026-03-11T00:00:00.000Z"
+    "lastActivity": "2026-03-14T07:43:17.605Z"
   },
-  "history": []
+  "history": [
+    {
+      "timestamp": "2026-03-14T07:26:03.891Z",
+      "feature": "pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:26:04.379Z",
+      "feature": "middleware",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:26:24.977Z",
+      "feature": "pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:26:30.305Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:26:31.043Z",
+      "feature": "scripts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:27:23.512Z",
+      "feature": "pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:27:34.807Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:28:00.191Z",
+      "feature": "middleware",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:28:04.591Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:28:07.435Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:28:31.092Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:28:31.904Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:29:34.954Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:29:50.433Z",
+      "feature": "scripts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:29:54.607Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:30:04.859Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:30:05.881Z",
+      "feature": "scripts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:30:24.121Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:30:35.425Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:30:49.446Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:30:56.801Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:31:14.973Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:31:22.388Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:31:36.211Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:31:42.666Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:31:44.572Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:31:48.701Z",
+      "feature": "scripts",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:31:56.507Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:32:38.245Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:32:58.988Z",
+      "feature": "security",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:33:00.173Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:33:21.535Z",
+      "feature": "security",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:33:41.027Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:33:43.661Z",
+      "feature": "security",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:34:20.526Z",
+      "feature": "security",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:34:21.708Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:34:42.434Z",
+      "feature": "security",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:34:47.474Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:34:48.955Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:34:53.627Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:35:03.552Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:35:19.145Z",
+      "feature": "pipeline",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:35:23.754Z",
+      "feature": "middleware",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:35:49.774Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:36:34.300Z",
+      "feature": "vanna-api",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:41:22.951Z",
+      "feature": "CAPA",
+      "phase": "do",
+      "action": "updated"
+    },
+    {
+      "timestamp": "2026-03-14T07:43:17.605Z",
+      "feature": "CAPA",
+      "phase": "do",
+      "action": "updated"
+    }
+  ]
 }

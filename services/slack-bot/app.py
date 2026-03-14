@@ -1,29 +1,40 @@
-import os
+"""
+Slack Bot - CAPA Text-to-SQL 응답 개선 (T6)
+설계 문서 §2.5~§2.6 기준
+
+개선 항목:
+- HTTP timeout: 60 → 310초 (NFR-06)
+- 에러 응답: ErrorResponse 파싱 후 안내 (FR-09)
+- 예외 노출 방지: str(e) → 일반화 메시지 (SEC-07)
+- 차트 이미지: chart_image_base64 → files.upload_v2 (FR-08b)
+- Redash 링크: redash_url → Section Block (FR-08)
+- 인증 헤더: X-Internal-Token (SEC-17)
+- 피드백 버튼: 👍/👎 Block Kit + Interaction 콜백 (FR-21)
+"""
+
+import base64
 import logging
-import requests
-from slack_bolt import App
-from slack_bolt.adapter.socket_mode import SocketModeHandler
-from flask import Flask, jsonify
+import os
 import threading
 
-# 로깅 설정
+import requests
+from flask import Flask, jsonify
+from slack_bolt import App
+from slack_bolt.adapter.socket_mode import SocketModeHandler
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 환경 변수
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
 SLACK_APP_TOKEN = os.environ.get("SLACK_APP_TOKEN")
-VANNA_API_URL = os.environ.get(
-    "VANNA_API_URL", "http://vanna-api.vanna.svc.cluster.local:8000"
-)
-REPORT_API_URL = os.environ.get(
-    "REPORT_API_URL", "http://report-generator.report.svc.cluster.local:8000"
-)
+VANNA_API_URL = os.environ.get("VANNA_API_URL", "http://vanna-api.vanna.svc.cluster.local:8000")
+REPORT_API_URL = os.environ.get("REPORT_API_URL", "http://report-generator.report.svc.cluster.local:8000")
+INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "")
 
-# Slack App 초기화
+# NFR-06: Slack Bot 측 timeout 310초 이상
+VANNA_API_TIMEOUT = int(os.environ.get("VANNA_API_TIMEOUT", "310"))
+
 app = App(token=SLACK_BOT_TOKEN)
-
-# 헬스 체크용 Flask 앱
 flask_app = Flask(__name__)
 
 
@@ -36,85 +47,214 @@ def run_flask():
     flask_app.run(host="0.0.0.0", port=3000)
 
 
+def _build_internal_headers() -> dict:
+    """SEC-17: X-Internal-Token 헤더 포함"""
+    headers = {"Content-Type": "application/json"}
+    if INTERNAL_API_TOKEN:
+        headers["X-Internal-Token"] = INTERNAL_API_TOKEN
+    return headers
+
+
+def _build_success_blocks(result: dict, user: str) -> list:
+    """정상 응답 Block Kit 구조 (설계 §2.6.2)"""
+    refined_question = result.get("refined_question", "")
+    answer = result.get("answer", "")
+    sql = result.get("sql", "")
+    redash_url = result.get("redash_url")
+    history_id = result.get("query_id", "")
+
+    blocks = []
+
+    # 1. 텍스트 블록 (AI 분석)
+    header_text = f"✅ *{refined_question or '분석 결과'}*\n\n{answer}" if answer else f"✅ <@{user}> 질의가 처리되었습니다."
+    blocks.append({
+        "type": "section",
+        "text": {"type": "mrkdwn", "text": header_text},
+    })
+
+    # 2. Redash 링크 (있을 때만)
+    if redash_url:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"🔗 <{redash_url}|Redash에서 전체 결과 보기>"},
+        })
+
+    # 3. SQL 코드 블록
+    if sql:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"```{sql}```"},
+        })
+
+    # 4. 피드백 버튼 (history_id 있을 때만)
+    if history_id:
+        blocks.append({
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "👍 좋아요"},
+                    "action_id": "feedback_positive",
+                    "value": history_id,
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "👎 별로예요"},
+                    "action_id": "feedback_negative",
+                    "value": history_id,
+                },
+            ],
+        })
+
+    return blocks
+
+
 @app.event("app_mention")
-def handle_mention(event, say):
+def handle_mention(event, say, client):
     """@capa-bot 멘션 처리"""
     text = event["text"]
     user = event["user"]
-    logger.info(f"Received mention from {user}: {text}")
+    channel_id = event.get("channel", "")
+    logger.info(f"멘션 수신: user={user}, text={text[:100]}")
 
-    # 1. "리포트 생성" 명령어 확인
+    # 1. "리포트 생성" 명령어
     if "리포트 생성" in text or "report" in text.lower():
-        # 날짜 추출 (예: 2026-02-17)
         import re
-
         date_match = re.search(r"(\d{4}-\d{2}-\d{2})", text)
         target_date = date_match.group(1) if date_match else None
-
         date_str = f" ({target_date})" if target_date else " (오늘)"
-        say(
-            f"📊 <@{user}>님, {date_str} 성과 리포트 생성을 시작합니다. 잠시만 기다려주세요..."
-        )
+        say(f"📊 <@{user}>님, {date_str} 성과 리포트 생성을 시작합니다. 잠시만 기다려주세요...")
         try:
             params = {"report_type": "daily"}
             if target_date:
                 params["date"] = target_date
-
-            response = requests.post(
-                f"{REPORT_API_URL}/generate", params=params, timeout=5
-            )
-            if response.status_code == 202 or response.status_code == 200:
-                say(
-                    "✅ 리포트 생성 요청이 성공했습니다. 분석이 완료되면 이 채널로 공유해 드릴게요."
-                )
+            response = requests.post(f"{REPORT_API_URL}/generate", params=params, timeout=5)
+            if response.status_code in (200, 202):
+                say("✅ 리포트 생성 요청이 성공했습니다. 분석이 완료되면 이 채널로 공유해 드릴게요.")
             else:
-                say(f"❌ 리포트 서버 응답 오류: {response.status_code}")
+                say("❌ 리포트 서버에서 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
         except Exception as e:
-            logger.error(f"Error calling report generator: {e}")
-            say(f"⚠️ 리포트 생성 요청 중 오류가 발생했습니다: {e}")
+            logger.error(f"리포트 생성 요청 오류: {e}")
+            say("⚠️ 리포트 생성 요청 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
         return
 
-    # 2. "echo" 명령어 확인 (디버깅용 유지)
+    # 2. "echo" 명령어 (디버깅용)
     if "echo" in text.lower():
-        message_parts = text.split("echo", 1)
-        message = (
-            message_parts[1].strip()
-            if len(message_parts) > 1
-            else "Echo할 메시지가 없습니다."
-        )
-        say(f"📢 Echo: {message}")
+        parts = text.split("echo", 1)
+        msg = parts[1].strip() if len(parts) > 1 else "Echo할 메시지가 없습니다."
+        say(f"📢 Echo: {msg}")
         return
 
     # 3. 기본: Vanna AI 자연어 질의
-    say(f"🔍 <@{user}>님의 질문을 분석 중입니다: `{text}`")
+    say(f"🔍 <@{user}>님의 질문을 분석 중입니다...")
+
     try:
         response = requests.post(
-            f"{VANNA_API_URL}/query", json={"question": text}, timeout=60
+            f"{VANNA_API_URL}/query",
+            json={
+                "question": text,
+                "slack_user_id": user,
+                "slack_channel_id": channel_id,
+            },
+            headers=_build_internal_headers(),
+            timeout=VANNA_API_TIMEOUT,  # NFR-06
         )
+
         if response.status_code == 200:
             result = response.json()
-            answer = result.get("answer", "죄송합니다. 답변을 생성하지 못했습니다.")
-            say(f"🤖 **AI 분석 결과:**\n{answer}")
+            chart_base64 = result.get("chart_image_base64")
+
+            # 2. 차트 이미지 업로드 (있을 때만, FR-08b)
+            if chart_base64:
+                try:
+                    image_bytes = base64.b64decode(chart_base64)
+                    client.files_upload_v2(
+                        channels=channel_id,
+                        content=image_bytes,
+                        filename="chart.png",
+                        title="분석 차트",
+                    )
+                    logger.info("차트 이미지 업로드 완료")
+                except Exception as e:
+                    logger.error(f"차트 업로드 실패: {e}")
+
+            # 1/3/4/5 블록 전송
+            blocks = _build_success_blocks(result, user)
+            say(blocks=blocks)
+
         else:
-            logger.error(f"Vanna API error: {response.status_code} - {response.text}")
-            say(
-                f"❌ AI 서버 응답 오류 ({response.status_code}). 잠시 후 다시 시도해주세요."
-            )
+            # SEC-07: error_code는 로그에만, 사용자에게는 message만 노출
+            try:
+                error = response.json().get("detail", {})
+                if isinstance(error, dict):
+                    error_code = error.get("error_code", "UNKNOWN_ERROR")
+                    message = error.get("message", "알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+                else:
+                    error_code = "UNKNOWN_ERROR"
+                    message = "알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+            except Exception:
+                error_code = "PARSE_ERROR"
+                message = "응답을 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+
+            logger.error(f"vanna-api 오류: HTTP {response.status_code}, error_code={error_code}")
+            say(blocks=[{
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"❌ *오류가 발생했습니다*\n{message}"},
+            }])
+
+    except requests.Timeout:
+        logger.error(f"vanna-api 타임아웃 ({VANNA_API_TIMEOUT}초)")
+        say("⚠️ AI 서버 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.")
     except Exception as e:
-        logger.error(f"Error calling Vanna AI: {e}")
-        say(f"⚠️ AI 연동 중 오류가 발생했습니다: {e}")
+        # SEC-07: 내부 오류 상세는 로그에만 기록
+        logger.error(f"vanna-api 연동 오류: {e}")
+        say("⚠️ AI 서버와 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+
+
+@app.action("feedback_positive")
+def handle_positive_feedback(ack, body, client):
+    """👍 피드백 처리 (FR-21)"""
+    ack()
+    history_id = body["actions"][0]["value"]
+    slack_user_id = body["user"]["id"]
+    try:
+        requests.post(
+            f"{VANNA_API_URL}/feedback",
+            json={"history_id": history_id, "feedback": "positive", "slack_user_id": slack_user_id},
+            headers=_build_internal_headers(),
+            timeout=10,
+        )
+        logger.info(f"긍정 피드백 전송: history_id={history_id}")
+    except Exception as e:
+        logger.error(f"긍정 피드백 전송 실패: {e}")
+
+
+@app.action("feedback_negative")
+def handle_negative_feedback(ack, body, client):
+    """👎 피드백 처리 (FR-21)"""
+    ack()
+    history_id = body["actions"][0]["value"]
+    slack_user_id = body["user"]["id"]
+    try:
+        requests.post(
+            f"{VANNA_API_URL}/feedback",
+            json={"history_id": history_id, "feedback": "negative", "slack_user_id": slack_user_id},
+            headers=_build_internal_headers(),
+            timeout=10,
+        )
+        logger.info(f"부정 피드백 전송: history_id={history_id}")
+    except Exception as e:
+        logger.error(f"부정 피드백 전송 실패: {e}")
 
 
 if __name__ == "__main__":
-    # 헬스 체크 서버 백그라운드 실행
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
 
-    # Slack Socket Mode 실행
     if not SLACK_APP_TOKEN:
         logger.error("SLACK_APP_TOKEN is missing!")
     else:
-        logger.info("⚡️ CAPA Slack Bot starting (Vanna + Report Integrated)...")
+        logger.info("CAPA Slack Bot 시작 중 (Text-to-SQL 개선 버전)...")
         handler = SocketModeHandler(app, SLACK_APP_TOKEN)
         handler.start()

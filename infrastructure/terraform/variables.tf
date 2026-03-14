@@ -94,3 +94,20 @@ variable "anthropic_api_key" {
   sensitive   = true
 }
 
+# ------------------------------------------------------------------------------
+# Text-to-SQL Secrets
+# ------------------------------------------------------------------------------
+variable "redash_api_key" {
+  description = "Redash API Key (Admin > Settings > API Key)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "internal_api_token" {
+  description = "내부 서비스 간 인증 토큰 (vanna-api ↔ slack-bot, openssl rand -hex 32)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+

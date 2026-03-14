@@ -1,353 +1,313 @@
 """
-Vanna AI API - Text-to-SQL Service
-자연어 질의를 SQL로 변환하고 Athena에서 실행하는 FastAPI 애플리케이션
+Vanna AI API - Text-to-SQL Service (v2)
+11-Step QueryPipeline 위임 방식 (T3)
+설계 문서 §3, §5 기준
 """
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Dict, List, Optional
+import json
 import logging
 import os
 import time
-import boto3
-import pandas as pd
-from vanna.chromadb import ChromaDB_VectorStore
-from vanna.anthropic import Anthropic_Chat
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Optional
 
-# 로깅 설정
+import boto3
+import chromadb
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from vanna.anthropic import Anthropic_Chat
+from vanna.chromadb import ChromaDB_VectorStore
+
+from .feedback_manager import FeedbackManager
+from .history_recorder import HistoryRecorder
+from .models.api import (
+    ErrorResponse,
+    FeedbackRequest,
+    FeedbackResponse,
+    HealthResponse,
+    QueryRequest,
+    QueryResponse as NewQueryResponse,
+    TrainRequest,
+    TrainResponse,
+)
+from .models.domain import FeedbackType, TrainDataType
+from .models.redash import RedashConfig
+from .query_pipeline import QueryPipeline
+from .security.auth import InternalTokenMiddleware
+from .security.error_handler import generic_exception_handler
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# FastAPI 앱 초기화
-app = FastAPI(
-    title="Vanna AI API",
-    description="Text-to-SQL 자연어 질의 처리 서비스",
-    version="0.1.0",
-)
-
-# 환경 변수
-CHROMA_HOST = os.getenv("CHROMA_HOST", "chromadb-service.chromadb.svc.cluster.local")
+CHROMA_HOST = os.getenv("CHROMA_HOST", "chromadb.chromadb.svc.cluster.local")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 ATHENA_DATABASE = os.getenv("ATHENA_DATABASE", "capa_db")
 AWS_REGION = os.getenv("AWS_REGION", "ap-northeast-2")
-S3_STAGING_DIR = os.getenv("S3_STAGING_DIR", "")  # Athena 쿼리 결과 저장 경로
+S3_STAGING_DIR = os.getenv("S3_STAGING_DIR", "")
+ATHENA_WORKGROUP = os.getenv("ATHENA_WORKGROUP", "capa-workgroup")
+REDASH_ENABLED = os.getenv("REDASH_ENABLED", "true").lower() == "true"
+REDASH_BASE_URL = os.getenv("REDASH_BASE_URL", "http://redash.redash.svc.cluster.local:5000")
+REDASH_API_KEY = os.getenv("REDASH_API_KEY", "")
+REDASH_DATA_SOURCE_ID = int(os.getenv("REDASH_DATA_SOURCE_ID", "1"))
+REDASH_QUERY_TIMEOUT_SEC = int(os.getenv("REDASH_QUERY_TIMEOUT_SEC", "300"))
+REDASH_POLL_INTERVAL_SEC = int(os.getenv("REDASH_POLL_INTERVAL_SEC", "3"))
+REDASH_PUBLIC_URL = os.getenv("REDASH_PUBLIC_URL", "https://redash.capa.internal")
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
 
-# Vanna 클래스 정의 (ChromaDB + Anthropic + Custom Athena)
 class VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
     def __init__(self, config=None):
         ChromaDB_VectorStore.__init__(self, config=config)
         Anthropic_Chat.__init__(self, config=config)
-        self.athena_client = None
-        self.athena_database = None
-        self.s3_staging_dir = None
 
-    def connect_to_athena(self, database, region_name, s3_staging_dir):
-        """Athena 연결 설정"""
-        self.athena_database = database
-        self.s3_staging_dir = s3_staging_dir
-        self.athena_client = boto3.client("athena", region_name=region_name)
-        logger.info(f"Connected to Athena: {database}, storage: {s3_staging_dir}")
 
-    def generate_explanation(self, question: str, sql: str, df: pd.DataFrame) -> str:
-        """결과에 대한 자연어 설명 생성 (Anthropic SDK 직접 사용)"""
-        try:
-            import anthropic
+def _init_vanna() -> VannaAthena:
+    logger.info(f"Vanna 초기화 중: ChromaDB {CHROMA_HOST}:{CHROMA_PORT}")
+    chroma_client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
+    instance = VannaAthena(config={
+        "api_key": ANTHROPIC_API_KEY,
+        "model": "claude-haiku-4-5-20251001",
+        "client": chroma_client,
+    })
+    logger.info("Vanna 초기화 완료")
+    return instance
 
-            client = anthropic.Anthropic(api_key=self.config.get("api_key"))
-            model = self.config.get("model", "claude-haiku-4-5")
 
-            prompt = f"User Question: {question}\nSQL: {sql}\nResults:\n{df.to_string()}\n\nPlease summarize the results and answer the user's question in a friendly tone in Korean."
-
-            response = client.messages.create(
-                model=model,
-                max_tokens=1024,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return response.content[0].text
-        except Exception as e:
-            logger.error(f"Error in generate_explanation: {e}", exc_info=True)
-            return f"결과를 요약하는 중 오류가 발생했습니다. (에러: {str(e)})"
-
-    def run_sql(self, sql: str) -> pd.DataFrame:
-        """Athena에서 SQL 실행 및 결과 반환 (Custom Implementation)"""
-        if not self.athena_client:
-            raise Exception(
-                "Athena client not initialized. Call connect_to_athena() first."
-            )
-
-        logger.info(f"Executing Athena SQL: {sql}")
-
-        # 쿼리 실행 시작
-        response = self.athena_client.start_query_execution(
-            QueryString=sql,
-            QueryExecutionContext={"Database": self.athena_database},
-            ResultConfiguration={"OutputLocation": self.s3_staging_dir},
+def _init_pipeline(vanna: VannaAthena) -> QueryPipeline:
+    athena_client = boto3.client("athena", region_name=AWS_REGION)
+    redash_config: Optional[RedashConfig] = None
+    if REDASH_ENABLED and REDASH_API_KEY:
+        redash_config = RedashConfig(
+            base_url=REDASH_BASE_URL,
+            api_key=REDASH_API_KEY,
+            data_source_id=REDASH_DATA_SOURCE_ID,
+            query_timeout_sec=REDASH_QUERY_TIMEOUT_SEC,
+            poll_interval_sec=REDASH_POLL_INTERVAL_SEC,
+            public_url=REDASH_PUBLIC_URL,
+            enabled=True,
         )
-        query_execution_id = response["QueryExecutionId"]
-
-        # 완료 대기 (최대 60초)
-        max_attempts = 60
-        attempts = 0
-        while attempts < max_attempts:
-            execution = self.athena_client.get_query_execution(
-                QueryExecutionId=query_execution_id
-            )
-            state = execution["QueryExecution"]["Status"]["State"]
-
-            if state == "SUCCEEDED":
-                break
-            elif state in ["FAILED", "CANCELLED"]:
-                reason = execution["QueryExecution"]["Status"].get(
-                    "StateChangeReason", "Unknown"
-                )
-                raise Exception(f"Athena query {state}: {reason}")
-
-            time.sleep(1)
-            attempts += 1
-        else:
-            raise Exception("Athena query timed out")
-
-        # 결과 가져오기
-        paginator = self.athena_client.get_paginator("get_query_results")
-        results_iter = paginator.paginate(QueryExecutionId=query_execution_id)
-
-        rows = []
-        columns = []
-
-        for results in results_iter:
-            if not columns:
-                columns = [
-                    col["Name"]
-                    for col in results["ResultSet"]["ResultSetMetadata"]["ColumnInfo"]
-                ]
-
-            for row in results["ResultSet"]["Rows"]:
-                data = [val.get("VarCharValue", None) for val in row["Data"]]
-                rows.append(data)
-
-        if not rows:
-            return pd.DataFrame(columns=columns)
-
-        # 데이터프레임 생성 (첫 줄이 컬럼명과 겹치면 제거)
-        df = pd.DataFrame(rows, columns=columns)
-        if len(df) > 0 and list(df.iloc[0]) == columns:
-            df = df.iloc[1:].reset_index(drop=True)
-
-        return df
+    return QueryPipeline(
+        vanna_instance=vanna,
+        anthropic_api_key=ANTHROPIC_API_KEY,
+        athena_client=athena_client,
+        database=ATHENA_DATABASE,
+        workgroup=ATHENA_WORKGROUP,
+        s3_staging_dir=S3_STAGING_DIR,
+        redash_config=redash_config,
+    )
 
 
-# Vanna 인스턴스 (전역)
-vanna_instance: Optional[VannaAthena] = None
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    logger.info("Vanna API 시작 중...")
+    vanna = _init_vanna()
+    recorder = HistoryRecorder()
+    app.state.vanna = vanna
+    app.state.pipeline = _init_pipeline(vanna)
+    app.state.recorder = recorder
+    app.state.feedback_manager = FeedbackManager(vanna_instance=vanna, history_recorder=recorder)
+    yield
+    logger.info("Vanna API 종료 중...")
 
 
-def get_vanna() -> VannaAthena:
-    """Vanna 인스턴스 반환 (Lazy Initialization)"""
-    global vanna_instance
-    if vanna_instance is None:
-        logger.info(f"Initializing Vanna instance with key: {ANTHROPIC_API_KEY[:5]}...")
-        import chromadb
+app = FastAPI(
+    title="Vanna AI API",
+    description="Text-to-SQL 자연어 질의 처리 서비스 (11-Step 파이프라인)",
+    version="0.2.0",
+    lifespan=lifespan,
+)
+app.add_middleware(InternalTokenMiddleware)
+app.add_exception_handler(Exception, generic_exception_handler)
 
-        # Instantiate external ChromaDB client properly
-        chroma_client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
 
-        vanna_instance = VannaAthena(
-            config={
-                "api_key": ANTHROPIC_API_KEY,
-                "model": "claude-haiku-4-5",
-                "client": chroma_client,
-            }
+@app.get("/health", response_model=HealthResponse)
+async def health_check() -> HealthResponse:
+    """헬스 체크 (인증 없음)"""
+    return HealthResponse(
+        status="ok",
+        service="vanna-api",
+        version="0.2.0",
+        checks={
+            "chromadb": f"{CHROMA_HOST}:{CHROMA_PORT}",
+            "athena": ATHENA_DATABASE,
+            "redash": "enabled" if REDASH_ENABLED else "disabled",
+        },
+    )
+
+
+@app.post("/query", response_model=NewQueryResponse)
+async def query_natural_language(request: QueryRequest) -> NewQueryResponse:
+    """자연어 질의 → 11-Step 파이프라인 실행"""
+    pipeline: QueryPipeline = app.state.pipeline
+    start_time = time.time()
+    logger.info(f"질의 처리 시작: {request.question[:100]}")
+    try:
+        ctx = await pipeline.run(
+            question=request.question,
+            slack_user_id=request.slack_user_id,
+            slack_channel_id=request.slack_channel_id,
         )
-        # Athena 연결 설정 (IRSA 자동 인증)
-        vanna_instance.connect_to_athena(
-            database=ATHENA_DATABASE,
-            region_name=AWS_REGION,
-            s3_staging_dir=S3_STAGING_DIR,
+    except Exception as e:
+        logger.error(f"파이프라인 예외: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={"error_code": "INTERNAL_ERROR", "message": "요청 처리 중 오류가 발생했습니다."},
         )
-        logger.info("Vanna initialization complete")
-    return vanna_instance
-
-
-# Request/Response 모델
-class QueryRequest(BaseModel):
-    question: str
-
-
-class QueryResponse(BaseModel):
-    sql: str
-    results: Optional[List[Dict]] = None
-    answer: Optional[str] = None
-    error: Optional[str] = None
-
-
-class TrainRequest(BaseModel):
-    ddl: Optional[str] = None
-    documentation: Optional[str] = None
-    sql: Optional[str] = None
-
-
-class SummarizeRequest(BaseModel):
-    text: str
-
-
-class SummarizeResponse(BaseModel):
-    answer: str
-
-
-# =====================================================
-# API Endpoints
-# =====================================================
-
-
-@app.get("/health")
-async def health_check() -> Dict[str, str]:
-    """헬스 체크"""
-    logger.info("Health check requested")
-    return {"status": "ok", "service": "vanna-api"}
-
-
-@app.post("/query", response_model=QueryResponse)
-async def query_natural_language(request: QueryRequest):
-    """
-    자연어 질의를 SQL로 변환하고 실행
-
-    Example:
-        POST /query
-        {
-            "question": "지난 7일간 CTR이 가장 높은 캠페인 5개를 보여줘"
+    elapsed = time.time() - start_time
+    if ctx.error:
+        error_resp = ErrorResponse(
+            error_code=ctx.error.error_code,
+            message=ctx.error.error_message,
+            detail=ctx.error.generated_sql if DEBUG else None,
+            prompt_used=ctx.error.used_prompt if DEBUG else None,
+        )
+        status_map = {
+            "INTENT_OUT_OF_SCOPE": 422,
+            "INTENT_GENERAL": 422,
+            "SQL_GENERATION_FAILED": 422,
+            "SQL_VALIDATION_FAILED": 422,
+            "SQL_NOT_SELECT": 422,
+            "QUERY_TIMEOUT": 504,
+            "REDASH_ERROR": 500,
+            "ATHENA_EXECUTION_FAILED": 500,
         }
-    """
-    try:
-        vanna = get_vanna()
-        logger.info(f"Processing question: {request.question}")
-
-        # SQL 생성
-        sql = vanna.generate_sql(request.question)
-        logger.info(f"Generated SQL: {sql}")
-
-        # Athena 실행
-        results = vanna.run_sql(sql)
-
-        # AI 요약/설명 생성
-        answer = "답변을 생성하지 못했습니다."
-        if results is not None:
-            try:
-                answer = vanna.generate_explanation(request.question, sql, results)
-            except Exception as ae:
-                logger.error(f"Explanation generation error: {ae}")
-                answer = f"쿼리 실행은 성공했으나 요약 생성 중 오류가 발생했습니다. (결과: {len(results)}건)"
-
-        return QueryResponse(
-            sql=sql,
-            results=results.to_dict(orient="records") if results is not None else [],
-            answer=answer,
+        raise HTTPException(
+            status_code=status_map.get(ctx.error.error_code, 500),
+            detail=error_resp.model_dump(exclude_none=True),
         )
+    results_preview = ctx.query_results.rows[:10] if ctx.query_results else None
+    validated_sql = (
+        ctx.validation_result.normalized_sql
+        if ctx.validation_result and ctx.validation_result.normalized_sql
+        else ctx.generated_sql
+    )
+    return NewQueryResponse(
+        query_id=ctx.history_id or "",
+        intent=ctx.intent,
+        refined_question=ctx.refined_question,
+        sql=validated_sql,
+        sql_validated=ctx.validation_result.is_valid if ctx.validation_result else False,
+        results=results_preview,
+        answer=ctx.analysis.answer if ctx.analysis else None,
+        chart_image_base64=ctx.chart_base64,
+        redash_url=ctx.redash_url,
+        redash_query_id=ctx.redash_query_id,
+        execution_path=ctx.query_results.execution_path if ctx.query_results else "unknown",
+        elapsed_seconds=round(elapsed, 2),
+    )
 
-    except Exception as e:
-        logger.error(f"Query error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/feedback", response_model=FeedbackResponse)
+async def post_feedback(request: FeedbackRequest) -> FeedbackResponse:
+    """피드백 수집 (FR-21)"""
+    fm: FeedbackManager = app.state.feedback_manager
+    logger.info(f"피드백 수신: history_id={request.history_id}, feedback={request.feedback}")
+    if request.feedback == FeedbackType.POSITIVE:
+        trained, msg = fm.record_positive(history_id=request.history_id, slack_user_id=request.slack_user_id)
+        return FeedbackResponse(status="accepted", trained=trained, message=msg)
+    msg = fm.record_negative(history_id=request.history_id, slack_user_id=request.slack_user_id, comment=request.comment)
+    return FeedbackResponse(status="accepted", trained=False, message=msg)
 
 
-@app.post("/generate-sql")
-async def generate_sql_only(request: QueryRequest):
-    """
-    자연어 질의를 SQL로만 변환 (실행하지 않음)
-    """
+@app.post("/train", response_model=TrainResponse)
+async def train_model(request: TrainRequest) -> TrainResponse:
+    """Vanna 모델 학습"""
+    vanna: VannaAthena = app.state.vanna
     try:
-        vanna = get_vanna()
-        sql = vanna.generate_sql(request.question)
-        return {"sql": sql}
-
-    except Exception as e:
-        logger.error(f"SQL generation error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/summarize", response_model=SummarizeResponse)
-async def summarize_text(request: SummarizeRequest):
-    """
-    집계된 데이터 텍스트를 AI로 요약 분석
-    """
-    try:
-        import anthropic
-
-        vanna = get_vanna()
-        client = anthropic.Anthropic(api_key=vanna.config.get("api_key"))
-        model = vanna.config.get("model", "claude-haiku-4-5")
-
-        logger.info(f"Summarizing text: {request.text[:100]}...")
-
-        response = client.messages.create(
-            model=model,
-            max_tokens=1024,
-            messages=[{"role": "user", "content": request.text}],
-        )
-        return SummarizeResponse(answer=response.content[0].text)
-
-    except Exception as e:
-        logger.error(f"Summarization error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/train")
-async def train_model(request: TrainRequest):
-    """
-    Vanna 모델 학습 (DDL, 문서, SQL 예제 추가)
-
-    Example:
-        POST /train
-        {
-            "ddl": "CREATE TABLE ad_events (campaign_id STRING, ctr DOUBLE, ...)",
-            "documentation": "CTR은 클릭률을 의미합니다",
-            "sql": "SELECT campaign_id, AVG(ctr) FROM ad_events GROUP BY campaign_id"
-        }
-    """
-    try:
-        vanna = get_vanna()
-
-        if request.ddl:
+        if request.data_type == TrainDataType.DDL and request.ddl:
             vanna.train(ddl=request.ddl)
-            logger.info(f"Trained with DDL: {request.ddl[:100]}...")
-
-        if request.documentation:
+            logger.info(f"DDL 학습 완료")
+        elif request.data_type == TrainDataType.DOCUMENTATION and request.documentation:
             vanna.train(documentation=request.documentation)
-            logger.info(f"Trained with documentation: {request.documentation[:100]}...")
-
-        if request.sql:
+            logger.info(f"Documentation 학습 완료")
+        elif request.data_type == TrainDataType.SQL and request.sql:
             vanna.train(sql=request.sql)
-            logger.info(f"Trained with SQL: {request.sql[:100]}...")
-
-        return {"status": "success", "message": "Training completed"}
-
+            logger.info(f"SQL 학습 완료")
+        elif request.data_type == TrainDataType.QA_PAIR:
+            if not request.question or not request.sql:
+                raise HTTPException(status_code=400, detail={"error_code": "INVALID_INPUT", "message": "qa_pair 유형은 question과 sql이 필요합니다."})
+            vanna.train(question=request.question, sql=request.sql)
+            logger.info(f"QA pair 학습 완료")
+        else:
+            raise HTTPException(status_code=400, detail={"error_code": "INVALID_INPUT", "message": "유효하지 않은 학습 데이터입니다."})
+        training_data = vanna.get_training_data()
+        count = len(training_data) if training_data is not None else 0
+        return TrainResponse(status="success", data_type=request.data_type, message="학습 데이터가 성공적으로 추가되었습니다.", training_data_count=count)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Training error: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"학습 오류: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"error_code": "INTERNAL_ERROR", "message": "학습 처리 중 오류가 발생했습니다."})
+
+
+@app.get("/history")
+async def get_history(limit: int = 50) -> dict:
+    """쿼리 이력 조회 (FR-10)"""
+    recorder: HistoryRecorder = app.state.recorder
+    try:
+        if not recorder._file.exists():
+            return {"data": [], "total": 0}
+        lines = recorder._file.read_text(encoding="utf-8").splitlines()
+        records = []
+        for line in reversed(lines):
+            if not line.strip():
+                continue
+            try:
+                records.append(json.loads(line))
+            except Exception:
+                continue
+            if len(records) >= limit:
+                break
+        return {"data": records, "total": len(records)}
+    except Exception as e:
+        logger.error(f"이력 조회 오류: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"error_code": "INTERNAL_ERROR", "message": "이력 조회 중 오류가 발생했습니다."})
 
 
 @app.get("/training-data")
-async def get_training_data():
+async def get_training_data() -> dict:
     """저장된 학습 데이터 조회"""
+    vanna: VannaAthena = app.state.vanna
     try:
-        vanna = get_vanna()
         training_data = vanna.get_training_data()
         return {"data": training_data}
-
     except Exception as e:
-        logger.error(f"Error fetching training data: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"학습 데이터 조회 오류: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"error_code": "INTERNAL_ERROR", "message": "학습 데이터 조회 중 오류가 발생했습니다."})
 
 
-@app.on_event("startup")
-async def startup_event():
-    """애플리케이션 시작 시 실행"""
-    logger.info("Vanna API starting up...")
-    logger.info(f"ChromaDB: {CHROMA_HOST}:{CHROMA_PORT}")
-    logger.info(f"Athena Database: {ATHENA_DATABASE}")
-    logger.info(f"AWS Region: {AWS_REGION}")
+class _LegacyRequest(BaseModel):
+    question: str
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """애플리케이션 종료 시 실행"""
-    logger.info("Vanna API shutting down...")
+class _SummarizeRequest(BaseModel):
+    text: str
+
+
+@app.post("/generate-sql")
+async def generate_sql_only(request: _LegacyRequest) -> dict:
+    """SQL 생성만 (하위 호환성)"""
+    from .pipeline.sql_generator import SQLGenerator, SQLGenerationError
+    vanna: VannaAthena = app.state.vanna
+    try:
+        sql = SQLGenerator(vanna_instance=vanna).generate(question=request.question)
+        return {"sql": sql}
+    except SQLGenerationError as e:
+        raise HTTPException(status_code=422, detail={"error_code": "SQL_GENERATION_FAILED", "message": str(e)})
+    except Exception as e:
+        logger.error(f"SQL 생성 오류: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"error_code": "INTERNAL_ERROR", "message": "SQL 생성 중 오류가 발생했습니다."})
+
+
+@app.post("/summarize")
+async def summarize_text(request: _SummarizeRequest) -> dict:
+    """텍스트 요약 (하위 호환성)"""
+    import anthropic as _anthropic
+    try:
+        client = _anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        response = client.messages.create(model="claude-haiku-4-5-20251001", max_tokens=1024, messages=[{"role": "user", "content": request.text}])
+        return {"answer": response.content[0].text}
+    except Exception as e:
+        logger.error(f"요약 오류: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"error_code": "INTERNAL_ERROR", "message": "요약 처리 중 오류가 발생했습니다."})
