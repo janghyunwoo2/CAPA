@@ -68,7 +68,18 @@ class RAGRetriever:
     def _retrieve_sql_examples(self, query: str) -> list[str]:
         try:
             results = self._vanna.get_similar_question_sql(question=query)
-            return results if isinstance(results, list) else []
+            if not isinstance(results, list):
+                return []
+            # Vanna SDK 반환값이 dict 배열인 경우 SQL 문자열로 변환
+            converted: list[str] = []
+            for item in results:
+                if isinstance(item, str):
+                    converted.append(item)
+                elif isinstance(item, dict):
+                    sql = item.get("sql") or item.get("SQL") or ""
+                    if sql:
+                        converted.append(str(sql))
+            return converted
         except Exception as e:
             logger.warning(f"SQL 예제 RAG 검색 실패: {e}")
             return []

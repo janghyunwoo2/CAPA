@@ -1000,41 +1000,41 @@ async def test_poll_job_failure_status_raises(client):
 ## 4. Phase 2: 통합 테스트 (배포 전, 로컬 ChromaDB)
 
 > **목적**: Step 간 연결 및 실제 파이프라인 흐름 확인
-> **선행 조건**: `chroma run --port 8001`, 환경변수 설정
-> **bkit 도구**: `qa-monitor` — Docker 로그 실시간 감시로 이슈 자동 감지
+> **선행 조건**: docker-compose.test.yml 설정, 환경변수 설정
+> **실제 진행**: pytest를 docker-compose 환경에서 직접 실행 (qa-monitor 미사용)
 
-### bkit qa-monitor 활용 (Phase 2)
+### Phase 2 실행 방식 (2026-03-16 완료)
 
+**계획 vs 실제**:
+| 항목 | 원래 계획 | 실제 진행 |
+|------|---------|---------|
+| 감시 도구 | bkit qa-monitor | pytest integration tests (직접 실행) |
+| 로그 분석 | docker compose logs -f (실시간 모니터링) | pytest 실행 결과 (자동 수집) |
+| 환경 설정 | 환경변수 + seed_chromadb.py | conftest.py에서 통합 (자동 시딩) |
+
+**실제 실행 명령**:
 ```bash
-# 터미널 1: 로컬 서비스 실행
-docker compose up -d   # chromadb + vanna-api
+cd services/vanna-api
 
-# 터미널 2: Claude에게 명령
-# "qa-monitor로 docker compose logs -f 감시해줘"
-# → Claude가 로그 스트림 감시하면서 ERROR / 3000ms 초과 / 연결 실패 자동 감지
-```
-
-Claude에게 내릴 명령:
-```
-"docker compose logs -f 실시간 모니터링해줘.
- ERROR 레벨 로그 발생하면 즉시 알려줘.
- duration_ms가 3000ms 넘으면 경고해줘."
-```
-
----
-
-```bash
+# 환경변수 설정
 export CHROMA_HOST=localhost
 export CHROMA_PORT=8001
 export ANTHROPIC_API_KEY=<실제 키>
 export INTERNAL_API_TOKEN=test-token
 
-# 시딩 먼저
-python scripts/seed_chromadb.py
+# docker-compose 시작 (ChromaDB + vanna-api 동시 실행)
+docker-compose -f docker-compose.test.yml up -d
 
-# 통합 테스트 실행
-pytest tests/integration/ -v -m integration
+# 통합 테스트 실행 (conftest.py에서 시딩 자동 수행)
+pytest tests/integration/test_pipeline_integration.py -v
+
+# 결과: 27 passed in 223.18s (0:03:43) ✅
 ```
+
+**수정된 진행 방식이 더 효율적인 이유**:
+- ✅ pytest가 ChromaDB 시딩 자동 처리 (conftest.py)
+- ✅ 전체 Step 1~11 검증을 27개 테스트로 체계적 실행
+- ✅ 실시간 감시 불필요 (테스트 결과 한 번에 확인)
 
 ```python
 # tests/integration/test_pipeline_integration.py
@@ -1812,7 +1812,21 @@ python scripts/evaluate_sql_quality.py
 - [ ] `python scripts/seed_chromadb.py` — 로컬 ChromaDB 시딩 성공
 - [ ] `pytest tests/integration/ -m integration` — 통합 테스트 통과 (Athena EXPLAIN + REDASH_ENABLED 분기 포함)
 
-### Phase 2 (배포 준비)
+### Phase 2 (통합 테스트 — 완료 ✅)
+
+> **상태**: 2026-03-16 완료
+> **결과**: 27/27 테스트 통과 (100%)
+
+- [x] `docker-compose -f docker-compose.test.yml up -d` — ChromaDB + vanna-api 실행
+- [x] ChromaDB 시딩 (DDL 2개 + Q&A 2개 + 문서 1개) — conftest.py에서 자동 수행
+- [x] `pytest tests/integration/test_pipeline_integration.py -v` — 27개 통합 테스트 통과
+- [x] Step 1~11 파이프라인 전체 검증 완료
+- [x] E2E 시나리오 A (CTR) — PASS
+- [x] E2E 시나리오 B (ROAS) — PASS
+
+---
+
+### Phase 3 (배포 준비 — 다음 단계)
 
 - [ ] `terraform.tfvars` — `redash_api_key`, `internal_api_token`, `redash_public_url` 추가
 - [ ] ECR 이미지 빌드 & 푸시 (vanna-api, slack-bot)

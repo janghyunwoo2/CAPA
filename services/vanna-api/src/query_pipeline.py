@@ -23,6 +23,9 @@ from datetime import datetime
 from typing import Any, Optional
 
 import boto3
+import chromadb
+from vanna.anthropic import Anthropic_Chat
+from vanna.chromadb import ChromaDB_VectorStore
 
 from .models.domain import IntentType, PipelineContext, PipelineError
 from .models.redash import RedashConfig
@@ -45,21 +48,49 @@ from .history_recorder import HistoryRecorder
 logger = logging.getLogger(__name__)
 
 
+class _VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
+    """환경변수 기반 자동 초기화용 내부 Vanna 구현체"""
+
+    def __init__(self, config=None):
+        ChromaDB_VectorStore.__init__(self, config=config)
+        Anthropic_Chat.__init__(self, config=config)
+
+
 class QueryPipeline:
     """11-Step Text-to-SQL 파이프라인 오케스트레이터"""
 
     def __init__(
         self,
-        vanna_instance: Any,
-        anthropic_api_key: str,
-        athena_client: Any,
-        database: str,
-        workgroup: str,
-        s3_staging_dir: str,
+        vanna_instance: Any = None,
+        anthropic_api_key: Optional[str] = None,
+        athena_client: Any = None,
+        database: Optional[str] = None,
+        workgroup: Optional[str] = None,
+        s3_staging_dir: Optional[str] = None,
         redash_config: Optional[RedashConfig] = None,
         history_recorder: Optional[HistoryRecorder] = None,
         llm_model: str = "claude-haiku-4-5-20251001",
     ) -> None:
+        # 환경변수 fallback
+        anthropic_api_key = anthropic_api_key or os.getenv("ANTHROPIC_API_KEY", "")
+        database = database or os.getenv("ATHENA_DATABASE", "capa_db")
+        workgroup = workgroup or os.getenv("ATHENA_WORKGROUP", "capa-workgroup")
+        s3_staging_dir = s3_staging_dir or os.getenv("S3_STAGING_DIR", "")
+        aws_region = os.getenv("AWS_REGION", "ap-northeast-2")
+
+        if athena_client is None:
+            athena_client = boto3.client("athena", region_name=aws_region)
+
+        if vanna_instance is None:
+            chroma_host = os.getenv("CHROMA_HOST", "chromadb.chromadb.svc.cluster.local")
+            chroma_port = int(os.getenv("CHROMA_PORT", "8000"))
+            chroma_client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
+            vanna_instance = _VannaAthena(config={
+                "api_key": anthropic_api_key,
+                "model": llm_model,
+                "client": chroma_client,
+            })
+
         self._vanna = vanna_instance
         self._api_key = anthropic_api_key
         self._athena = athena_client

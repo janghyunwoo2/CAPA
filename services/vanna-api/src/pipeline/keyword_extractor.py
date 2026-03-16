@@ -44,7 +44,11 @@ class KeywordExtractor:
                 messages=[{"role": "user", "content": question}],
             )
             raw = response.content[0].text.strip()
-            keywords: list[str] = json.loads(raw)
+            # markdown 코드블록 제거 (```json ... ``` 형식 처리)
+            if raw.startswith("```"):
+                lines = raw.split("\n")
+                raw = "\n".join(lines[1:-1]) if len(lines) > 2 else ""
+            keywords: list[str] = json.loads(raw) if raw else []
             logger.info(f"키워드 추출 결과: {keywords}")
             return keywords if isinstance(keywords, list) else []
 

@@ -11,7 +11,7 @@ Vanna AI SDK의 3개 컬렉션(sql-ddl, sql-documentation, sql-qa)에
 import logging
 
 try:
-    from vanna import VannaBase
+    from vanna.base.base import VannaBase
     from vanna.chromadb import ChromaDB_VectorStore
 except ImportError as e:
     raise ImportError(
