@@ -14,7 +14,7 @@ sqlglot
 sqlparse
 httpx
 respx
-vanna[chromadb,anthropic]==0.7.9
+vanna[anthropic]==0.7.9
 matplotlib
 pandas
 

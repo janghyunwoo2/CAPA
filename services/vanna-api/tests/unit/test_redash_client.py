@@ -29,7 +29,7 @@ def redash_config() -> RedashConfig:
         api_key="test-api-key-12345",
         data_source_id=1,
         query_timeout_sec=10,
-        poll_interval_sec=0.1,
+        poll_interval_sec=1,
         public_url="https://redash.example.com",
         enabled=True,
     )
