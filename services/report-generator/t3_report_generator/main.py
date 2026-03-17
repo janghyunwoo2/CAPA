@@ -1,232 +1,223 @@
 """보고서 생성 메인 모듈.
 
-매일 아침 08:00에 Airflow DAG에서 호출됩니다.
-날짜에 따라 일간/주간/월간 섹션을 동적으로 추가하여 보고서를 생성합니다.
+Airflow DAG 또는 직접 실행으로 호출됩니다.
+일간/주간/월간 보고서를 각각 독립적으로 생성합니다.
 """
 
 import logging
+import sys
 from datetime import datetime, timedelta
 from typing import Any
 
 from athena_client import (
     get_daily_kpi,
-    get_weekly_list,
     get_category_performance,
-    get_shop_top10,
-    get_shop_bottom10,
+    get_shop_top5,
+    get_shop_bottom5,
     get_funnel_data,
 )
 import markdown_builder
+import pdf_exporter
+import slack_notifier
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 
-def get_month_start(date: datetime) -> datetime:
-    """주어진 날짜의 월초(1일)를 반환합니다."""
+# ============================================================================
+# 날짜 유틸
+# ============================================================================
+
+def _parse_date(date_str: str = None) -> datetime:
+    if date_str:
+        return datetime.strptime(date_str, "%Y-%m-%d")
+    return datetime.now()
+
+
+def _get_month_start(date: datetime) -> datetime:
     return date.replace(day=1)
 
 
-def get_previous_month_end(date: datetime) -> datetime:
-    """주어진 날짜의 전월 마지막 날을 반환합니다."""
+def _get_previous_month_range(date: datetime) -> tuple[str, str]:
+    """전월 1일 ~ 전월 마지막 날"""
     first_day = date.replace(day=1)
-    last_day_prev_month = first_day - timedelta(days=1)
-    return last_day_prev_month
+    prev_month_end = first_day - timedelta(days=1)
+    prev_month_start = prev_month_end.replace(day=1)
+    return prev_month_start.strftime("%Y-%m-%d"), prev_month_end.strftime("%Y-%m-%d")
 
 
-def is_monday(date: datetime) -> bool:
-    """월요일 여부를 반환합니다 (0=월요일)."""
-    return date.weekday() == 0
+def _save_and_send(markdown: str, daily_breakdown: list, date: datetime, report_type: str):
+    """마크다운 저장 → PDF 생성 → Slack 전송"""
+    date_str = date.strftime("%Y-%m-%d")
 
-
-def is_month_start(date: datetime) -> bool:
-    """월초(1일) 여부를 반환합니다."""
-    return date.day == 1
-
-
-def generate_report(date: datetime = None) -> str:
-    """보고서를 생성합니다.
-
-    Args:
-        date: 보고서 생성 날짜 (기본값: 오늘)
-
-    Returns:
-        마크다운 형식의 보고서 문자열
-    """
-    if date is None:
-        date = datetime.now()
-
-    logger.info(f"보고서 생성 시작: {date.strftime('%Y-%m-%d %H:%M:%S')}")
-
-    # =========================================================================
-    # 1단계: 날짜 판단
-    # =========================================================================
-    is_mon = is_monday(date)
-    is_first_day = is_month_start(date)
-
-    logger.info(f"  - 월요일: {is_mon}, 1일: {is_first_day}")
-
-    # =========================================================================
-    # 2단계: 데이터 범위 결정
-    # =========================================================================
-    month_start = get_month_start(date)
-    yesterday = date - timedelta(days=1)
-    yesterday_str = yesterday.strftime("%Y-%m-%d")
-
-    if is_first_day:
-        # 1일: 전월 데이터 조회
-        prev_month_end = get_previous_month_end(date)
-        prev_month_start = prev_month_end.replace(day=1)
-
-        daily_start_str = prev_month_start.strftime("%Y-%m-%d")
-        daily_end_str = prev_month_end.strftime("%Y-%m-%d")
-
-        logger.info(f"  - 월초(1일) 모드: 전월 {daily_start_str} ~ {daily_end_str}")
-    else:
-        # 2~31일: 현월 누적 데이터 조회
-        daily_start_str = month_start.strftime("%Y-%m-%d")
-        daily_end_str = yesterday_str
-
-        logger.info(f"  - 월중 모드: 현월 {daily_start_str} ~ {daily_end_str}")
-
-    # =========================================================================
-    # 3단계: 데이터 조회
-    # =========================================================================
-    logger.info("  - 데이터 조회 시작...")
-
-    # 일간 데이터
+    # 마크다운 저장
+    md_filename = f"report_{report_type}_{date_str}.md"
     try:
-        daily_data = get_daily_kpi(daily_start_str, daily_end_str)
-        logger.info(f"    ✓ 일간 데이터 조회 완료: {len(daily_data.get('daily_breakdown', []))} 일")
+        with open(md_filename, "w", encoding="utf-8") as f:
+            f.write(markdown)
+        logger.info(f"마크다운 저장: {md_filename}")
     except Exception as e:
-        logger.error(f"    ✗ 일간 데이터 조회 실패: {e}")
-        raise
+        logger.warning(f"마크다운 저장 실패: {e}")
 
-    # 주간 데이터 (월요일일 때만)
-    weekly_list = None
-    if is_mon:
-        try:
-            month_start_str = month_start.strftime("%Y-%m-%d")
-            weekly_list = get_weekly_list(month_start_str, daily_end_str)
-            logger.info(f"    ✓ 주간 데이터 조회 완료: {len(weekly_list)} 주차")
-        except Exception as e:
-            logger.error(f"    ✗ 주간 데이터 조회 실패: {e}")
-            # 주간 데이터 실패는 보고서 중단이 아님
-            weekly_list = None
-
-    # 월간 데이터 (1일일 때만)
-    monthly_data = None
-    if is_first_day:
-        try:
-            categories = get_category_performance(daily_start_str, daily_end_str)
-            top10 = get_shop_top10(daily_start_str, daily_end_str)
-            bottom10 = get_shop_bottom10(daily_start_str, daily_end_str)
-            funnel = get_funnel_data(daily_start_str, daily_end_str)
-
-            monthly_data = {
-                "summary": daily_data["summary"],
-                "categories": categories,
-                "top10": top10,
-                "bottom10": bottom10,
-                "funnel": funnel,
-            }
-            logger.info(
-                f"    ✓ 월간 데이터 조회 완료: "
-                f"카테고리 {len(categories)}, 상점 {len(top10)}+{len(bottom10)}"
-            )
-        except Exception as e:
-            logger.error(f"    ✗ 월간 데이터 조회 실패: {e}")
-            # 월간 데이터 실패는 보고서 중단이 아님
-            monthly_data = None
-
-    # =========================================================================
-    # 4단계: 마크다운 생성
-    # =========================================================================
-    logger.info("  - 마크다운 생성 시작...")
-
+    # PDF 생성
+    pdf_filename = f"report_{report_type}_{date_str}.pdf"
     try:
-        markdown = markdown_builder.build(
-            date=date,
-            daily_data=daily_data,
-            start_date_str=daily_start_str,
-            end_date_str=daily_end_str,
-            weekly_list=weekly_list,
-            monthly_data=monthly_data,
+        pdf_path = pdf_exporter.create_pdf(
+            report_markdown=markdown,
+            daily_breakdown=daily_breakdown,
+            output_path=pdf_filename,
         )
-        logger.info("    ✓ 마크다운 생성 완료")
-    except Exception as e:
-        logger.error(f"    ✗ 마크다운 생성 실패: {e}")
-        raise
+        logger.info(f"PDF 저장: {pdf_path}")
 
-    # =========================================================================
-    # 5단계: 결과 반환
-    # =========================================================================
-    logger.info("✓ 보고서 생성 완료")
-
-    return markdown
-
-
-def main(date_str: str = None) -> dict[str, Any]:
-    """진입점 함수. Airflow DAG에서 호출됩니다.
-
-    Args:
-        date_str: 보고서 생성 날짜 (YYYY-MM-DD 형식, 기본값: 오늘)
-
-    Returns:
-        {
-            "status": "success" | "error",
-            "date": "YYYY-MM-DD",
-            "markdown": "...",
-            "error": "..." (error인 경우만)
-        }
-    """
-    try:
-        # 날짜 파싱
-        if date_str:
-            date = datetime.strptime(date_str, "%Y-%m-%d")
+        # Slack 전송
+        if slack_notifier.send_report_to_slack(pdf_path, date_str):
+            logger.info("Slack 전송 완료")
         else:
-            date = datetime.now()
+            logger.info("Slack 전송 실패 또는 설정 안 됨")
 
-        # 보고서 생성
-        markdown = generate_report(date)
+        return pdf_path
+    except Exception as e:
+        logger.warning(f"PDF 생성 실패: {e}")
+        return None
 
-        return {
-            "status": "success",
-            "date": date.strftime("%Y-%m-%d"),
-            "markdown": markdown,
-        }
+
+# ============================================================================
+# 일간 보고서
+# ============================================================================
+
+def generate_daily_report(date_str: str = None) -> dict[str, Any]:
+    """일간 보고서 생성 - 현월 누적 (월초~어제)"""
+    date = _parse_date(date_str)
+    logger.info(f"[일간] 보고서 생성 시작: {date.strftime('%Y-%m-%d')}")
+
+    yesterday = date - timedelta(days=1)
+    start_str = _get_month_start(date).strftime("%Y-%m-%d")
+    end_str = yesterday.strftime("%Y-%m-%d")
+
+    logger.info(f"[일간] 데이터 범위: {start_str} ~ {end_str}")
+
+    try:
+        data = get_daily_kpi(start_str, end_str)
+        markdown = markdown_builder.build_daily(date, data, start_str, end_str)
+
+        _save_and_send(markdown, data.get("daily_breakdown", []), date, "daily")
+
+        logger.info("[일간] 보고서 생성 완료")
+        return {"status": "success", "date": date.strftime("%Y-%m-%d"), "markdown": markdown}
 
     except Exception as e:
-        logger.error(f"✗ 보고서 생성 실패: {e}", exc_info=True)
+        logger.error(f"[일간] 보고서 생성 실패: {e}", exc_info=True)
+        return {"status": "error", "date": date.strftime("%Y-%m-%d"), "error": str(e)}
 
-        return {
-            "status": "error",
-            "date": date.strftime("%Y-%m-%d") if date else "unknown",
-            "error": str(e),
+
+# ============================================================================
+# 주간 보고서
+# ============================================================================
+
+def generate_weekly_report(date_str: str = None) -> dict[str, Any]:
+    """주간 보고서 생성 - 지난주 월요일~일요일"""
+    date = _parse_date(date_str)
+    logger.info(f"[주간] 보고서 생성 시작: {date.strftime('%Y-%m-%d')}")
+
+    current_monday = date - timedelta(days=date.weekday())
+    prev_week_start = current_monday - timedelta(days=7)
+    prev_week_end = current_monday - timedelta(days=1)
+
+    start_str = prev_week_start.strftime("%Y-%m-%d")
+    end_str = prev_week_end.strftime("%Y-%m-%d")
+
+    logger.info(f"[주간] 데이터 범위: {start_str} ~ {end_str}")
+
+    try:
+        data = get_daily_kpi(start_str, end_str)
+        weekly_data = {
+            "start_date": start_str,
+            "end_date": end_str,
+            "summary": data["summary"],
+            "daily_breakdown": data["daily_breakdown"],
         }
+        markdown = markdown_builder.build_weekly(date, weekly_data)
 
+        _save_and_send(markdown, data.get("daily_breakdown", []), date, "weekly")
+
+        logger.info("[주간] 보고서 생성 완료")
+        return {"status": "success", "date": date.strftime("%Y-%m-%d"), "markdown": markdown}
+
+    except Exception as e:
+        logger.error(f"[주간] 보고서 생성 실패: {e}", exc_info=True)
+        return {"status": "error", "date": date.strftime("%Y-%m-%d"), "error": str(e)}
+
+
+# ============================================================================
+# 월간 보고서
+# ============================================================================
+
+def generate_monthly_report(date_str: str = None) -> dict[str, Any]:
+    """월간 보고서 생성 - 전월 전체"""
+    date = _parse_date(date_str)
+    logger.info(f"[월간] 보고서 생성 시작: {date.strftime('%Y-%m-%d')}")
+
+    start_str, end_str = _get_previous_month_range(date)
+
+    logger.info(f"[월간] 데이터 범위: {start_str} ~ {end_str}")
+
+    try:
+        summary_data = get_daily_kpi(start_str, end_str)
+        categories = get_category_performance(start_str, end_str)
+        top10 = get_shop_top5(start_str, end_str)
+        bottom10 = get_shop_bottom5(start_str, end_str)
+        funnel = get_funnel_data(start_str, end_str)
+
+        monthly_data = {
+            "summary": summary_data["summary"],
+            "daily_breakdown": summary_data["daily_breakdown"],
+            "categories": categories,
+            "top10": top10,
+            "bottom10": bottom10,
+            "funnel": funnel,
+        }
+        markdown = markdown_builder.build_monthly(date, monthly_data, start_str, end_str)
+
+        _save_and_send(markdown, summary_data.get("daily_breakdown", []), date, "monthly")
+
+        logger.info("[월간] 보고서 생성 완료")
+        return {"status": "success", "date": date.strftime("%Y-%m-%d"), "markdown": markdown}
+
+    except Exception as e:
+        logger.error(f"[월간] 보고서 생성 실패: {e}", exc_info=True)
+        return {"status": "error", "date": date.strftime("%Y-%m-%d"), "error": str(e)}
+
+
+# ============================================================================
+# CLI 진입점 (venv 테스트용)
+# ============================================================================
 
 if __name__ == "__main__":
-    # 테스트 실행
-    import sys
+    # 사용법:
+    #   python main.py 2026-03-17 daily
+    #   python main.py 2026-03-17 weekly
+    #   python main.py 2026-03-17 monthly
 
-    if len(sys.argv) > 1:
-        result = main(sys.argv[1])
-    else:
-        result = main()
+    date_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    type_arg = sys.argv[2] if len(sys.argv) > 2 else "daily"
+
+    dispatch = {
+        "daily": generate_daily_report,
+        "weekly": generate_weekly_report,
+        "monthly": generate_monthly_report,
+    }
+
+    if type_arg not in dispatch:
+        print(f"[오류] 알 수 없는 타입: {type_arg} (daily/weekly/monthly 중 선택)", file=sys.stderr)
+        sys.exit(1)
+
+    result = dispatch[type_arg](date_arg)
 
     if result["status"] == "success":
-        # 터미널에 출력
-        print(result["markdown"])
-        
-        # 파일로도 자동 저장 (예: report_2026-03-02.md)
-        filename = f"report_{result['date']}.md"
         try:
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(result["markdown"])
-            print(f"\n[안내] 보고서가 파일로도 저장되었습니다: {filename}")
-        except Exception as e:
-            print(f"\n[주의] 파일 저장 중 오류 발생: {e}", file=sys.stderr)
+            print(result["markdown"])
+        except UnicodeEncodeError:
+            print("[보고서 출력 중 인코딩 에러 - 파일로는 정상 저장됨]")
     else:
         print(f"Error: {result['error']}", file=sys.stderr)
         sys.exit(1)

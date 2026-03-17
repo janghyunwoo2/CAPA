@@ -8,15 +8,15 @@ Glue 테이블: capa_ad_logs.ad_combined_log_summary
 - get_weekly_list(month_start, end_date): 주차별 범위 리스트 반환
 - get_monthly_kpi(year, month): 월간 KPI 조회
 - get_category_performance(start_date, end_date): 카테고리별 성과
-- get_shop_top5(start_date, end_date): Top 10 상점
-- get_shop_bottom5(start_date, end_date): Bottom 10 상점 (ROAS 기준)
+- get_shop_top10(start_date, end_date): Top 10 상점
+- get_shop_bottom10(start_date, end_date): Bottom 10 상점 (ROAS 기준)
 - get_funnel_data(start_date, end_date): 전환 퍼널 데이터
 """
 
 import os
 import time
 import logging
-# import calendar  # 미사용 (비교 쿼리 제거 후 불필요)
+import calendar
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -186,7 +186,7 @@ def get_daily_kpi(start_date: str, end_date: str) -> dict[str, Any]:
     """일간 누적 KPI를 조회합니다.
 
     start_date부터 end_date까지의 누적 데이터를 반환합니다.
-    월별 누적(1일부터 시작) 또는 데이터 조회에 사용됩니다.
+    월별 누적(1일부터 시작) 또는 전월 데이터 조회에 사용됩니다.
 
     Args:
         start_date: 시작 날짜 (YYYY-MM-DD), 보통 월초(1일)
@@ -194,13 +194,33 @@ def get_daily_kpi(start_date: str, end_date: str) -> dict[str, Any]:
 
     Returns:
         {
-            "summary": {...},  # 누적 KPI
+            "summary": {...},  # 누적 KPI 카드 (실적, 전월 대비)
+            "detail": {...},   # 상세 지표 (10개)
             "daily_breakdown": [...]  # 일별 분해 테이블
         }
     """
-    # 1. 누적 KPI 조회
+    # 1. 누적 KPI 조회 (동일 날짜 범위를 전월로 변경해서 비교)
     start = datetime.strptime(start_date, "%Y-%m-%d")
     end = datetime.strptime(end_date, "%Y-%m-%d")
+
+    # prev_start: start를 전월 1일로
+    if start.month == 1:
+        prev_start = start.replace(year=start.year - 1, month=12, day=1)
+    else:
+        prev_start = start.replace(month=start.month - 1, day=1)
+
+    # prev_end: end를 전월의 해당 날짜로 (단, 전월 범위 내)
+    if end.month == 1:
+        target_month = 12
+        target_year = end.year - 1
+    else:
+        target_month = end.month - 1
+        target_year = end.year
+
+    # 그 달의 마지막 날 구하기
+    _, last_day_of_month = calendar.monthrange(target_year, target_month)
+    prev_end_day = min(end.day, last_day_of_month)
+    prev_end = datetime(target_year, target_month, prev_end_day)
 
     _part = _build_partition_filter(start_date, end_date)
 
@@ -236,7 +256,44 @@ def get_daily_kpi(start_date: str, end_date: str) -> dict[str, Any]:
           BETWEEN CAST('{start_date}' AS date) AND CAST('{end_date}' AS date)
     """
 
+    _prev_start_str = prev_start.strftime('%Y-%m-%d')
+    _prev_end_str = prev_end.strftime('%Y-%m-%d')
+    _prev_part = _build_partition_filter(_prev_start_str, _prev_end_str)
+
+    sql_prev = f"""
+    SELECT
+        COUNT(DISTINCT impression_id) AS impressions,
+        SUM(CAST(is_click AS INT)) AS clicks,
+        COUNT(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN 1 END) AS conversions,
+        SUM(COALESCE(cost_per_click, 0)) AS cost,
+        SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) AS revenue,
+        ROUND(
+            CAST(SUM(CAST(is_click AS INT)) AS DOUBLE)
+            / NULLIF(COUNT(DISTINCT impression_id), 0) * 100,
+            2
+        ) AS ctr,
+        ROUND(
+            CAST(COUNT(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN 1 END) AS DOUBLE)
+            / NULLIF(SUM(CAST(is_click AS INT)), 0) * 100,
+            2
+        ) AS cvr,
+        ROUND(
+            SUM(CAST(cost_per_click AS DOUBLE))
+            / NULLIF(SUM(CAST(is_click AS INT)), 0),
+            2
+        ) AS cpc,
+        ROUND(
+            SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) / NULLIF(SUM(COALESCE(cost_per_click, 0)), 0) * 100,
+            2
+        ) AS roas
+    FROM {GLUE_DATABASE}.{GLUE_TABLE}
+    WHERE {_prev_part}
+      AND CAST(CONCAT(year, '-', LPAD(month, 2, '0'), '-', LPAD(day, 2, '0')) AS date)
+          BETWEEN CAST('{_prev_start_str}' AS date) AND CAST('{_prev_end_str}' AS date)
+    """
+
     df_kpi = execute_query(sql_kpi)
+    df_prev = execute_query(sql_prev)
 
     # 2. 일별 분해 조회
     sql_daily = f"""
@@ -266,8 +323,14 @@ def get_daily_kpi(start_date: str, end_date: str) -> dict[str, Any]:
 
     df_daily = execute_query(sql_daily)
 
+    # 이전 기간 데이터: 쿼리 결과가 없으면 데이터 없음으로 처리
+    # df_prev 행 수 0 = DB에 데이터 없음 → N/A
+    # df_prev 행 수 1 이상 = DB에 데이터 있음 (값이 0이어도 0.00원)
+    prev_rec = df_prev.to_dict(orient="records")[0] if len(df_prev) > 0 else {}
+
     return {
         "summary": df_kpi.to_dict(orient="records")[0] if len(df_kpi) > 0 else {},
+        "prev_summary": prev_rec,
         "daily_breakdown": df_daily.to_dict(orient="records"),
     }
 
@@ -292,7 +355,7 @@ def get_weekly_list(month_start: str, end_date: str) -> list[dict[str, Any]]:
                 "start_date": "YYYY-MM-DD",
                 "end_date": "YYYY-MM-DD",
                 "summary": {...},
-                "daily_breakdown": [...]
+                "prev_summary": {...}  # 전주 데이터
             },
             ...
         ]
@@ -354,11 +417,34 @@ def get_weekly_list(month_start: str, end_date: str) -> list[dict[str, Any]]:
     for i, week in enumerate(weeks):
         week_kpi = get_daily_kpi(week["start_date"], week["end_date"])
 
+        # 전주 데이터 조회
+        prev_week_kpi = None
+        prev_week_start = None
+        prev_week_end = None
+
+        if i > 0:
+            # 이전 주차가 있으면 그걸 사용
+            prev_week = weeks[i - 1]
+            prev_week_start = prev_week["start_date"]
+            prev_week_end = prev_week["end_date"]
+            prev_week_kpi = get_daily_kpi(prev_week_start, prev_week_end)
+        else:
+            # i==0이면 현재 주차의 월요일 - 7일이 전주 월요일
+            current_week_start = datetime.strptime(week["start_date"], "%Y-%m-%d")
+            prev_monday = current_week_start - timedelta(days=7)
+            prev_sunday = prev_monday + timedelta(days=6)
+            prev_week_start = prev_monday.strftime("%Y-%m-%d")
+            prev_week_end = prev_sunday.strftime("%Y-%m-%d")
+            prev_week_kpi = get_daily_kpi(prev_week_start, prev_week_end)
+
         result.append(
             {
                 "start_date": week["start_date"],
                 "end_date": week["end_date"],
                 "summary": week_kpi["summary"],
+                "prev_summary": prev_week_kpi["summary"] if prev_week_kpi else {},
+                "prev_week_start": prev_week_start,
+                "prev_week_end": prev_week_end,
                 "daily_breakdown": week_kpi["daily_breakdown"],
             }
         )
@@ -372,7 +458,9 @@ def get_weekly_list(month_start: str, end_date: str) -> list[dict[str, Any]]:
 
 
 def get_category_performance(start_date: str, end_date: str) -> list[dict[str, Any]]:
-    """카테고리별 성과를 조회합니다 (매출 내림차순)."""
+    """카테고리별 성과를 조회합니다 (매출 내림차순, 전월 대비 포함)."""
+    from datetime import datetime
+
     # 현재 기간 데이터
     _part = _build_partition_filter(start_date, end_date)
     sql_current = f"""
@@ -405,12 +493,58 @@ def get_category_performance(start_date: str, end_date: str) -> list[dict[str, A
     ORDER BY revenue DESC
     """
 
+    # 전월 동일 기간 데이터
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+
+    if start.month == 1:
+        prev_start = start.replace(year=start.year - 1, month=12, day=1)
+    else:
+        prev_start = start.replace(month=start.month - 1, day=1)
+
+    if end.month == 1:
+        target_month = 12
+        target_year = end.year - 1
+    else:
+        target_month = end.month - 1
+        target_year = end.year
+
+    _, last_day_of_month = calendar.monthrange(target_year, target_month)
+    prev_end_day = min(end.day, last_day_of_month)
+    prev_end = datetime(target_year, target_month, prev_end_day)
+
+    prev_start_str = prev_start.strftime('%Y-%m-%d')
+    prev_end_str = prev_end.strftime('%Y-%m-%d')
+    _prev_part = _build_partition_filter(prev_start_str, prev_end_str)
+
+    sql_prev = f"""
+    SELECT
+        food_category AS category,
+        SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) AS prev_revenue
+    FROM {GLUE_DATABASE}.{GLUE_TABLE}
+    WHERE {_prev_part}
+      AND CAST(CONCAT(year, '-', LPAD(month, 2, '0'), '-', LPAD(day, 2, '0')) AS date)
+          BETWEEN CAST('{prev_start_str}' AS date) AND CAST('{prev_end_str}' AS date)
+    GROUP BY food_category
+    """
+
     df_current = execute_query(sql_current)
+    df_prev = execute_query(sql_prev)
+
+    # 전월 데이터와 merge
+    if len(df_prev) > 0:
+        df_prev = df_prev[['category', 'prev_revenue']]
+        df_current = df_current.merge(df_prev, on='category', how='left')
+    else:
+        df_current['prev_revenue'] = None
+
     return df_current.to_dict(orient="records")
 
 
-def get_shop_top5(start_date: str, end_date: str) -> list[dict[str, Any]]:
-    """Top 5 상점을 조회합니다 (매출 기준)."""
+def get_shop_top10(start_date: str, end_date: str) -> list[dict[str, Any]]:
+    """Top 10 상점을 조회합니다 (매출 기준, 전월 대비 포함)."""
+    from datetime import datetime
+
     # 현재 기간 데이터
     _part = _build_partition_filter(start_date, end_date)
     sql_current = f"""
@@ -439,12 +573,56 @@ def get_shop_top5(start_date: str, end_date: str) -> list[dict[str, Any]]:
     LIMIT 5
     """
 
+    # 전월 동일 기간 데이터
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+
+    if start.month == 1:
+        prev_start = start.replace(year=start.year - 1, month=12, day=1)
+    else:
+        prev_start = start.replace(month=start.month - 1, day=1)
+
+    if end.month == 1:
+        target_month = 12
+        target_year = end.year - 1
+    else:
+        target_month = end.month - 1
+        target_year = end.year
+
+    _, last_day_of_month = calendar.monthrange(target_year, target_month)
+    prev_end_day = min(end.day, last_day_of_month)
+    prev_end = datetime(target_year, target_month, prev_end_day)
+
+    prev_start_str = prev_start.strftime('%Y-%m-%d')
+    prev_end_str = prev_end.strftime('%Y-%m-%d')
+    _prev_part = _build_partition_filter(prev_start_str, prev_end_str)
+
+    sql_prev = f"""
+    SELECT
+        store_id AS shop_id,
+        SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) AS prev_revenue
+    FROM {GLUE_DATABASE}.{GLUE_TABLE}
+    WHERE {_prev_part}
+      AND CAST(CONCAT(year, '-', LPAD(month, 2, '0'), '-', LPAD(day, 2, '0')) AS date)
+          BETWEEN CAST('{prev_start_str}' AS date) AND CAST('{prev_end_str}' AS date)
+    GROUP BY store_id
+    """
+
     df_current = execute_query(sql_current)
+    df_prev = execute_query(sql_prev)
+
+    # 전월 데이터와 merge
+    if len(df_prev) > 0:
+        df_prev = df_prev[['shop_id', 'prev_revenue']]
+        df_current = df_current.merge(df_prev, on='shop_id', how='left')
+    else:
+        df_current['prev_revenue'] = None
+
     return df_current.to_dict(orient="records")
 
 
-def get_shop_bottom5(start_date: str, end_date: str) -> list[dict[str, Any]]:
-    """Bottom 5 상점을 조회합니다 (ROAS 기준, 최소 노출 100건)."""
+def get_shop_bottom10(start_date: str, end_date: str) -> list[dict[str, Any]]:
+    """Bottom 10 상점을 조회합니다 (ROAS 기준, 최소 노출 100건)."""
     _part = _build_partition_filter(start_date, end_date)
     sql = f"""
     SELECT
@@ -477,7 +655,9 @@ def get_shop_bottom5(start_date: str, end_date: str) -> list[dict[str, Any]]:
 
 
 def get_funnel_data(start_date: str, end_date: str) -> list[dict[str, Any]]:
-    """전환 퍼널 데이터를 조회합니다."""
+    """전환 퍼널 데이터를 조회합니다 (전월 대비 포함)."""
+    from datetime import datetime
+
     # 현재 기간 데이터
     _part = _build_partition_filter(start_date, end_date)
     sql_current = f"""
@@ -492,5 +672,50 @@ def get_funnel_data(start_date: str, end_date: str) -> list[dict[str, Any]]:
     ORDER BY conversion_type
     """
 
+    # 전월 동일 기간 데이터
+    start = datetime.strptime(start_date, "%Y-%m-%d")
+    end = datetime.strptime(end_date, "%Y-%m-%d")
+
+    if start.month == 1:
+        prev_start = start.replace(year=start.year - 1, month=12, day=1)
+    else:
+        prev_start = start.replace(month=start.month - 1, day=1)
+
+    if end.month == 1:
+        target_month = 12
+        target_year = end.year - 1
+    else:
+        target_month = end.month - 1
+        target_year = end.year
+
+    _, last_day_of_month = calendar.monthrange(target_year, target_month)
+    prev_end_day = min(end.day, last_day_of_month)
+    prev_end = datetime(target_year, target_month, prev_end_day)
+
+    prev_start_str = prev_start.strftime('%Y-%m-%d')
+    prev_end_str = prev_end.strftime('%Y-%m-%d')
+    _prev_part = _build_partition_filter(prev_start_str, prev_end_str)
+
+    sql_prev = f"""
+    SELECT
+        conversion_type,
+        SUM(CAST(is_conversion AS INT)) AS prev_count
+    FROM {GLUE_DATABASE}.{GLUE_TABLE}
+    WHERE {_prev_part}
+      AND CAST(CONCAT(year, '-', LPAD(month, 2, '0'), '-', LPAD(day, 2, '0')) AS date)
+          BETWEEN CAST('{prev_start_str}' AS date) AND CAST('{prev_end_str}' AS date)
+    GROUP BY conversion_type
+    ORDER BY conversion_type
+    """
+
     df_current = execute_query(sql_current)
+    df_prev = execute_query(sql_prev)
+
+    # 전월 데이터와 merge
+    if len(df_prev) > 0:
+        df_prev = df_prev[['conversion_type', 'prev_count']]
+        df_current = df_current.merge(df_prev, on='conversion_type', how='left')
+    else:
+        df_current['prev_count'] = None
+
     return df_current.to_dict(orient="records")
