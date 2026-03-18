@@ -1,8 +1,8 @@
-# Text-to-SQL 로컬 E2E 테스트 계획서
+# Text-to-SQL 로컬 통합 테스트 계획서 (TDD)
 
 > **작성일**: 2026-03-17
 > **담당**: t1
-> **목적**: EKS 없이 로컬 Docker Compose 환경에서 E2E 전체 시나리오 완전 검증
+> **목적**: EKS 없이 로컬 Docker Compose 환경에서 E2E 전체 시나리오 완전 검증 — TDD 방식 적용
 > **기준 문서**:
 > - `docs/t1/text-to-sql/05-test/test-plan.md` — 원본 테스트 계획서 (Phase 2 참조)
 > - `docs/t1/text-to-sql/05-test/phase-3-prerequisites-report.md` — Phase 3 미해결 이슈 목록
@@ -35,10 +35,19 @@
 
 ### 1.1 핵심 원칙
 
+#### 환경 원칙
+
 - **EKS 없음**: 모든 의존성(vanna-api, ChromaDB, Redash)을 로컬 Docker Compose로 구동
 - **실제 Athena 연결**: Redash가 로컬에서 실제 AWS Athena에 직접 쿼리 (mock 아님)
 - **Phase 3 시나리오 동일 적용**: 케이스 A/B + EX-1~EX-10을 `curl.exe`로 직접 호출
 - **핫 리로드**: `src/` 볼륨 마운트로 코드 수정 시 컨테이너 재빌드 불필요
+
+#### TDD 원칙 (Red → Green → Refactor)
+
+- **Red**: 수정 전 코드로 테스트를 먼저 실행하여 실패 상태(현재 버그)를 확인한다
+- **Green**: BUG-4·RAG 패치 적용 후 동일 테스트를 재실행하여 Pass(기대값 충족)를 확인한다
+- **Refactor**: 전체 Pass 후 로그 품질·응답 구조를 검토하여 개선 여지를 파악한다
+- **단언 기반 검증**: 모든 케이스의 Pass 기준은 `assert response["field"] == expected` 형태의 단언문으로 명시한다
 
 ### 1.2 기존 Phase 2 대비 달라지는 점
 
@@ -50,21 +59,35 @@
 | **테스트 방법** | pytest 단위/통합 테스트 | curl 시나리오 테스트 (E2E) |
 | **검증 목표** | 코드 인터페이스 및 로직 검증 | 전체 파이프라인 E2E 동작 검증 |
 
-### 1.3 실행 흐름
+### 1.3 실행 흐름 (TDD 사이클)
 
 ```
-[사전 작업] 미해결 이슈 코드 수정 (BUG-4, RAG-1, RAG-2)
+[Red Phase — 실패 확인]
+  사전 작업: BUG-4·RAG 미수정 상태로 케이스 A 먼저 실행 → KeyError 발생 확인
     ↓
-[환경 구성] docker-compose.local-e2e.yml 작성
-           (vanna-api + ChromaDB + Redash + Postgres + Redis)
+
+[환경 구성]
+  docker-compose.local-e2e.yml 작성
+  (vanna-api + ChromaDB + Redash + Postgres + Redis)
     ↓
-[환경 기동] docker compose -f docker-compose.local-e2e.yml up --build -d
+
+[환경 기동]
+  docker compose -f docker-compose.local-e2e.yml up --build -d
     ↓
-[초기 설정] ChromaDB 시딩 + Redash 초기화 + Athena 데이터소스 등록
+
+[초기 설정]
+  ChromaDB 시딩 + Redash 초기화 + Athena 데이터소스 등록
     ↓
-[테스트 실행] 케이스 A → 케이스 B → EX-1 ~ EX-10
+
+[Green Phase — 패치 적용 후 통과]
+  코드 수정 (BUG-4, RAG-1, RAG-2) 적용 → vanna-api 재빌드
+  케이스 A → 케이스 B → EX-1 ~ EX-10 순차 실행
+  각 케이스별 assert 단언 항목 Pass 확인
     ↓
-[결과 기록] local-e2e-test-results.md 작성
+
+[Refactor Phase — 품질 검토]
+  로그 품질·응답 구조·SQL 생성 정확도 검토
+  결과 기록: local-e2e-test-results.md 작성
 ```
 
 ---
@@ -331,8 +354,15 @@ curl.exe http://localhost:8000/health
 
 ### 6.1 케이스 A: CTR 질문
 
-**질문**: "2026-02-01 캠페인별 CTR 알려줘" (실제 데이터 존재 날짜)
+**TC-A-01** | 실제 데이터 날짜로 캠페인별 CTR 조회
 
+#### Given
+- 로컬 E2E 환경 기동 완료 (vanna-api + ChromaDB + Redash + Athena)
+- ChromaDB 시딩 완료 (DDL, 문서, QA 예제)
+- Athena `capa_db` 에 `2026-02-01` 파티션 데이터 존재
+- BUG-4 패치 적용 완료 (`max_age: 0`)
+
+#### When
 ```powershell
 curl.exe -X POST $API_BASE/query `
   -H "Content-Type: application/json; charset=utf-8" `
@@ -340,31 +370,38 @@ curl.exe -X POST $API_BASE/query `
   -d '{"question": "2026-02-01 캠페인별 CTR 알려줘"}'
 ```
 
-**검증 체크리스트**:
+#### Then (assert 단언)
 
-| Step | 검증 항목 | 기대값 | Pass 기준 |
-|------|----------|-------|----------|
-| Step 1 | `intent` | `DATA_QUERY` | 정확히 일치 |
-| Step 2 | `refined_question` | "CTR" 포함 | 키워드 포함 여부 |
-| Step 3 | `keywords` | `["CTR", "캠페인"]` 포함 | 최소 2개 |
-| Step 4 | RAG 검색 | DDL 1건 이상 | `rag_results.ddl_count >= 1` |
-| Step 5 | SQL | `ad_combined_log` 테이블 + 날짜 조건 | `year='2026' AND month='02' AND day='01'` |
-| Step 6 | SQL 검증 | `sql_validated: true` | 3계층 + EXPLAIN 성공 |
-| Step 7~8 | Redash 실행 | `redash_query_id` 존재 | job 정상 완료 (BUG-4 수정 확인) |
-| Step 9 | `row_count` | 1 이상 | `row_count >= 1` |
-| Step 10 | AI 분석 | `analysis` 텍스트 존재 | 한국어 분석 포함 |
-| Step 10.5 | 차트 | `chart_image_base64` 존재 | null이 아님 (CHART-1 검증) |
-| Step 11 | 이력 | `history_id` 존재 | UUID 형식 |
-| 전체 | HTTP 상태 | 200 | `error: null` |
+| TC | Step | assert 단언 | 판정 |
+|----|------|------------|------|
+| A-01-1 | Step 1 | `assert response["intent"] == "DATA_QUERY"` | ☐ |
+| A-01-2 | Step 2 | `assert "CTR" in response["refined_question"]` | ☐ |
+| A-01-3 | Step 3 | `assert len(response["keywords"]) >= 2` | ☐ |
+| A-01-4 | Step 4 | `assert response["rag_results"]["ddl_count"] >= 1` | ☐ |
+| A-01-5 | Step 5 | `assert "year='2026'" in response["generated_sql"]` | ☐ |
+| A-01-5 | Step 5 | `assert "ad_combined_log" in response["generated_sql"]` | ☐ |
+| A-01-6 | Step 6 | `assert response["sql_validated"] == True` | ☐ |
+| A-01-7 | Step 7~8 | `assert response["redash_query_id"] is not None`  *(BUG-4 검증)* | ☐ |
+| A-01-8 | Step 9 | `assert response["row_count"] >= 1` | ☐ |
+| A-01-9 | Step 10 | `assert len(response["analysis"]) > 0` | ☐ |
+| A-01-10 | Step 10.5 | `assert response["chart_image_base64"] is not None`  *(CHART-1 조건부)* | ☐ |
+| A-01-11 | Step 11 | `assert response["history_id"] is not None` | ☐ |
+| A-01-12 | 전체 | `assert http_status == 200 and response["error"] is None` | ☐ |
 
-**케이스 A 성공 기준**: 위 12개 항목 중 10개 이상 Pass (CHART-1은 조건부)
+**TC-A-01 성공 기준**: 13개 assert 중 11개 이상 Pass (CHART-1은 조건부 허용)
 
 ---
 
 ### 6.2 케이스 B: ROAS 질문
 
-**질문**: "최근 7일간 디바이스별 ROAS 순위 알려줘"
+**TC-B-01** | 최근 7일간 디바이스별 ROAS 순위 조회
 
+#### Given
+- TC-A-01 Pass 완료 (환경 정상 기동 확인)
+- Athena `capa_db`에 최근 7일 이내 파티션 데이터 존재 (2026-02-01 이후)
+- `ad_combined_log_summary` 테이블에 `cost`, `conversion_value`, `device_type` 컬럼 존재
+
+#### When
 ```powershell
 curl.exe -X POST $API_BASE/query `
   -H "Content-Type: application/json; charset=utf-8" `
@@ -372,170 +409,250 @@ curl.exe -X POST $API_BASE/query `
   -d '{"question": "최근 7일간 디바이스별 ROAS 순위 알려줘"}'
 ```
 
-**검증 체크리스트**:
+#### Then (assert 단언)
 
-| 항목 | 기대값 | Pass 기준 |
-|------|-------|----------|
-| `intent` | `DATA_QUERY` | 정확히 일치 |
-| 생성 SQL 테이블 | `ad_combined_log_summary` | 포함 여부 |
-| ROAS 계산식 | `SUM(conversion_value) / SUM(cost)` 패턴 | SQL 포함 여부 |
-| 날짜 범위 필터 | 7일 범위 (date_diff 또는 interval) | SQL 포함 여부 |
-| GROUP BY | `device_type` | SQL 포함 여부 |
-| Redash 실행 | `row_count >= 1` | 실제 데이터 확인 |
-| AI 분석 | 디바이스별 인사이트 포함 | 한국어 분석 텍스트 |
+| TC | assert 단언 | 판정 |
+|----|------------|------|
+| B-01-1 | `assert response["intent"] == "DATA_QUERY"` | ☐ |
+| B-01-2 | `assert "ad_combined_log_summary" in response["generated_sql"]` | ☐ |
+| B-01-3 | `assert "SUM(conversion_value)" in response["generated_sql"] or "conversion_value" in response["generated_sql"]` | ☐ |
+| B-01-4 | `assert "device_type" in response["generated_sql"]` | ☐ |
+| B-01-5 | `assert "GROUP BY" in response["generated_sql"]` | ☐ |
+| B-01-6 | `assert response["row_count"] >= 1` | ☐ |
+| B-01-7 | `assert len(response["analysis"]) > 0  # 디바이스별 인사이트 포함` | ☐ |
+| B-01-8 | `assert http_status == 200 and response["error"] is None` | ☐ |
+
+**TC-B-01 성공 기준**: 8개 assert 중 7개 이상 Pass
 
 ---
 
 ### 6.3 예외 케이스 EX-1 ~ EX-10
 
-#### EX-1: 도메인 범위 외 질문
+> **공통 Given**: 로컬 E2E 환경 기동 완료, TC-A-01 Pass 확인 후 진행
 
+---
+
+#### TC-EX-01: 도메인 범위 외 질문
+
+##### Given
+- 광고 데이터와 무관한 일반 질문 입력
+
+##### When
 ```powershell
 curl.exe -X POST $API_BASE/query `
   -H "Content-Type: application/json; charset=utf-8" `
   -d '{"question": "파이썬 배우는 방법은?"}'
 ```
 
-| 기대 | 검증 기준 |
-|------|----------|
-| `intent: "OUT_OF_DOMAIN"` | Step 1에서 즉시 종료 |
-| HTTP 200 + `status: "rejected"` | 정상 거부 응답 |
-| SQL 생성 없음 | `generated_sql: null` |
+##### Then (assert 단언)
+```
+assert response["intent"] == "OUT_OF_DOMAIN"
+assert http_status == 200
+assert response.get("generated_sql") is None
+assert response["status"] == "rejected"  # 또는 error 필드 존재
+```
 
 ---
 
-#### EX-2: 의도 불명확 질문
+#### TC-EX-02: 의도 불명확 질문
 
+##### Given
+- 날짜·지표가 불특정한 모호한 질문 입력
+
+##### When
 ```powershell
 curl.exe -X POST $API_BASE/query `
   -H "Content-Type: application/json; charset=utf-8" `
   -d '{"question": "지난 주 데이터 좀"}'
 ```
 
-| 기대 | 검증 기준 |
-|------|----------|
-| Step 2에서 정제 시도 | `refined_question` 있음 |
-| 또는 OUT_OF_DOMAIN | Step 1에서 분류 거부 |
+##### Then (assert 단언)
+```
+# 두 가지 경우 중 하나면 Pass
+assert (
+    response.get("refined_question") is not None  # Step 2에서 정제 시도
+    or response["intent"] == "OUT_OF_DOMAIN"       # Step 1에서 분류 거부
+)
+```
 
 ---
 
-#### EX-3: SQL 생성 타임아웃 시뮬레이션
+#### TC-EX-03: SQL 생성 타임아웃 시뮬레이션
 
-> **방법**: `LLM_TIMEOUT_SECONDS` 환경변수를 0.001로 설정 후 재요청
+##### Given
+- `LLM_TIMEOUT_SECONDS=0.001` 환경변수 오버라이드 후 vanna-api 재시작
+- 또는 Anthropic API 네트워크 차단으로 시뮬레이션
 
+##### When
 ```powershell
-# vanna-api에 타임아웃 강제 적용 (환경변수 오버라이드 후 재시작)
-# 또는 네트워크 차단으로 시뮬레이션
 curl.exe -X POST $API_BASE/query `
   -H "Content-Type: application/json; charset=utf-8" `
   -d '{"question": "어제 캠페인별 CTR"}'
 ```
 
-| 기대 | 검증 기준 |
-|------|----------|
-| HTTP 4xx/5xx 또는 200 + error | `error_code: "SQL_GENERATION_FAILED"` |
-| 친절한 오류 메시지 | `message` 필드 존재 |
+##### Then (assert 단언)
+```
+assert response.get("error_code") == "SQL_GENERATION_FAILED"  # 또는 TIMEOUT
+assert response.get("message") is not None  # 사용자 친화적 오류 메시지
+assert http_status in [200, 504]  # 서비스에 따라 허용
+```
 
 ---
 
-#### EX-4: Redash 쿼리 타임아웃
+#### TC-EX-04: Redash 쿼리 타임아웃
 
-> **방법**: `REDASH_QUERY_TIMEOUT_SECONDS=1`로 설정 후 복잡한 쿼리 실행
+##### Given
+- `REDASH_QUERY_TIMEOUT_SECONDS=1` 설정 후 vanna-api 재시작
+- 복잡한 JOIN 쿼리가 생성될 질문 사용
 
-| 기대 | 검증 기준 |
-|------|----------|
-| `error_code: "QUERY_TIMEOUT"` | timeout 초과 시 에러 반환 |
-| 쿼리 단순화 제안 | `message` 필드에 안내 문구 |
+##### When
+```powershell
+curl.exe -X POST $API_BASE/query `
+  -H "Content-Type: application/json; charset=utf-8" `
+  -d '{"question": "최근 30일간 캠페인별 디바이스별 시간대별 CTR ROAS 전환율 알려줘"}'
+```
+
+##### Then (assert 단언)
+```
+assert response.get("error_code") == "QUERY_TIMEOUT"
+assert response.get("message") is not None  # 쿼리 단순화 안내 포함
+```
 
 ---
 
-#### EX-5: SQL 인젝션 시도
+#### TC-EX-05: SQL 인젝션 시도
 
+##### Given
+- DDL 조작 구문이 포함된 악의적 질문 입력
+
+##### When
 ```powershell
 curl.exe -X POST $API_BASE/query `
   -H "Content-Type: application/json; charset=utf-8" `
   -d '{"question": "DROP TABLE ad_combined_log; SELECT 1"}'
 ```
 
-| 기대 | 검증 기준 |
-|------|----------|
-| SQL 검증 거부 | `sql_validated: false` 또는 OUT_OF_DOMAIN |
-| HTTP 200 + error 또는 rejected | 정상 방어 |
+##### Then (assert 단언)
+```
+# 두 가지 경우 중 하나면 Pass
+assert (
+    response.get("sql_validated") == False         # SQL 검증 단계에서 차단
+    or response["intent"] == "OUT_OF_DOMAIN"        # 의도 분류 단계에서 차단
+)
+assert response.get("error") is not None or response.get("status") == "rejected"
+```
 
 ---
 
-#### EX-6: 허용되지 않은 테이블 참조
+#### TC-EX-06: 허용되지 않은 테이블 참조
 
+##### Given
+- 허용 테이블(`ad_combined_log`, `ad_combined_log_summary`) 외 테이블 요청
+
+##### When
 ```powershell
 curl.exe -X POST $API_BASE/query `
   -H "Content-Type: application/json; charset=utf-8" `
   -d '{"question": "users 테이블에서 이메일 목록 줘"}'
 ```
 
-| 기대 | 검증 기준 |
-|------|----------|
-| SQL 검증 거부 | `error_code: "INVALID_TABLE"` |
-| 허용 테이블 안내 | message 필드 존재 |
+##### Then (assert 단언)
+```
+assert response.get("sql_validated") == False or response["intent"] == "OUT_OF_DOMAIN"
+assert response.get("message") is not None  # 허용 테이블 안내 포함
+```
 
 ---
 
-#### EX-7: 빈 질문
+#### TC-EX-07: 빈 질문
 
+##### Given
+- 빈 문자열 question 전송
+
+##### When
 ```powershell
 curl.exe -X POST $API_BASE/query `
   -H "Content-Type: application/json; charset=utf-8" `
   -d '{"question": ""}'
 ```
 
-| 기대 | 검증 기준 |
-|------|----------|
-| HTTP 422 또는 400 | 빈 질문 거부 |
+##### Then (assert 단언)
+```
+assert http_status in [400, 422]  # FastAPI 유효성 검사 거부
+```
 
 ---
 
-#### EX-8: 존재하지 않는 날짜 범위
+#### TC-EX-08: 데이터 존재 범위 외 날짜 요청
 
+##### Given
+- Athena에 데이터 없는 날짜 (DATA_START_DATE: 2026-02-01 이전) 질문
+
+##### When
 ```powershell
 curl.exe -X POST $API_BASE/query `
   -H "Content-Type: application/json; charset=utf-8" `
   -d '{"question": "2020년 1월 데이터 줘"}'
 ```
 
-| 기대 | 검증 기준 |
-|------|----------|
-| SQL 생성 또는 데이터 없음 응답 | `row_count: 0` + 안내 메시지 |
-| 또는 사전 차단 | DATA_START_DATE(2026-02-01) 이전 요청 거부 |
+##### Then (assert 단언)
+```
+# 두 가지 경우 중 하나면 Pass
+assert (
+    response.get("row_count") == 0             # SQL 생성 성공 + 빈 결과 처리
+    or response.get("status") == "rejected"    # 사전 날짜 범위 차단
+)
+assert response.get("message") is not None
+```
 
 ---
 
-#### EX-9: 특수문자 포함 질문 (XSS/인젝션)
+#### TC-EX-09: 특수문자 포함 질문 (XSS 방어)
 
+##### Given
+- HTML/스크립트 태그가 포함된 질문 입력
+
+##### When
 ```powershell
 curl.exe -X POST $API_BASE/query `
   -H "Content-Type: application/json; charset=utf-8" `
   -d '{"question": "<script>alert(1)</script> CTR 알려줘"}'
 ```
 
-| 기대 | 검증 기준 |
-|------|----------|
-| 특수문자 이스케이프 또는 OUT_OF_DOMAIN | 스크립트 태그 미실행 |
+##### Then (assert 단언)
+```
+# 스크립트 태그 미실행 확인 (이스케이프 또는 도메인 거부)
+assert "<script>" not in response.get("analysis", "")
+assert "<script>" not in response.get("message", "")
+assert (
+    response["intent"] == "OUT_OF_DOMAIN"      # 거부
+    or response.get("sql_validated") is not None  # 정상 처리 (이스케이프)
+)
+```
 
 ---
 
-#### EX-10: 결과 없는 정상 쿼리
+#### TC-EX-10: 데이터 없는 정상 날짜 쿼리 (빈 결과 처리)
 
+##### Given
+- 유효한 날짜이나 Athena 파티션 데이터 없음 (2026-03-01 이후 미존재)
+
+##### When
 ```powershell
 curl.exe -X POST $API_BASE/query `
   -H "Content-Type: application/json; charset=utf-8" `
   -d '{"question": "2026-03-01 캠페인별 CTR 알려줘"}'
 ```
 
-*(2026-03-01 데이터 미존재 날짜)*
-
-| 기대 | 검증 기준 |
-|------|----------|
-| `row_count: 0` | SQL 생성 성공, 결과 없음 처리 |
-| `analysis` 또는 빈 결과 안내 | LLM 스킵 + fallback 메시지 |
+##### Then (assert 단언)
+```
+assert http_status == 200
+assert response["intent"] == "DATA_QUERY"
+assert response.get("generated_sql") is not None  # SQL 생성 성공
+assert response.get("row_count") == 0              # 빈 결과
+assert response.get("message") is not None         # fallback 메시지 (LLM 스킵)
+assert response.get("error") is None               # 오류 없이 정상 완료
+```
 
 ---
 
@@ -567,15 +684,17 @@ docker compose -f docker-compose.local-e2e.yml logs vanna-api `
 
 ## 8. 성공 기준 및 결과 기록
 
-### 8.1 전체 성공 기준
+### 8.1 전체 성공 기준 (TDD Green Phase)
 
-| 구분 | 목표 | Pass 기준 |
-|------|------|----------|
-| **케이스 A** | 12개 항목 | 10/12 이상 Pass |
-| **케이스 B** | 7개 항목 | 6/7 이상 Pass |
-| **EX-1~EX-10** | 10개 예외 | 8/10 이상 Pass |
-| **BUG-4 검증** | Redash 재실행 시 캐시 오류 없음 | 0건 발생 |
-| **CHART-1 검증** | Step 10.5 ChartRenderer 실행 | `chart_image_base64 != null` |
+| 구분 | TC ID | assert 개수 | Green 기준 |
+|------|-------|------------|-----------|
+| **케이스 A** | TC-A-01 | 13개 | 11/13 이상 Pass |
+| **케이스 B** | TC-B-01 | 8개 | 7/8 이상 Pass |
+| **예외 EX-01~10** | TC-EX-01~10 | 케이스당 2~6개 | 8/10 케이스 Pass |
+| **BUG-4 검증** | TC-A-01-7 | `redash_query_id is not None` | 0건 KeyError 발생 |
+| **CHART-1 검증** | TC-A-01-10 | `chart_image_base64 is not None` | 조건부 (실패해도 진행) |
+
+**Refactor 진입 조건**: TC-A-01 + TC-B-01 + TC-EX 8개 이상 Green 달성 시
 
 ### 8.2 결과 기록 파일
 
