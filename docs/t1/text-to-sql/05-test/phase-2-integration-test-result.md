@@ -400,11 +400,57 @@ assert "<script>" not in body_str.lower().replace("&lt;script&gt;", "")
 
 ---
 
-## 9. 다음 단계
+## 9. TC-FB-01: 긍정 피드백 → RAG 자동 훈련 검증
+
+### 9.1 테스트 개요
+
+**목적**: 사용자 👍 피드백 시 질문-SQL 쌍이 ChromaDB에 자동 학습되는지 검증
+**실행 일시**: 2026-03-18 17:45
+**방식**: curl 수동 테스트
+
+### 9.2 실행 결과
+
+**Step 1 — before 건수**: **17건**
+
+**Step 2 — 쿼리 실행**:
+```bash
+curl -X POST http://localhost:8000/query \
+  -H "X-Internal-Token: test-token" \
+  -d '{"question": "2월 5일 캠페인별 CTR 알려줘"}'
+```
+- `history_id`: `be0e530a-3945-4e30-9848-5f4d7eb7dd4a`
+- HTTP 200, `refined_question`: "2월 5일 캠페인별 CTR"
+
+**Step 3 — 긍정 피드백 전송**:
+```bash
+curl -X POST http://localhost:8000/feedback \
+  -H "X-Internal-Token: test-token" \
+  -d '{"history_id": "be0e530a-3945-4e30-9848-5f4d7eb7dd4a", "feedback": "positive", "slack_user_id": "test-user"}'
+```
+```json
+{"status": "accepted", "trained": true, "message": "피드백이 기록되었으며 학습 데이터에 추가되었습니다."}
+```
+
+**Step 4 — after 건수**: **18건** (+1 ✅)
+
+### 9.3 assert 단언 결과
+
+| TC | assert 단언 | 기대값 | 실제값 | 판정 |
+|----|------------|--------|--------|------|
+| FB-01-1 | HTTP 상태 | 200 | 200 | ✅ |
+| FB-01-2 | `trained` 필드 | `true` | `true` | ✅ |
+| FB-01-3 | `/training-data` count | 17 + 1 = 18 | 18 | ✅ |
+
+**결과**: 3/3 PASS → **GREEN ✅**
+
+---
+
+## 10. 다음 단계
 
 - [x] **TC-A-01**: "2026-02-01 캠페인별 CTR 알려줘" 실행 ✅
 - [x] **TC-B-01**: "2월 1~7일 디바이스별 ROAS 순위 알려줘" 실행 ✅
-- [x] **TC-EX-01~10**: 예외 케이스 자동화 테스트 (20/20 PASS) ✅
+- [x] **TC-EX-01~10**: 예외 케이스 테스트 완료 (자동화 20개 + 수동 2개 = 22개 메서드 전부 PASS) ✅
+- [x] **TC-FB-01**: 긍정 피드백 → RAG 자동 훈련 검증 (3/3 PASS) ✅
 - [ ] **Phase 4**: SQL 품질 평가 (LLM-as-Judge, 목표 평균 3.5/5)
 - [ ] **DELETE /training-data/{id}**: 특정 학습 데이터 삭제 엔드포인트 추가
 

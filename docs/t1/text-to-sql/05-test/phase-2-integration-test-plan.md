@@ -693,8 +693,46 @@ docker compose -f docker-compose.local-e2e.yml logs vanna-api `
 | **예외 EX-01~10** | TC-EX-01~10 | 케이스당 2~6개 | 8/10 케이스 Pass |
 | **BUG-4 검증** | TC-A-01-7 | `redash_query_id is not None` | 0건 KeyError 발생 |
 | **CHART-1 검증** | TC-A-01-10 | `chart_image_base64 is not None` | 조건부 (실패해도 진행) |
+| **피드백 RAG 훈련** | TC-FB-01 | 3개 | trained=true + 학습 건수 +1 |
 
 **Refactor 진입 조건**: TC-A-01 + TC-B-01 + TC-EX 8개 이상 Green 달성 시
+
+---
+
+### 8.3 TC-FB-01: 긍정 피드백 → RAG 자동 훈련 검증
+
+**목적**: 사용자가 👍 피드백 시 해당 질문-SQL 쌍이 ChromaDB에 자동 학습되는지 확인
+
+**사전 조건**: 성공한 쿼리(`history_id` 보유)가 1건 이상 존재
+
+**테스트 절차**:
+
+```bash
+# Step 1: 현재 RAG 학습 데이터 건수 확인 (before)
+curl http://localhost:8000/training-data | grep count
+
+# Step 2: 쿼리 실행 → history_id 획득
+curl -X POST http://localhost:8000/query \
+  -H "X-Internal-Token: test-token" \
+  -d '{"question": "2월 5일 캠페인별 CTR 알려줘"}'
+# → 응답에서 history_id 확인 (또는 /data/query_history.jsonl 직접 조회)
+
+# Step 3: 긍정 피드백 전송
+curl -X POST http://localhost:8000/feedback \
+  -H "X-Internal-Token: test-token" \
+  -d '{"history_id": "<step2에서 획득>", "feedback": "positive", "slack_user_id": "test-user"}'
+
+# Step 4: RAG 학습 건수 재확인 (after)
+curl http://localhost:8000/training-data | grep count
+```
+
+**assert 단언**:
+
+| TC | assert 단언 | 기대값 | Pass 기준 |
+|----|------------|--------|----------|
+| FB-01-1 | `/feedback` 응답 HTTP 상태 | 200 | 200 |
+| FB-01-2 | 응답 `trained` 필드 | `true` | `true` |
+| FB-01-3 | `/training-data` count | before + 1 | before보다 1 증가 |
 
 ### 8.2 결과 기록 파일
 
