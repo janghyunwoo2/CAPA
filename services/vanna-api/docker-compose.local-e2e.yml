@@ -167,6 +167,10 @@ services:
       - REDASH_DATA_SOURCE_ID=${REDASH_DATA_SOURCE_ID:-1}
       - REDASH_PUBLIC_URL=http://localhost:5000
 
+      # 타임아웃 제어 (기본값: LLM 60초, Redash 쿼리 300초)
+      - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-60}
+      - REDASH_QUERY_TIMEOUT_SEC=${REDASH_QUERY_TIMEOUT_SEC:-300}
+
       - PYTHONUNBUFFERED=1
       - DEBUG=true
 
