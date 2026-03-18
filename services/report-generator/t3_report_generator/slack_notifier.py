@@ -16,12 +16,13 @@ slack_bot_token = os.getenv("SLACK_BOT_TOKEN")
 slack_app = App(token=slack_bot_token) if slack_bot_token else None
 
 
-def send_report_to_slack(pdf_path: str, report_date: str = None) -> bool:
+def send_report_to_slack(pdf_path: str, report_date: str = None, report_type: str = "daily") -> bool:
     """PDF 보고서를 Slack으로 전송합니다.
 
     Args:
         pdf_path: PDF 파일 경로
         report_date: 보고서 날짜 (YYYY-MM-DD 형식)
+        report_type: 보고서 타입 (daily/weekly/monthly)
 
     Returns:
         성공 여부
@@ -39,13 +40,21 @@ def send_report_to_slack(pdf_path: str, report_date: str = None) -> bool:
         return False
 
     try:
+        # 보고서 타입별 이모지 및 라벨
+        type_labels = {
+            "daily": ("🔵", "일간"),
+            "weekly": ("📅", "주간"),
+            "monthly": ("📊", "월간"),
+        }
+        emoji, label = type_labels.get(report_type, ("📋", "보고서"))
+
         # 메시지 구성
         if report_date:
-            title = f"CAPA 광고 성과 보고서 ({report_date})"
-            comment = f"📊 {report_date} 보고서 생성 완료"
+            title = f"CAPA 광고 성과 보고서 - [{label}] ({report_date})"
+            comment = f"{emoji} [{label}] {report_date} 보고서 생성 완료"
         else:
-            title = "CAPA 광고 성과 보고서"
-            comment = "📊 CAPA 광고 성과 보고서 생성 완료"
+            title = f"CAPA 광고 성과 보고서 - [{label}]"
+            comment = f"{emoji} [{label}] 보고서 생성 완료"
 
         # PDF 파일 업로드
         slack_app.client.files_upload_v2(
@@ -54,7 +63,7 @@ def send_report_to_slack(pdf_path: str, report_date: str = None) -> bool:
             title=title,
             initial_comment=comment,
         )
-        logger.info("✓ Slack 전송 완료")
+        logger.info(f"✓ Slack 전송 완료 ({label})")
         return True
 
     except Exception as e:

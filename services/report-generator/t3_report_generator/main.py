@@ -8,6 +8,10 @@ import logging
 import sys
 from datetime import datetime, timedelta
 from typing import Any
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 
 from athena_client import (
     get_daily_kpi,
@@ -31,7 +35,8 @@ logging.basicConfig(level=logging.INFO)
 def _parse_date(date_str: str = None) -> datetime:
     if date_str:
         return datetime.strptime(date_str, "%Y-%m-%d")
-    return datetime.now()
+    kst_tz = ZoneInfo('Asia/Seoul')
+    return datetime.now(kst_tz)
 
 
 def _get_month_start(date: datetime) -> datetime:
@@ -70,7 +75,7 @@ def _save_and_send(markdown: str, daily_breakdown: list, date: datetime, report_
         logger.info(f"PDF 저장: {pdf_path}")
 
         # Slack 전송
-        if slack_notifier.send_report_to_slack(pdf_path, date_str):
+        if slack_notifier.send_report_to_slack(pdf_path, date_str, report_type):
             logger.info("Slack 전송 완료")
         else:
             logger.info("Slack 전송 실패 또는 설정 안 됨")

@@ -8,6 +8,10 @@ import logging
 import tempfile
 from datetime import datetime
 from pathlib import Path
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 
 import matplotlib
 matplotlib.use("Agg")
@@ -126,7 +130,9 @@ def create_pdf(
 
     # 헤더
     story.append(Paragraph("CAPA 광고 성과 보고서", title_style))
-    story.append(Paragraph(f"생성 일시: {datetime.now().strftime('%Y-%m-%d %H:%M')}", normal_style))
+    kst_tz = ZoneInfo('Asia/Seoul')
+    kst_time = datetime.now(kst_tz).strftime('%Y-%m-%d %H:%M')
+    story.append(Paragraph(f"생성 일시: {kst_time}", normal_style))
     story.append(Spacer(1, 0.5*cm))
 
     # 마크다운 파싱 후 요소 추가
