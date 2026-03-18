@@ -17,7 +17,7 @@
 ### 1.1 핵심 원칙
 
 이 테스트 계획서는 **e2e-scenario.md에 정의된 시나리오를 그대로 실행하는 것**을 목표로 한다.
-단위 테스트(pytest)는 배포 전 인터페이스 확인 목적이고, 핵심은 시나리오 A·B와 EX-1~EX-10 전체 통과이다.
+단위 테스트(pytest)는 배포 전 인터페이스 확인 목적이고, 핵심은 케이스 A·B와 EX-1~EX-10 전체 통과이다.
 
 **모든 테스트는 Docker 컨테이너에서 실행한다.**
 - 이유: EKS 배포 환경(`python:3.11`)과 동일한 의존성 보장
@@ -26,7 +26,7 @@
 ```
 Docker 기반 단위 테스트              배포 후 (EKS)
 ──────────────────────────────    ──────────────────────────────────
-Phase 1: Dockerfile.test 빌드      Phase 3: E2E 시나리오 A, B
+Phase 1: Dockerfile.test 빌드      Phase 3: E2E 케이스 A, B
          → pytest 단위 테스트              예외 시나리오 EX-1 ~ EX-10
 Phase 2: docker compose 통합 테스트 Phase 4: SQL 품질 평가 (LLM-as-Judge)
          → bkit qa-monitor 감시
@@ -36,7 +36,7 @@ Phase 2: docker compose 통합 테스트 Phase 4: SQL 품질 평가 (LLM-as-Judg
 
 | 구분 | 항목 수 | 테스트 방법 |
 |------|--------|-----------|
-| 기능 요구사항 (FR) | 16개 (FR-01~FR-11, FR-13a~FR-15a, FR-21) | 시나리오 A/B + 단위 테스트 |
+| 기능 요구사항 (FR) | 16개 (FR-01~FR-11, FR-13a~FR-15a, FR-21) | 케이스 A/B + 단위 테스트 |
 | 비기능 요구사항 (NFR) | 8개 (NFR-01~NFR-08) | 타임아웃/메모리 측정 |
 | 보안 요구사항 (SEC) | 11개 | EX-3, EX-9, EX-10 + 단위 테스트 |
 | 예외 시나리오 (EX) | 10개 | curl 직접 호출 |
@@ -53,7 +53,7 @@ Phase 2: docker compose 통합 테스트 Phase 4: SQL 품질 평가 (LLM-as-Judg
     ↓
 [선행 조건] terraform.tfvars 변수 추가 + ECR 빌드 + terraform apply
     ↓
-[Phase 3] E2E 시나리오 테스트 (시나리오 A → B → EX-1~EX-10 순서)
+[Phase 3] E2E 시나리오 테스트 (케이스 A → B → EX-1~EX-10 순서)
               도구: bkit /zero-script-qa + qa-monitor — kubectl 로그 실시간 분석
     ↓
 [Phase 4] SQL 품질 평가 (LLM-as-Judge, 평균 3.5/5 이상)
@@ -99,23 +99,36 @@ def ephemeral_chroma():
 
 ### 2.2 EKS 배포 전 체크리스트 (Phase 3 선행 조건)
 
-```bash
-# 1. terraform.tfvars 신규 변수 3개 추가 확인
-grep "redash_api_key"     infrastructure/terraform/terraform.tfvars  # 없으면 추가
-grep "internal_api_token" infrastructure/terraform/terraform.tfvars  # 없으면 추가
-grep "redash_public_url"  infrastructure/terraform/terraform.tfvars  # 없으면 추가
+> **업데이트 (2026-03-17)**: terraform.tfvars 변수 설정 완료 확인됨. 하기 참고사항 추가.
 
-# 2. ECR 이미지 빌드 & 푸시
+#### terraform.tfvars 변수 상태 (2026-03-17 확인 완료)
+
+| 변수 | 상태 | 비고 |
+|------|------|------|
+| `redash_api_key` | ✅ 설정됨 | Redash Admin > Settings > API Key |
+| `redash_public_url` | ✅ 설정됨 | kubectl get ingress -n redash 로 확인 |
+| `internal_api_token` | ⚠️ 선택사항 | 빈 값이면 인증 스킵 (개발 환경 허용) — EKS 내부 통신이므로 생략 가능 |
+
+> **image_tag 참고**: `11-k8s-apps.tf`에 `:latest` 하드코딩 상태.
+> ECR에 `latest` 태그로 푸시 후 `kubectl rollout restart` 실행 시 K8s `imagePullPolicy: Always` 기본 동작으로 최신 이미지 자동 pull됨.
+> `-var="image_tag=v1.0.0"` 옵션은 현재 코드에 미반영이므로 무시해도 됨.
+
+```bash
+# 1. terraform.tfvars 변수 확인 (2026-03-17 완료)
+grep "redash_api_key"    infrastructure/terraform/terraform.tfvars  # ✅ 설정됨
+grep "redash_public_url" infrastructure/terraform/terraform.tfvars  # ✅ 설정됨
+
+# 2. ECR 이미지 빌드 & 푸시 (latest 태그 사용)
 aws ecr get-login-password --region ap-northeast-2 | \
   docker login --username AWS --password-stdin <ECR_URL>
-docker build -t <ECR_URL>/capa-vanna-api:v1.0.0 services/vanna-api/
-docker build -t <ECR_URL>/capa-slack-bot:v1.0.0 services/slack-bot/
-docker push <ECR_URL>/capa-vanna-api:v1.0.0
-docker push <ECR_URL>/capa-slack-bot:v1.0.0
+docker build -t <ECR_URL>/capa-vanna-api:latest services/vanna-api/
+docker build -t <ECR_URL>/capa-slack-bot:latest services/slack-bot/
+docker push <ECR_URL>/capa-vanna-api:latest
+docker push <ECR_URL>/capa-slack-bot:latest
 
 # 3. Terraform 배포
 cd infrastructure/terraform
-terraform apply -var="image_tag=v1.0.0"
+terraform apply
 
 # 4. 배포 확인
 kubectl rollout status deployment/vanna-api -n vanna
@@ -124,6 +137,10 @@ kubectl get pods -n vanna        # 모두 Running
 kubectl get pods -n slack-bot    # 모두 Running
 kubectl get pods -n chromadb     # 모두 Running
 kubectl get pods -n redash       # 모두 Running
+
+# 5. 재배포 시 (새 이미지 올린 후)
+kubectl rollout restart deployment/vanna-api -n vanna
+kubectl rollout restart deployment/slack-bot -n slack-bot
 ```
 
 ### 2.3 포트포워딩 설정 (Phase 3 공통)

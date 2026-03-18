@@ -321,7 +321,7 @@ ORDER BY ctr DESC
 
 ### 3.3 E2E 시나리오 검증
 
-#### 시나리오 A: CTR (캠페인별 전환율)
+#### 케이스 A: CTR (캠페인별 전환율)
 ```
 입력: "어제 캠페인별 CTR 알려줘"
 처리: Step 1~11 전체 파이프라인
@@ -329,7 +329,7 @@ ORDER BY ctr DESC
 테스트: ✅ TestStep1to11E2E::test_시나리오A_CTR_1to11완전흐름 (PASS)
 ```
 
-#### 시나리오 B: ROAS (기기별 광고 효율)
+#### 케이스 B: ROAS (기기별 광고 효율)
 ```
 입력: "최근 7일간 디바이스별 ROAS 순위 알려줘"
 처리: Step 1~11 전체 파이프라인 (ChromaDB 시딩 활용)
@@ -471,7 +471,7 @@ ORDER BY ctr DESC
 - ✅ Phase 2 100% PASS (27/27)
 - ✅ Step 1-11 전체 파이프라인 검증 완료
 - ✅ ChromaDB 시딩 동작 확인
-- ✅ E2E 시나리오 A/B 통과
+- ✅ E2E 케이스 A/B 통과
 
 **다음 단계**:
 1. terraform.tfvars 변수 추가 (보안 시딩)
