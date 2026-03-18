@@ -113,7 +113,8 @@ resource "aws_iam_role_policy" "report_generator" {
           "glue:GetDatabase",
           "glue:GetTable",
           "glue:GetTables",
-          "glue:GetPartitions"
+          "glue:GetPartitions",
+          "glue:GetPartition"
         ]
         Resource = "*"
       },
@@ -243,7 +244,7 @@ resource "kubernetes_deployment" "report_generator" {
           }
           env {
             name  = "ATHENA_DATABASE"
-            value = "capa_db"
+            value = "capa_ad_logs"
           }
           env {
             name  = "REPORT_S3_BUCKET"
@@ -440,7 +441,8 @@ resource "aws_iam_role_policy" "vanna" {
           "glue:GetDatabase",
           "glue:GetTable",
           "glue:GetTables",
-          "glue:GetPartitions"
+          "glue:GetPartitions",
+          "glue:GetPartition"
         ]
         Resource = "*"
       },
@@ -575,11 +577,11 @@ resource "kubernetes_deployment" "vanna_api" {
           }
           env {
             name  = "S3_STAGING_DIR"
-            value = "s3://${aws_s3_bucket.data_lake.bucket}/athena-results/"
+            value = "s3://${aws_s3_bucket.data_lake.bucket}/summary/"
           }
           env {
             name  = "ATHENA_DATABASE"
-            value = "capa_db"
+            value = "capa_ad_logs"
           }
           env {
             name  = "CHROMA_HOST"
@@ -619,7 +621,7 @@ resource "kubernetes_deployment" "vanna_api" {
           }
           env {
             name  = "REDASH_DATA_SOURCE_ID"
-            value = "1"
+            value = "5"
           }
           env {
             name  = "REDASH_ENABLED"
