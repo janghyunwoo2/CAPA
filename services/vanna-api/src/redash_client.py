@@ -109,7 +109,7 @@ class RedashClient:
             async with self._make_client() as client:
                 response = await client.post(
                     f"/api/queries/{query_id}/results",
-                    json={"parameters": {}},
+                    json={"parameters": {}, "max_age": 0},  # BUG-4: 캐시 무효화 — 항상 신규 job 생성
                 )
                 response.raise_for_status()
                 data = response.json()

@@ -24,6 +24,9 @@ RUN pip install --upgrade pip && \
 # 애플리케이션 코드 복사 (src/ 를 패키지 구조로 유지 — relative import 정상 동작)
 COPY src/ ./src/
 
+# 유틸리티 스크립트 복사 (seed_chromadb.py 등)
+COPY scripts/ ./scripts/
+
 # 헬스체크
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1

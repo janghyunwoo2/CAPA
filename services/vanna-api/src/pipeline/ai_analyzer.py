@@ -58,6 +58,13 @@ class AIAnalyzer:
         """쿼리 결과를 분석하여 인사이트와 차트 유형을 반환.
         실패 시 기본 AnalysisResult 반환 (원시 데이터만 표시).
         """
+        # 결과 0건이면 LLM 호출 스킵
+        if query_results.row_count == 0:
+            return AnalysisResult(
+                answer="조회 결과가 없습니다. 날짜 범위나 조건을 확인해주세요.",
+                chart_type=ChartType.NONE,
+            )
+
         # PII 마스킹 후 최대 10행만 전달 (SEC-15, SEC-16)
         masked_rows = mask_sensitive_data(query_results.rows[:10])
 
@@ -110,6 +117,13 @@ Results (up to 10 rows): {json.dumps(masked_rows, ensure_ascii=False)}
             )
 
             raw = response.content[0].text.strip()
+            # 마크다운 코드 블록 제거 (LLM이 ```json ... ``` 형식으로 반환하는 케이스)
+            if raw.startswith("```"):
+                raw = re.sub(r"^```(?:json)?\s*", "", raw)
+                raw = re.sub(r"\s*```$", "", raw)
+                raw = raw.strip()
+            if not raw:
+                raise json.JSONDecodeError("LLM 빈 응답", "", 0)
             # JSON 파싱 시도
             parsed = json.loads(raw)
             chart_type_str = parsed.get("chart_type", "none").lower()

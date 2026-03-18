@@ -5,6 +5,7 @@ Step 5: SQLGenerator — Vanna + Claude 기반 SQL 생성
 """
 
 import logging
+from datetime import date, timedelta
 from typing import Any, Optional
 from ..models.domain import RAGContext
 
@@ -31,7 +32,16 @@ class SQLGenerator:
         실패 시 SQLGenerationError 발생 → 파이프라인 중단.
         """
         try:
-            sql = self._vanna.generate_sql(question=question)
+            today = date.today()
+            yesterday = today - timedelta(days=1)
+            last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+            last_month_end = today.replace(day=1) - timedelta(days=1)
+            date_context = (
+                f"[날짜 컨텍스트: 오늘={today}, 어제={yesterday}, "
+                f"이번달={today.strftime('%Y-%m')}-01~{today}, "
+                f"지난달={last_month_start}~{last_month_end}] "
+            )
+            sql = self._vanna.generate_sql(question=f"{date_context}{question}")
             if not sql or not sql.strip():
                 raise SQLGenerationError("빈 SQL이 생성되었습니다")
 

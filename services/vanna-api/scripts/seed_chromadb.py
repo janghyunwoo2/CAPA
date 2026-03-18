@@ -8,11 +8,15 @@ Vanna AI SDK의 3개 컬렉션(sql-ddl, sql-documentation, sql-qa)에
 참조: docs/t1/text-to-sql/02-design/features/text-to-sql.design.md §4.2
 """
 
+import os
+import sys
 import logging
 
+# sys.path 설정 — /app 이하의 모듈 임포트 가능
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 try:
-    from vanna.base.base import VannaBase
-    from vanna.chromadb import ChromaDB_VectorStore
+    from src.query_pipeline import QueryPipeline
 except ImportError as e:
     raise ImportError(
         "Required packages not found. Install with: pip install -r services/vanna-api/requirements.txt"
@@ -24,11 +28,6 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
-
-
-class VannaWithChromaDB(ChromaDB_VectorStore, VannaBase):
-    """Vanna + ChromaDB 통합 클래스."""
-    pass
 
 
 # ========================= DDL 정의 =========================
@@ -293,7 +292,6 @@ FROM ad_combined_log_summary
 WHERE year='2026' AND month='02'
 GROUP BY campaign_id
 ORDER BY total_ad_spend DESC
-LIMIT 100
 """
     },
     {
@@ -323,7 +321,6 @@ WHERE year='2026' AND month='03'
 GROUP BY campaign_id
 HAVING SUM(conversion_value) >= SUM(cost_per_impression + cost_per_click)
 ORDER BY roas_percent DESC
-LIMIT 50
 """
     },
     {
@@ -353,7 +350,6 @@ WHERE year='2026' AND month='03'
 GROUP BY food_category
 HAVING SUM(CAST(is_click AS INT)) > 0
 ORDER BY cvr_percent DESC
-LIMIT 5
 """
     },
     {
@@ -378,7 +374,6 @@ FROM ad_combined_log_summary
 WHERE year='2026' AND month='03'
 GROUP BY day
 ORDER BY total_cpi_spend DESC
-LIMIT 1
 """
     },
     {
@@ -392,7 +387,6 @@ FROM ad_combined_log_summary
 WHERE year='2026' AND month='03'
 GROUP BY campaign_id, day
 ORDER BY campaign_id, day
-LIMIT 1000
 """
     },
     {
@@ -418,22 +412,30 @@ FROM last_week lw, this_week tw
 ]
 
 
-def initialize_vanna() -> VannaWithChromaDB:
-    """Vanna + ChromaDB 인스턴스 초기화."""
+def initialize_vanna():
+    """Vanna + ChromaDB 인스턴스 초기화 (QueryPipeline을 통한 접근)."""
     logger.info("Vanna + ChromaDB 인스턴스 초기화 중...")
 
     try:
-        # ChromaDB 벡터 스토어 초기화
-        # DDL, Documentation, QA 학습에는 LLM 모델이 필요하지 않음
-        vanna_instance = VannaWithChromaDB()
-        logger.info("Vanna 인스턴스 생성 완료")
+        # QueryPipeline 초기화 — vanna_instance=None 으로 실제 ChromaDB 자동 연결
+        pipeline = QueryPipeline(
+            vanna_instance=None,  # 실제 ChromaDB 자동 연결 (CHROMA_HOST 환경변수 사용)
+            anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
+            athena_client=None,    # 시딩용으로는 Athena 불필요
+            database=os.getenv("ATHENA_DATABASE", "capa_db"),
+            workgroup=os.getenv("ATHENA_WORKGROUP", "primary"),
+            s3_staging_dir=os.getenv("S3_STAGING_DIR", "s3://test-bucket/results/"),
+        )
+
+        vanna_instance = pipeline._vanna
+        logger.info("Vanna 인스턴스 생성 완료 (QueryPipeline._vanna)")
         return vanna_instance
     except Exception as e:
         logger.error(f"Vanna 초기화 실패: {e}")
         raise
 
 
-def train_ddl(vanna_instance: VannaWithChromaDB) -> None:
+def train_ddl(vanna_instance) -> None:
     """DDL 학습."""
     logger.info("DDL 학습 시작...")
 
@@ -457,7 +459,7 @@ def train_ddl(vanna_instance: VannaWithChromaDB) -> None:
         raise
 
 
-def train_documentation(vanna_instance: VannaWithChromaDB) -> None:
+def train_documentation(vanna_instance) -> None:
     """Documentation 학습."""
     logger.info("Documentation 학습 시작...")
 
@@ -471,8 +473,7 @@ def train_documentation(vanna_instance: VannaWithChromaDB) -> None:
     try:
         for doc_name, doc_content in docs:
             vanna_instance.train(
-                documentation=doc_content,
-                documentation_source=doc_name
+                documentation=doc_content
             )
             logger.info(f"✓ {doc_name} 학습 완료")
     except Exception as e:
@@ -480,7 +481,7 @@ def train_documentation(vanna_instance: VannaWithChromaDB) -> None:
         raise
 
 
-def train_qa_examples(vanna_instance: VannaWithChromaDB) -> None:
+def train_qa_examples(vanna_instance) -> None:
     """QA 예제 학습."""
     logger.info(f"QA 예제 학습 시작 ({len(QA_EXAMPLES)}개)...")
 
@@ -496,7 +497,7 @@ def train_qa_examples(vanna_instance: VannaWithChromaDB) -> None:
         raise
 
 
-def verify_training(vanna_instance: VannaWithChromaDB) -> None:
+def verify_training(vanna_instance) -> None:
     """학습 데이터 검증 (RAG 테스트)."""
     logger.info("학습 데이터 검증 시작...")
 
