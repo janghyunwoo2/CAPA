@@ -739,3 +739,188 @@ docker compose -f docker-compose.local-e2e.yml down -v
 **작성자**: t1
 **작성일**: 2026-03-17
 **상태**: 계획 완료 — 작업 순서 1번(BUG-4 수정)부터 시작
+
+---
+
+## 11. 로컬 E2E 실행 결과 (2026-03-18)
+
+### 11.1 환경 구성 완료 내역
+
+| 항목 | 내용 | 상태 |
+|------|------|------|
+| docker-compose.local-e2e.yml | ChromaDB, PostgreSQL, Redis, Redash(server/worker/scheduler), vanna-api | ✅ |
+| Redash 초기화 | DB 생성 → 관리자 계정 → API Key 발급 → Athena 데이터소스 등록 | ✅ |
+| ChromaDB 시딩 | DDL 2개, Documentation 4개, QA 예제 10개 (`seed_chromadb.py` 실행) | ✅ |
+| 스모크 테스트 | `/health` → chromadb connected, athena ready 확인 | ✅ |
+| Hot-reload | `docker-compose.local-e2e.yml` command 오버라이드로 `--reload` 적용 | ✅ |
+
+### 11.2 TC-A-01 실행 결과
+
+**시나리오**: "2월 1일 캠페인별 CTR 알려줘"
+
+| 항목 | 값 |
+|------|-----|
+| 상태 | ✅ GREEN |
+| 응답 시간 | 14.15초 |
+| HTTP 상태 | 200 OK |
+| 결과 건수 | 5건 (campaign_01~05) |
+| 최고 CTR | campaign_05 — 3.28% |
+
+**Step별 실행 결과:**
+
+| Step | 결과 | 비고 |
+|------|------|------|
+| Step 1 의도 분류 | DATA_QUERY | ✅ |
+| Step 2 질문 정제 | "2월 1일 캠페인별 CTR" | ✅ |
+| Step 3 키워드 추출 | ['2월 1일', '캠페인', 'CTR'] | ✅ |
+| Step 4 RAG 검색 | DDL 2건, Documentation 4건, QA예제 10건 | ✅ |
+| Step 5 SQL 생성 | `day='01'` 날짜 컨텍스트 반영 | ✅ |
+| Step 6 SQL 검증 | LIMIT 1000 자동 추가 / EXPLAIN 스킵 (권한 부족) | ⚠️ |
+| Step 7 Redash 실행 | query_id 생성 → 5건 결과 반환 | ✅ |
+| Step 8.5 차트 렌더링 | BAR 차트 (X: campaign_id, Y: ctr) | ✅ |
+| Step 9 AI 분석 | 캠페인별 CTR 분석 텍스트 생성 | ✅ |
+| Step 10 이력 저장 | 저장 완료 | ✅ |
+
+### 11.3 발견 버그 및 수정 내역
+
+#### BUG-LOCAL-01: Redash `/api/users/me` Internal Server Error
+- **원인**: Redash v10이 경로 파라미터 `me`를 정수로 파싱 시도 → `ValueError: invalid literal for int() with base 10: 'me'`
+- **수정**: `/api/session` GET으로 user_id 확인 후 `/api/users/{id}` 호출로 변경
+- **파일**: `services/vanna-api/src/pipeline/redash_client.py`
+
+#### BUG-LOCAL-02: Redash job status=1 (pending) 지속 / QUERY_TIMEOUT
+- **원인**: `redash-worker`, `redash-scheduler` 컨테이너에 `REDASH_COOKIE_SECRET` 환경변수 누락
+- **수정**: `docker-compose.local-e2e.yml`의 worker/scheduler 서비스에 `REDASH_COOKIE_SECRET` 추가
+- **파일**: `services/vanna-api/docker-compose.local-e2e.yml`
+
+#### BUG-LOCAL-03: 차트 Y축이 지표 컬럼이 아닌 두 번째 컬럼 고정
+- **원인**: `chart_renderer.py:78` `y_col = df.columns[1]` — 두 번째 컬럼(impressions)이 고정 선택됨
+- **수정**: 숫자형 컬럼 중 지표성 키워드(`ctr`, `roas`, `cvr`, `rate`, `percent`, `ratio`, `pct`) 포함 컬럼 우선 선택
+- **파일**: `services/vanna-api/src/pipeline/chart_renderer.py`
+- **변경 로직**:
+  ```python
+  METRIC_KEYWORDS = ("percent", "rate", "ratio", "ctr", "roas", "cvr", "pct")
+  metric_cols = [c for c in numeric_cols if any(k in c.lower() for k in METRIC_KEYWORDS)]
+  y_col = metric_cols[0] if metric_cols else (numeric_cols[-1] if numeric_cols else df.columns[1])
+  ```
+
+#### BUG-LOCAL-04: Slack 차트 이미지가 메시지 맨 아래로 배치됨
+- **원인**: `files_upload_v2` 호출이 `say(blocks)` 이후에 위치 — Slack에서 파일이 마지막 메시지로 추가됨
+- **수정**: `_build_success_blocks` → `_build_header_blocks` + `_build_footer_blocks`로 분리, 전송 순서 재정렬
+  - ① `say(헤더 + 질문 + SQL + 결과 테이블)` 먼저 전송
+  - ② `files_upload_v2(차트 이미지)` 업로드
+  - ③ `say(AI 분석 + Redash 링크 + 피드백 버튼)` 후송
+- **파일**: `services/slack-bot/app.py`
+
+#### BUG-LOCAL-05: `/training-data` INTERNAL_ERROR (JSON 직렬화 실패)
+- **원인**: `vanna.get_training_data()`가 pandas DataFrame 반환 → FastAPI JSON 직렬화 불가
+- **수정**: `.to_dict(orient="records")`로 변환 후 반환
+- **파일**: `services/vanna-api/src/main.py`
+  ```python
+  records = training_data.to_dict(orient="records") if training_data is not None else []
+  return {"data": records, "count": len(records)}
+  ```
+
+#### BUG-LOCAL-06: `/training-data` 브라우저 접근 시 403 인증 오류
+- **원인**: `_EXEMPT_PATHS`에 `/training-data` 미포함
+- **수정**: `auth.py`의 `_EXEMPT_PATHS` frozenset에 `/training-data` 추가
+- **파일**: `services/vanna-api/src/security/auth.py`
+
+### 11.4 코드 개선 사항
+
+| 항목 | 내용 | 파일 |
+|------|------|------|
+| Hot-reload 적용 | 로컬 E2E에서만 `--reload` 오버라이드 (Dockerfile은 프로덕션 배포용 유지) | `docker-compose.local-e2e.yml` |
+| Slack 메시지 포맷 | plan §3.1 기준 — 헤더+테이블 → 차트 → AI분석+Redash+버튼 순서 확정 | `slack-bot/app.py` |
+| 결과 테이블 포맷 | `_format_results_table()` 추가 — Slack mrkdwn 텍스트 테이블 (최대 10행) | `slack-bot/app.py` |
+
+### 11.5 알려진 이슈 (미해결)
+
+| 이슈 | 내용 | 우선순위 |
+|------|------|---------|
+| glue:GetPartition 권한 없음 | Step 6 EXPLAIN 검증 스킵 — capa-vanna-role IAM 정책 수정 필요 | Low |
+| RAG 시딩 날짜 하드코딩 | `seed_chromadb.py` 예시 SQL 날짜 고정값 — 날짜 컨텍스트 주입으로 임시 해결 | Medium |
+| ONNX 모델 매 요청마다 재다운로드 | Pod 재시작 시 79.3MB 재다운로드 (~8초 추가), 기능 문제는 아님 | Low |
+
+### 11.6 다음 단계
+
+- [ ] **TC-B-01**: "2월 1~7일 디바이스별 ROAS 순위 알려줘" 실행
+- [ ] **TC-EX-01~10**: 예외 케이스 10개 순차 실행
+- [ ] **DELETE /training-data/{id}**: 특정 학습 데이터 삭제 엔드포인트 추가
+- [ ] **커밋**: 수정된 파일 일괄 커밋 (chart_renderer, slack-bot, main.py, auth.py, docker-compose.local-e2e.yml)
+
+---
+
+**업데이트**: 2026-03-18 (TC-A-01 GREEN 달성, BUG-LOCAL-01~06 수정 완료)
+
+---
+
+## 12. 로컬 슬랙봇 통합 (2026-03-18)
+
+### 12.1 슬랙봇 docker-compose 추가
+
+**목표**: 로컬 E2E 환경에서 Slack 채널을 통한 전체 흐름 검증
+
+**구성 방식**: 프로덕션과 토큰을 공유하면 Socket Mode 이벤트가 양쪽에 분배되는 문제 발생 → 테스트 전용 Slack App 별도 생성
+
+| 항목 | 내용 |
+|------|------|
+| 테스트 전용 Slack App | 별도 `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN` 발급 |
+| VANNA_API_URL | `http://vanna-api:8000` (docker 내부 서비스명) |
+| 네트워크 | `capa-e2e-network` (기존 서비스와 동일) |
+| depends_on | `vanna-api: service_healthy` |
+| 파일 | `services/vanna-api/docker-compose.local-e2e.yml` |
+
+**OAuth 스코프**: `app_mentions:read`, `chat:write`, `files:write`, `channels:history`, `groups:history`, `groups:write`
+
+### 12.2 발견 버그 및 수정 내역
+
+#### BUG-LOCAL-07: 차트 업로드 파라미터 오류 (`channels` → `channel`)
+- **원인**: `files_upload_v2`의 파라미터명이 구 API(`files.upload`)와 다름 — `channels`(복수)로 호출하면 무시되어 `channel_not_found` 반환
+- **수정**: `channels=channel_id` → `channel=channel_id`
+- **파일**: `services/slack-bot/app.py`
+
+#### BUG-LOCAL-08: 차트 이미지가 항상 메시지 맨 아래에 표시
+- **근본 원인**: Slack의 `files_upload_v2`는 내부적으로 3단계 처리 (S3 URL 발급 → S3 업로드 → `completeUploadExternal`). Python API가 반환되는 시점은 "업로드 접수 완료"이며 채널 게시 완료가 아님. 이후 `say()`로 전송되는 메시지가 파일보다 먼저 채널에 표시됨
+- **시도 1**: `initial_comment`로 AI 분석을 차트에 묶음 → Redash 버튼이 여전히 먼저 표시
+- **시도 2**: 구 `files.upload` API 사용 → `method_deprecated` 오류 (Slack에서 완전 차단)
+- **최종 수정**: 업로드 후 `conversations_history` 폴링으로 파일이 실제로 채널에 게시될 때까지 대기 (200ms 간격, 최대 3초) → 확인 후 `say(AI 분석 + Redash + 버튼)` 전송
+- **파일**: `services/slack-bot/app.py`
+
+```python
+# 채널에 파일이 실제로 나타날 때까지 폴링 (최대 3초)
+file_id = response["files"][0]["id"]
+for _ in range(15):
+    history = client.conversations_history(channel=channel_id, limit=5)
+    posted = any(
+        file_id in [f["id"] for f in msg.get("files", [])]
+        for msg in history.get("messages", [])
+    )
+    if posted:
+        break
+    time.sleep(0.2)
+```
+
+### 12.3 최종 Slack 메시지 출력 순서
+
+```
+① 헤더 + 질문 + SQL 요약 + 결과 테이블 (say)
+② 차트 이미지 (files_upload_v2 + 폴링 대기)
+③ AI 분석 + 처리시간 + Redash 링크 + 피드백 버튼 (say)
+```
+
+### 12.4 TC-A-01 슬랙 검증 결과
+
+| 항목 | 결과 |
+|------|------|
+| 봇 멘션 수신 | ✅ |
+| 결과 테이블 (5건, 🥇 표시) | ✅ |
+| 차트 이미지 (BAR, campaign_id × ctr_percent) | ✅ |
+| AI 분석 텍스트 | ✅ |
+| Redash 링크 | ✅ |
+| 피드백 버튼 (👍/👎) | ✅ |
+| 처리 시간 | ~13초 |
+
+---
+
+**업데이트**: 2026-03-18 (슬랙봇 로컬 통합 완료, BUG-LOCAL-07~08 수정)

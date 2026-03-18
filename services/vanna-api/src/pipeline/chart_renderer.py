@@ -75,9 +75,19 @@ class ChartRenderer:
 
         try:
             x_col = df.columns[0]
-            y_col = df.columns[1] if len(df.columns) > 1 else df.columns[0]
 
-            # 숫자형 변환 시도
+            # 숫자형 컬럼 목록 추출
+            numeric_cols = [
+                c for c in df.columns[1:]
+                if pd.to_numeric(df[c], errors="coerce").notna().any()
+            ]
+
+            # 지표성 키워드 컬럼 우선 선택 (ctr, roas, cvr, rate, percent, ratio)
+            METRIC_KEYWORDS = ("percent", "rate", "ratio", "ctr", "roas", "cvr", "pct")
+            metric_cols = [c for c in numeric_cols if any(k in c.lower() for k in METRIC_KEYWORDS)]
+            y_col = metric_cols[0] if metric_cols else (numeric_cols[-1] if numeric_cols else df.columns[1])
+
+            # 숫자형 변환
             try:
                 df[y_col] = pd.to_numeric(df[y_col], errors="coerce")
             except Exception:

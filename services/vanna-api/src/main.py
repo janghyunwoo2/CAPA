@@ -271,7 +271,8 @@ async def get_training_data() -> dict:
     vanna: VannaAthena = app.state.vanna
     try:
         training_data = vanna.get_training_data()
-        return {"data": training_data}
+        records = training_data.to_dict(orient="records") if training_data is not None else []
+        return {"data": records, "count": len(records)}
     except Exception as e:
         logger.error(f"학습 데이터 조회 오류: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"error_code": "INTERNAL_ERROR", "message": "학습 데이터 조회 중 오류가 발생했습니다."})

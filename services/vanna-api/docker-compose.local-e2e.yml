@@ -3,7 +3,7 @@ services:
   # ChromaDB - 벡터 데이터베이스
   # ==============================================================================
   chromadb:
-    image: chromadb/chroma:0.6.3
+    image: chromadb/chroma:1.0.10
     container_name: capa-chromadb-e2e
     ports:
       - "8001:8000"
@@ -20,7 +20,7 @@ services:
     container_name: capa-postgres-e2e
     environment:
       - POSTGRES_USER=redash
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-redash-local-pass}
       - POSTGRES_DB=redash
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -92,6 +92,7 @@ services:
       - REDASH_DATABASE_URL=postgresql://redash:${POSTGRES_PASSWORD}@postgres:5432/redash
       - REDASH_REDIS_URL=redis://redis:6379/0
       - REDASH_SECRET_KEY=${REDASH_SECRET_KEY}
+      - REDASH_COOKIE_SECRET=${REDASH_COOKIE_SECRET}
       - QUEUES=queries,scheduled_queries,celery,schemas
       - WORKERS_COUNT=2
       - AWS_DEFAULT_REGION=${AWS_REGION}
@@ -116,6 +117,7 @@ services:
       - REDASH_DATABASE_URL=postgresql://redash:${POSTGRES_PASSWORD}@postgres:5432/redash
       - REDASH_REDIS_URL=redis://redis:6379/0
       - REDASH_SECRET_KEY=${REDASH_SECRET_KEY}
+      - REDASH_COOKIE_SECRET=${REDASH_COOKIE_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
@@ -136,6 +138,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: capa-vanna-api-e2e
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
     ports:
       - "8000:8000"
     environment:
@@ -184,6 +187,31 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+
+  # ==============================================================================
+  # Slack Bot - 로컬 테스트 전용 앱 토큰 사용
+  # ==============================================================================
+  slack-bot:
+    build:
+      context: ../slack-bot
+      dockerfile: Dockerfile
+    container_name: capa-slack-bot-e2e
+    environment:
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
+      - VANNA_API_URL=http://vanna-api:8000
+      - REPORT_API_URL=http://localhost:9999
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN:-test-token}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ../slack-bot/app.py:/app/app.py
+    ports:
+      - "3000:3000"
+    depends_on:
+      vanna-api:
+        condition: service_healthy
+    networks:
+      - capa-e2e-network
 
 volumes:
   postgres-data:

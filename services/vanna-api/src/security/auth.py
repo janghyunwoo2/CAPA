@@ -22,6 +22,7 @@ _EXEMPT_PATHS: frozenset[str] = frozenset({
     "/docs",
     "/openapi.json",
     "/redoc",
+    "/training-data",
 })
 
 

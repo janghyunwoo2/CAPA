@@ -16,6 +16,7 @@ import base64
 import logging
 import os
 import threading
+import time
 
 import requests
 from flask import Flask, jsonify
@@ -55,54 +56,80 @@ def _build_internal_headers() -> dict:
     return headers
 
 
-def _build_success_blocks(result: dict, user: str) -> list:
-    """정상 응답 Block Kit 구조 (설계 §2.6.2)"""
-    refined_question = result.get("refined_question", "")
-    answer = result.get("answer", "")
+def _format_results_table(results: list, sql: str) -> str:
+    """결과 데이터를 Slack mrkdwn 텍스트 테이블로 포맷 (NFR-03: 최대 10행)"""
+    if not results:
+        return ""
+    rows = results[:10]
+    cols = list(rows[0].keys())
+    col_widths = [max(len(str(c)), max(len(str(r.get(c, ""))) for r in rows)) for c in cols]
+    sep = "┼".join("─" * (w + 2) for w in col_widths)
+    header = "│".join(f" {str(c):<{w}} " for c, w in zip(cols, col_widths))
+    lines = [f"┌{sep}┐", f"│{header}│", f"├{sep}┤"]
+    for i, row in enumerate(rows):
+        suffix = " 🥇" if i == 0 else ""
+        line = "│".join(f" {str(row.get(c, '')):<{w}} " for c, w in zip(cols, col_widths))
+        lines.append(f"│{line}│{suffix}")
+    lines.append(f"└{sep}┘")
+    # SQL에서 테이블명·WHERE 조건 간략 추출
+    sql_summary = sql.split("FROM")[-1].split("GROUP")[0].strip() if "FROM" in sql else sql
+    return "\n".join(lines)
+
+
+def _build_header_blocks(result: dict) -> list:
+    """① 헤더 + 질문 + SQL + 결과 테이블 블록 (차트 업로드 전 전송)"""
+    question = result.get("refined_question") or result.get("original_question", "")
     sql = result.get("sql", "")
+    results = result.get("results", [])
+
+    # 헤더 + 질문 + SQL 요약
+    sql_table = sql.split("FROM")[-1].split("GROUP")[0].strip() if "FROM" in sql else sql
+    text = f"*📊 CAPA Text-to-SQL 쿼리 결과*\n\n💬 *질문:* {question}\n🔍 *SQL:* `{sql_table}`"
+    blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": text}}]
+
+    # 결과 테이블
+    if results:
+        table_text = _format_results_table(results, sql)
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"```{table_text}```"},
+        })
+
+    return blocks
+
+
+def _build_footer_blocks(result: dict) -> list:
+    """③ AI 분석 + Redash 링크 + 피드백 버튼 (차트 업로드 후 전송)"""
+    answer = result.get("answer", "")
     redash_url = result.get("redash_url")
     history_id = result.get("query_id", "")
+    elapsed = result.get("elapsed_seconds")
 
     blocks = []
 
-    # 1. 텍스트 블록 (AI 분석)
-    header_text = f"✅ *{refined_question or '분석 결과'}*\n\n{answer}" if answer else f"✅ <@{user}> 질의가 처리되었습니다."
-    blocks.append({
-        "type": "section",
-        "text": {"type": "mrkdwn", "text": header_text},
-    })
+    # AI 분석
+    if answer:
+        footer_text = f"🤖 *AI 분석:*\n{answer}"
+        if elapsed:
+            footer_text += f"\n\n⏱ 처리 시간: {elapsed:.2f}초"
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": footer_text}})
 
-    # 2. Redash 링크 (있을 때만)
+    # Redash 링크
     if redash_url:
         blocks.append({
             "type": "section",
             "text": {"type": "mrkdwn", "text": f"🔗 <{redash_url}|Redash에서 전체 결과 보기>"},
         })
 
-    # 3. SQL 코드 블록
-    if sql:
-        blocks.append({
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": f"```{sql}```"},
-        })
-
-    # 4. 피드백 버튼 (history_id 있을 때만)
+    # 피드백 버튼
     if history_id:
         blocks.append({
             "type": "actions",
             "elements": [
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "👍 좋아요"},
-                    "action_id": "feedback_positive",
-                    "value": history_id,
-                },
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "👎 별로예요"},
-                    "action_id": "feedback_negative",
-                    "value": history_id,
-                },
+                {"type": "button", "text": {"type": "plain_text", "text": "👍 좋아요"},
+                 "action_id": "feedback_positive", "value": history_id},
+                {"type": "button", "text": {"type": "plain_text", "text": "👎 별로예요"},
+                 "action_id": "feedback_negative", "value": history_id},
             ],
         })
 
@@ -164,23 +191,36 @@ def handle_mention(event, say, client):
             result = response.json()
             chart_base64 = result.get("chart_image_base64")
 
-            # 2. 차트 이미지 업로드 (있을 때만, FR-08b)
+            # ① 헤더 + 질문 + SQL + 결과 테이블 먼저 전송
+            say(blocks=_build_header_blocks(result))
+
+            # ② 차트 업로드 후 채널에 실제 게시될 때까지 대기
             if chart_base64:
                 try:
                     image_bytes = base64.b64decode(chart_base64)
-                    client.files_upload_v2(
-                        channels=channel_id,
+                    response = client.files_upload_v2(
+                        channel=channel_id,
                         content=image_bytes,
                         filename="chart.png",
                         title="분석 차트",
                     )
+                    # 채널에 파일이 실제로 나타날 때까지 폴링 (최대 3초)
+                    file_id = response["files"][0]["id"]
+                    for _ in range(15):
+                        history = client.conversations_history(channel=channel_id, limit=5)
+                        posted = any(
+                            file_id in [f["id"] for f in msg.get("files", [])]
+                            for msg in history.get("messages", [])
+                        )
+                        if posted:
+                            break
+                        time.sleep(0.2)
                     logger.info("차트 이미지 업로드 완료")
                 except Exception as e:
                     logger.error(f"차트 업로드 실패: {e}")
 
-            # 1/3/4/5 블록 전송
-            blocks = _build_success_blocks(result, user)
-            say(blocks=blocks)
+            # ③ AI 분석 + Redash 링크 + 피드백 버튼 (차트 업로드 완료 후)
+            say(blocks=_build_footer_blocks(result))
 
         else:
             # SEC-07: error_code는 로그에만, 사용자에게는 message만 노출
