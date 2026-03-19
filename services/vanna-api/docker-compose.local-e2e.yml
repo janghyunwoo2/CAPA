@@ -217,8 +217,110 @@ services:
     networks:
       - capa-e2e-network
 
+  # ==============================================================================
+  # Postgres (Airflow Metadata) - 인프라 설정(helm-values/airflow.yaml) 반영
+  # ==============================================================================
+  postgres-airflow:
+    image: postgres:11-alpine
+    container_name: capa-postgres-airflow-e2e
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - postgres-airflow-data:/var/lib/postgresql/data
+    networks:
+      - capa-e2e-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  # ==============================================================================
+  # Airflow Init (Initialize Database and Create User)
+  # 참고: helm-values/airflow.yaml의 설정 반영 (LocalExecutor, secret, admin/admin)
+  # ==============================================================================
+  airflow-init:
+    image: apache/airflow:2.9.2
+    container_name: capa-airflow-init-e2e
+    command: version
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__WEBSERVER__SECRET_KEY=capa_airflow_secret_key_2026_fixed
+      - _AIRFLOW_DB_UPGRADE=true
+      - _AIRFLOW_WWW_USER_CREATE=true
+      - _AIRFLOW_WWW_USER_USERNAME=admin
+      - _AIRFLOW_WWW_USER_PASSWORD=admin
+      - _AIRFLOW_WWW_USER_EMAIL=admin@example.com
+      - _AIRFLOW_WWW_USER_ROLE=Admin
+    depends_on:
+      postgres-airflow:
+        condition: service_healthy
+    networks:
+      - capa-e2e-network
+
+  # ==============================================================================
+  # Airflow Webserver (UI)
+  # ==============================================================================
+  airflow-webserver:
+    image: apache/airflow:2.9.2
+    container_name: capa-airflow-webserver-e2e
+    command: webserver
+    ports:
+      - "8080:8080"
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__WEBSERVER__SECRET_KEY=capa_airflow_secret_key_2026_fixed
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+      - AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT=300
+      - AIRFLOW__WEBSERVER__WEB_SERVER_WORKER_TIMEOUT=300
+      - AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX=True
+    volumes:
+      - ../airflow-dags:/opt/airflow/dags
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres-airflow:
+        condition: service_healthy
+    networks:
+      - capa-e2e-network
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ==============================================================================
+  # Airflow Scheduler
+  # ==============================================================================
+  airflow-scheduler:
+    image: apache/airflow:2.9.2
+    container_name: capa-airflow-scheduler-e2e
+    command: scheduler
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__WEBSERVER__SECRET_KEY=capa_airflow_secret_key_2026_fixed
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    volumes:
+      - ../airflow-dags:/opt/airflow/dags
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres-airflow:
+        condition: service_healthy
+    networks:
+      - capa-e2e-network
+
 volumes:
   postgres-data:
+    driver: local
+  postgres-airflow-data:
     driver: local
 
 networks:
