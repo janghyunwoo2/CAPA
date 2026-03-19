@@ -107,7 +107,21 @@ class QueryPipeline:
         self._intent_classifier = IntentClassifier(api_key=anthropic_api_key, model=llm_model)
         self._question_refiner = QuestionRefiner(api_key=anthropic_api_key, model=llm_model)
         self._keyword_extractor = KeywordExtractor(api_key=anthropic_api_key, model=llm_model)
-        self._rag_retriever = RAGRetriever(vanna_instance=vanna_instance)
+        # Phase 2: PHASE2_RAG_ENABLED=true 시 CrossEncoderReranker + Anthropic 주입
+        if PHASE2_RAG_ENABLED:
+            from .pipeline.reranker import CrossEncoderReranker
+            import anthropic as _anthropic
+            _reranker = CrossEncoderReranker()
+            _anthropic_client = _anthropic.Anthropic(api_key=anthropic_api_key)
+        else:
+            _reranker = None
+            _anthropic_client = None
+
+        self._rag_retriever = RAGRetriever(
+            vanna_instance=vanna_instance,
+            reranker=_reranker,
+            anthropic_client=_anthropic_client,
+        )
         self._sql_generator = SQLGenerator(vanna_instance=vanna_instance)
         self._sql_validator = SQLValidator(
             athena_client=athena_client,
@@ -255,7 +269,12 @@ class QueryPipeline:
         # Step 7: Redash 쿼리 생성
         try:
             query_name = f"CAPA: {ctx.refined_question or ctx.original_question} [{datetime.utcnow().strftime('%Y-%m-%d %H:%M')}]"
-            ctx.redash_query_id = await redash.create_query(sql=sql, name=query_name)
+            dynamodb_table = getattr(self._redash_config, "dynamodb_table", None)
+            ctx.redash_query_id = await redash.create_or_reuse_query(
+                sql=sql,
+                dynamodb_table=dynamodb_table,
+                name=query_name,
+            )
             ctx.redash_url = redash.build_public_url(ctx.redash_query_id)
         except RedashAPIError as e:
             logger.error(f"Step 7 Redash 쿼리 생성 실패: {e}")
