@@ -137,15 +137,16 @@ Slack → vanna-api /query
 | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
 | FR-01  | **의도 분류**: 데이터 조회 / 일반 질문 / 범위 외로 분류, 범위 외 질문은 즉시 안내 반환                                                                                                                                                                                  | InsightLens + DableTalk |
 | FR-02  | **질문 정제**: 인사말, 감사 인사, 부연 설명 제거 → 핵심 질문만 추출                                                                                                                                                                                                    | InsightLens             |
-| FR-03  | **키워드 추출**: 정제된 질문에서 핵심 명사/광고 지표 단어 단위 추출 → RAG 검색 정확도 향상                                                                                                                                                                             | InsightLens             |
-| FR-04  | **SQL EXPLAIN 검증**: Athena `EXPLAIN` 호출로 비용 없이 SQL 문법 사전 검증                                                                                                                                                                                            | DableTalk               |
-| FR-05  | **Redash Query 생성**: Vanna 생성 SQL을 Redash API로 저장 (query_id 획득)                                                                                                                                                                                               | DableTalk + 요구사항    |
-| FR-06  | **Redash 실행**: Redash API로 쿼리 실행 (Redash → Athena 위임)                                                                                                                                                                                                         | 요구사항                |
-| FR-07  | **결과 수집**: Redash API 폴링으로 실행 결과 수집                                                                                                                                                                                                                       | 요구사항                |
-| FR-08  | **AI 분석 + 응답**: 결과를 AI로 분석하여 인사이트 생성, Slack에 AI 분석 텍스트 + matplotlib 차트 이미지(인라인) + Redash 링크 전달                                                                                                                                      | 요구사항                |
+| FR-03  | **키워드 추출**: 정제된 질문에서 핵심 명사/광고 지표 단어 �| FR-09  | **실패 투명성**: 오류 시 오류 정보 + 사용된 프롬프트를 Slack에 함께 전달                                                                                                                                                                                                | DableTalk               |
+| FR-10  | **History 저장**: 성공한 쿼리의 질문-SQL-결과 쌍을 로컬 파일에 저장. 피드백 루프 데이터 축적이 목적이므로 실패 쿼리는 저장하지 않음. (Phase 2 FR-11에서 DynamoDB로 전환 예정)                                                                                                                                                                                          | DableTalk               |
+| FR-11  | **기존 Athena 직접 경로 유지**: `REDASH_ENABLED` 플래그로 롤백 경로 보존                                                                                                                                                                                              | 안정성                  |
+| FR-21  | **Slack 피드백 버튼**: 슬랙 응답에 👍/👎 버튼 추가. Phase 1에서는 👍 클릭 시 즉시 `vanna.train()` 호출 → ChromaDB 바로 추가. (Phase 2 FR-16에서 검증 기반 배치 학습으로 고도화 예정) | 물어보새                |
+| FR-13a | **ChromaDB 초기 시딩 (비즈니스 용어)**: 광고 도메인 표준 용어를 ChromaDB에 1회 적재. (Phase 2 FR-13의 기반 데이터) | 물어보새 |
+| FR-14a | **ChromaDB 초기 시딩 (Athena 특화 지식)**: Presto SQL 방언, 날짜 함수, 파티션 필수 규칙 1회 적재. (Phase 2 FR-14의 기반 데이터) | DableTalk |
+| FR-15a | **ChromaDB 초기 시딩 (정책 데이터)**: 지표 계산식, 코드값 매핑 규칙 1회 적재. (Phase 2 FR-15의 기반 데이터) | InsightLens |성, Slack에 AI 분석 텍스트 + matplotlib 차트 이미지(인라인) + Redash 링크 전달                                                                                                                                      | 요구사항                |
 | FR-08b | **matplotlib 차트 생성**: AI 분석 결과 데이터를 `io.BytesIO` 버퍼로 Bar/Line 차트 PNG 렌더링 → Base64 인코딩하여 `QueryResponse.chart_image_base64`로 반환. slack-bot이 수신 후 Slack `files.upload_v2` API로 인라인 이미지 전달 (vanna-api에 Slack 의존성 없음) | 요구사항                |
 | FR-09  | **실패 투명성**: 오류 시 오류 정보 + 사용된 프롬프트를 Slack에 함께 전달                                                                                                                                                                                                | DableTalk               |
-| FR-10  | **History 저장**: 성공한 쿼리의 질문-SQL-결과 쌍을 로컬 파일에 저장. 피드백 루프 데이터 축적이 목적이므로 실패 쿼리는 저장하지 않음 (실패 쿼리 분석은 Phase 3에서 구현)                                                                                                                                                                                          | DableTalk               |
+| FR-10  | **History 저장**: 성공한 쿼리의 질문-SQL-결과 쌍을 로컬 파일에 저장.() 피드백 루프 데이터 축적이 목적이므로 실패 쿼리는 저장하지 않음 (실패 쿼리 분석은 Phase 3에서 구현)                                                                                                                                                                                          | DableTalk               |
 | FR-11  | **기존 Athena 직접 경로 유지**: `REDASH_ENABLED` 플래그로 롤백 경로 보존                                                                                                                                                                                              | 안정성                  |
 | FR-21  | **Slack 피드백 버튼**: 슬랙 응답에 👍/👎 버튼 추가. Phase 1에서는 👍 클릭 시 즉시 `vanna.train()` 호출 → ChromaDB 바로 추가. Phase 2(FR-16)에서는 즉시 학습을 폐기하고 DynamoDB 저장 후 Airflow DAG(FR-18) 배치 검증으로 전환. 버튼 UI 자체는 두 Phase 모두 동일하게 유지 | 물어보새                |
 | FR-13a | **ChromaDB 초기 시딩 (비즈니스 용어)**: CTR, ROAS, CVR 등 광고 도메인 표준 용어를 ChromaDB에 1회 적재. 없으면 SQL 품질 보장 불가. (FR-13의 초기 적재 부분 — 지속 관리 체계는 Phase 2에서 구축) | 물어보새 |
@@ -156,13 +157,15 @@ Slack → vanna-api /query
 
 | ID    | 요구사항                                                                                                | 출처                    |
 | ----- | ------------------------------------------------------------------------------------------------------- | ----------------------- |
-| FR-12 | **3단계 RAG 파이프라인**: 벡터 유사도 검색 → Reranker 재평가 → LLM 최종 선별 (0개도 허용)       | InsightLens             |
-| FR-13 | **비즈니스 용어 사전 지속 관리**: Phase 1에서 초기 시딩(FR-13a) 이후, 신규 용어 추가 및 업데이트 자동화 체계 구축 | 물어보새                |
-| FR-14 | **Athena 특화 지식 지속 관리**: Phase 1에서 초기 시딩(FR-14a) 이후, 신규 규칙 추가 자동화 체계 구축 | DableTalk               |
-| FR-15 | **정책 데이터 지속 관리**: Phase 1에서 초기 시딩(FR-15a) 이후, 정책 변경 시 ChromaDB 자동 반영 체계 구축 | InsightLens             |
-| FR-16 | **피드백 루프 품질 제어**: FR-21(Phase 1)의 👍 버튼은 그대로 유지하되, 즉시 학습 방식을 폐기하고 FR-18 Airflow DAG을 통한 검증(EXPLAIN + 중복 제거) 후 통과한 질문-SQL 쌍만 `vanna.train()` 배치 실행. Phase 1의 즉시 학습 대비 데이터 품질 보장 | InsightLens + DableTalk |
-| FR-17 | **중복 쿼리 방지**: SQL 해시 기반으로 Redash 기존 쿼리 탐색 후 재사용                             | 운영 안정성             |
-| FR-18 | **Airflow DAG 연동**: 주기적 ChromaDB 학습 데이터 최신화 파이프라인. FR-16과 세트로 동작. 매주 월요일 09:00 KST 실행 → ① 긍정 피드백 추출 → ② EXPLAIN 재검증 + 중복 제거 → ③ 검증된 쌍만 학습 → ④ 신규 비즈니스 용어/정책 반영 | 물어보새                |
+| FR-11 | **DynamoDB 저장소 전환**: Phase 1의 로컬 History/Feedback 저장소를 DynamoDB로 전환 (영구 보존 및 확장성 확보) | 인프라 고도화 |
+| FR-12 | **3단계 RAG 파이프라인**: 벡터 유사도 검색 → Reranker 재평가 → LLM 최종 선별 (질문과 무관한 지식 원천 차단) | InsightLens             |
+| FR-13 | **비즈니스 용어 사전 지속 관리**: Phase 1(FR-13a) 시딩 완료. Phase 2에서 `DELETE /training-data/{id}` 엔드포인트를 추가하여 잘못된 학습 데이터 삭제 관리 체계 완성 (CRUD 완성) | 물어보새                |
+| FR-14 | **Athena 특화 지식 지속 관리**: Phase 1(FR-14a) 시딩 완료. Phase 2에서 `DELETE /training-data/{id}` 엔드포인트를 통해 구식/오류 SQL 규칙 삭제 가능 (CRUD 완성) | DableTalk               |
+| FR-15 | **정책 데이터 지속 관리**: Phase 1(FR-15a) 시딩 완료. Phase 2에서 `DELETE /training-data/{id}` 엔드포인트를 통해 변경된 정책/계산식 데이터 삭제 관리 가능 (CRUD 완성) | InsightLens             |
+| FR-16 | **피드백 루프 품질 제어**: Phase 1(FR-21)의 즉시 학습 방식을 폐기하고, DynamoDB에 저장된 피드백을 Airflow로 가져와 EXPLAIN 검증 및 중복 제거 후 엄선된 데이터만 학습 | InsightLens + DableTalk |
+| FR-17 | **중복 쿼리 방지**: SQL 해시 기반으로 Redash 기존 쿼리 탐색 후 재사용 (리소스 절약 및 응답 속도 향상) | 운영 안정성             |
+| FR-18 | **Airflow DAG 연동**: 매주 월요일 09:00 실행하여 DynamoDB `pending_feedbacks`의 피드백 검증(EXPLAIN + 해시 중복 제거) 및 ChromaDB 배치 학습 수행 (3 Task: extract → validate → batch_train) | 물어보새 |
+| FR-19 | **비동기 쿼리 처리 (Async)**: FastAPI `BackgroundTasks`를 도입하여 300초 이상 소요 쿼리도 타임아웃 없이 처리 | 성능 개선 |
 
 #### Phase 3: UX 고도화 (선택적)
 
