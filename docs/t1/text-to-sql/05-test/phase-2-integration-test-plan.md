@@ -774,8 +774,209 @@ docker compose -f docker-compose.local-e2e.yml down -v
 
 ---
 
+---
+
+## 11. 미실행 TC 보완 (보안 및 분기 검증)
+
+> **추가 배경**: Gap Analysis 결과 계획서 §11.4 E2E 시나리오 3건, §11.5 보안 테스트 3건, §11.3 분기 테스트 1건이 미실행으로 확인됨 (2026-03-19)
+> **공통 Given**: 로컬 E2E 환경 기동 완료, TC-A-01 Pass 확인 후 진행
+
+---
+
+### TC-SEC-01: 입력 500자 초과 차단 (SEC-08)
+
+**목적**: 501자 이상 질문 입력 시 FastAPI 유효성 검사 또는 보안 필터에서 차단되는지 확인
+
+#### Given
+- 로컬 E2E 환경 정상 기동
+- 501자 이상의 임의 한국어 문자열 준비
+
+#### When
+```powershell
+# 501자 문자열 생성 후 전송
+$longQuestion = "광고" * 251  # 502자
+curl.exe -X POST $API_BASE/query `
+  -H "Content-Type: application/json; charset=utf-8" `
+  -H "X-Internal-Token: $TOKEN" `
+  -d "{`"question`": `"$longQuestion`"}"
+```
+
+#### Then (assert 단언)
+
+| TC | Step | 스텝 역할 | 인풋 | assert 단언 | 판정 |
+|----|------|----------|------|------------|------|
+| SEC-01-1 | 입력 검증 | FastAPI/보안 필터 길이 차단 | 502자 문자열 | `assert http_status in (400, 422)` | ☐ |
+| SEC-01-2 | 에러 메시지 | 길이 초과 안내 포함 여부 | - | `assert body.get("message") is not None or body.get("detail") is not None` | ☐ |
+
+**성공 기준**: 2/2 Pass — `HTTP 400` 또는 `422` 반환, 서버 크래시 없음
+
+> ⚠️ 구현 전 확인: `src/main.py` 또는 `src/models/` 의 `question` 필드에 `max_length` 제약이 없으면 400 대신 200이 반환될 수 있음 → FAIL 시 구현 추가 필요
+
+---
+
+### TC-SEC-02: PII 마스킹 — user_id 컬럼 (SEC-15)
+
+**목적**: 결과에 `user_id` 컬럼이 포함될 경우 응답에서 마스킹 처리되는지 확인
+
+#### Given
+- `ad_combined_log` 테이블에 `user_id` 컬럼이 존재
+- user_id 포함 조회 질문 준비
+
+#### When
+```powershell
+curl.exe -X POST $API_BASE/query `
+  -H "Content-Type: application/json; charset=utf-8" `
+  -H "X-Internal-Token: $TOKEN" `
+  -d '{"question": "어제 유저별 클릭수 알려줘"}'
+```
+
+#### Then (assert 단언)
+
+| TC | Step | 스텝 역할 | 인풋 | assert 단언 | 판정 |
+|----|------|----------|------|------------|------|
+| SEC-02-1 | 전체 | 파이프라인 정상 완료 | "어제 유저별 클릭수" | `assert http_status == 200` | ☐ |
+| SEC-02-2 | Step 9 결과 | user_id 값 마스킹 여부 | results 배열 | `assert all("****" in str(row.get("user_id","")) or row.get("user_id") is None for row in results)` | ☐ |
+| SEC-02-3 | 응답 전체 | 실제 user_id 값 노출 차단 | response body | `assert not any(str(row.get("user_id","")).startswith("u-") for row in results)` | ☐ |
+
+**성공 기준**: SEC-02-2 또는 SEC-02-3 Pass (마스킹 또는 필드 제거 중 하나)
+
+> ⚠️ 구현 전 확인: PII 마스킹 로직(`src/` 내 `pii` 관련 코드)이 실제 구현되어 있는지 먼저 확인. 미구현 시 SEC-02-2/3 FAIL → 구현 이슈로 별도 기록
+
+---
+
+### TC-SEC-03: 결과 10행 초과 제한 (SEC-16)
+
+**목적**: Athena 결과가 10행을 초과할 경우 응답의 `results`가 10행으로 잘리고 Redash 링크가 제공되는지 확인
+
+#### Given
+- 다수 행이 반환될 광범위한 집계 질문 준비
+- `ad_combined_log` 에 10개 이상의 캠페인 데이터 존재
+
+#### When
+```powershell
+curl.exe -X POST $API_BASE/query `
+  -H "Content-Type: application/json; charset=utf-8" `
+  -H "X-Internal-Token: $TOKEN" `
+  -d '{"question": "전체 캠페인 목록과 노출수 알려줘"}'
+```
+
+#### Then (assert 단언)
+
+| TC | Step | 스텝 역할 | 인풋 | assert 단언 | 판정 |
+|----|------|----------|------|------------|------|
+| SEC-03-1 | 전체 | 파이프라인 정상 완료 | "전체 캠페인 목록" | `assert http_status == 200` | ☐ |
+| SEC-03-2 | Step 9 결과 | results 행수 제한 | Athena 결과 | `assert len(response.get("results", [])) <= 10` | ☐ |
+| SEC-03-3 | Step 9 | Redash 링크 제공 | - | `assert response.get("redash_url") is not None` | ☐ |
+| SEC-03-4 | 응답 | 전체 건수 안내 | - | `assert response.get("row_count") is not None` | ☐ |
+
+**성공 기준**: 4/4 Pass — results ≤ 10행 + redash_url 포함
+
+> ⚠️ 구현 전 확인: `src/pipeline/result_collector.py` 또는 `main.py`에서 results 슬라이싱([: 10]) 로직 존재 여부 확인. LIMIT 1000은 SQL에 붙지만 응답 results 필드 자체 제한과는 별개
+
+---
+
+### TC-SEC-04: REDASH_ENABLED=false 분기 검증
+
+**목적**: `REDASH_ENABLED=false` 환경에서 Athena 직접 호출 경로로 전환되어 정상 동작하는지 확인
+
+#### Given
+- `REDASH_ENABLED=false` 환경변수 오버라이드 후 vanna-api 재시작
+
+```powershell
+$env:REDASH_ENABLED = "false"
+docker compose -f docker-compose.local-e2e.yml --env-file .env.local-e2e `
+  up -d --no-deps vanna-api
+```
+
+#### When
+```powershell
+curl.exe -X POST $API_BASE/query `
+  -H "Content-Type: application/json; charset=utf-8" `
+  -H "X-Internal-Token: $TOKEN" `
+  -d '{"question": "2026-02-01 캠페인별 CTR 알려줘"}'
+```
+
+#### Then (assert 단언)
+
+| TC | Step | 스텝 역할 | 인풋 | assert 단언 | 판정 |
+|----|------|----------|------|------------|------|
+| SEC-04-1 | 전체 | 파이프라인 정상 완료 | CTR 질문 | `assert http_status == 200` | ☐ |
+| SEC-04-2 | Step 7~8 | Redash 미경유 확인 | - | `assert response.get("redash_query_id") is None` | ☐ |
+| SEC-04-3 | Step 7~8 | Redash URL 미포함 확인 | - | `assert response.get("redash_url") is None` | ☐ |
+| SEC-04-4 | Step 9 | Athena 직접 결과 수신 | - | `assert response.get("row_count") is not None` | ☐ |
+
+**성공 기준**: 4/4 Pass
+
+> 테스트 후 반드시 `REDASH_ENABLED=true`로 복원 후 vanna-api 재시작
+
+---
+
+### TC-SEC-05: /train 엔드포인트 인증 검증 (SEC-05)
+
+**목적**: 인증 헤더 없이 `/train` 호출 시 `401 Unauthorized` 반환 확인
+
+#### Given
+- vanna-api 정상 기동 상태
+- `X-Internal-Token` 헤더 미포함 요청 준비
+
+#### When
+```powershell
+# 1) 인증 헤더 없이 호출
+curl.exe -X POST $API_BASE/train `
+  -H "Content-Type: application/json; charset=utf-8" `
+  -d '{"question": "테스트", "sql": "SELECT 1"}'
+
+# 2) 잘못된 토큰으로 호출
+curl.exe -X POST $API_BASE/train `
+  -H "Content-Type: application/json; charset=utf-8" `
+  -H "X-Internal-Token: wrong-token" `
+  -d '{"question": "테스트", "sql": "SELECT 1"}'
+```
+
+#### Then (assert 단언)
+
+| TC | Step | 스텝 역할 | 인풋 | assert 단언 | 판정 |
+|----|------|----------|------|------------|------|
+| SEC-05-1 | 인증 미들웨어 | 헤더 없음 → 차단 | 토큰 없음 | `assert http_status == 401` | ☐ |
+| SEC-05-2 | 인증 미들웨어 | 잘못된 토큰 → 차단 | "wrong-token" | `assert http_status == 401` | ☐ |
+| SEC-05-3 | 응답 메시지 | 에러 메시지 포함 | - | `assert body.get("detail") is not None or body.get("message") is not None` | ☐ |
+
+**성공 기준**: 3/3 Pass
+
+---
+
+### 11.1 보완 TC 성공 기준 요약
+
+| TC | 목적 | assert 수 | 성공 기준 | 구현 선확인 필요 |
+|----|------|----------|----------|----------------|
+| TC-SEC-01 | 입력 500자 초과 차단 | 2개 | 2/2 Pass | `question` max_length 제약 |
+| TC-SEC-02 | PII(user_id) 마스킹 | 3개 | 2/3 이상 Pass | PII 마스킹 로직 구현 여부 |
+| TC-SEC-03 | 결과 10행 초과 제한 | 4개 | 4/4 Pass | results 슬라이싱 로직 구현 여부 |
+| TC-SEC-04 | REDASH_ENABLED=false 분기 | 4개 | 4/4 Pass | 없음 (환경변수 오버라이드) |
+| TC-SEC-05 | /train 인증 401 | 3개 | 3/3 Pass | 없음 (기존 인증 미들웨어 검증) |
+
+> TC-SEC-01/02/03은 실행 전 구현 여부를 코드에서 먼저 확인한다. 미구현이면 TC 실행보다 구현을 먼저 진행 후 테스트한다.
+
+### 11.2 실행 결과 요약 (2026-03-19)
+
+| TC | 판정 | Pass/Total | 심각도 | 비고 |
+|----|------|-----------|--------|------|
+| TC-SEC-01 | ✅ PASS | 1/1 | - | Pydantic max_length=500 정상 동작 |
+| TC-SEC-02 | ✅ PASS* | 2/3 | 🟠 Medium-High | SEC-02-2 FAIL (user_id raw 노출), SEC-02-3 PASS로 OR 기준 충족. **API 응답 results에 user_id 비마스킹 상태 — PII 보호 미완성** |
+| TC-SEC-03 | ❌ FAIL | 3/4 | 🟢 Low | SEC-03-4 FAIL: row_count=None. 기능 동작은 정상, UX 정보 누락 |
+| TC-SEC-04 | ❌ FAIL | 3/4 | 🟢 Low | SEC-04-4 FAIL: row_count=None (REDASH=false도 동일). REDASH 분기 자체는 정상 |
+| TC-SEC-05 | ❌ FAIL | 1/3 | 🟡 Medium | BaseHTTPMiddleware에서 HTTPException(403) raise 시 Starlette가 Exception으로 전파 → generic_exception_handler가 500 반환. **실제 인증 차단은 동작**, 상태코드만 오류 |
+
+**미수정 이슈 목록**:
+- `row_count` 미제공: REDASH 활성/비활성 모두 None → 백로그
+- `user_id` API 응답 raw 노출: `main.py` results 반환 시 마스킹 미적용 → 다음 배포 전 수정 권장
+- `/train` 인증 오류 500 반환: `auth.py` BaseHTTPMiddleware → `raise HTTPException` 대신 `return JSONResponse(status_code=403)` 로 수정 필요 → 다음 배포 전 수정 권장
+
+---
+
 **작성자**: t1
 **작성일**: 2026-03-17
 **상태**: 계획 완료 — 작업 순서 1번(BUG-4 수정)부터 시작
+**업데이트**: 2026-03-19 — §11 미실행 TC 보완 5건 추가 (Gap Analysis 기반)
 
 > 실행 결과는 `phase-2-integration-test-result.md` 참조

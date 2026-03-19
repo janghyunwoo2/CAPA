@@ -185,3 +185,4 @@ Feature: {피처명}
 ## 참고 문서
 
 - [세부 코딩 규칙](.claude/rules/coding-rules.md)
+- [테스트 규칙](.claude/rules/test-rules.md)
