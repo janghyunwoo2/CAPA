@@ -926,19 +926,26 @@ class DynamoDBHistoryRecorder(HistoryRecorder):
 ### 9.1 DynamoDB 리소스 (Terraform)
 
 > **무료 요금 범위 (25GB까지)**: 과금 없이 완전히 무료로 운영하려면, 용량 모드를 **프로비저닝됨(Provisioned)**으로 설정해야 합니다. 온디맨드(On-Demand) 모드는 프리 티어가 없어 모든 요청에 과금됩니다.
-> **⚠️ 주의**: 25 WCU / 25 RCU 프리 티어는 단일 테이블 기준이 아니라 **AWS 계정 내 모든 테이블 합산** 기준입니다. 2개 테이블을 합산하여 25 WCU, 25 RCU를 초과하지 않도록 설정합니다.
+> **⚠️ 중요**: 25 WCU / 25 RCU 프리 티어는 단일 테이블 기준이 아니라 **AWS 계정 내 모든 테이블 + GSI 합산** 기준입니다.
+> - query_history: 테이블 8 + feedback-status-index GSI 3 + channel-index GSI 3 = **14 WCU/RCU**
+> - pending_feedbacks: 테이블 7 + status-index GSI 4 = **11 WCU/RCU**
+> - **총합: 25 WCU / 25 RCU** (프리 티어 범위 내)
 
 ```hcl
 # infrastructure/terraform/13-dynamodb.tf (신규)
+# 무료 요금 범위 (25 WCU/RCU 이하): 테이블 + GSI 전체 합산
+#   query_history: 8 + 3 + 3 = 14
+#   pending_feedbacks: 7 + 4 = 11
+#   합계: 25 WCU/RCU
 
 resource "aws_dynamodb_table" "query_history" {
   name           = "capa-${var.env}-query-history"
   billing_mode   = "PROVISIONED"
   hash_key       = "history_id"
 
-  # 합산 25 WCU/RCU 무료 범위 내 유지: query_history 13 + pending_feedbacks 12 = 25
-  write_capacity = 13
-  read_capacity  = 13
+  # 테이블 기본 용량 8 WCU/RCU
+  write_capacity = 8
+  read_capacity  = 8
 
   attribute {
     name = "history_id"
@@ -957,17 +964,24 @@ resource "aws_dynamodb_table" "query_history" {
     type = "S"
   }
 
+  # GSI-1: 피드백 상태별 조회 (3 WCU/RCU)
   global_secondary_index {
-    name            = "feedback-status-index"
-    hash_key        = "feedback"
-    range_key       = "timestamp"
-    projection_type = "ALL"
+    name               = "feedback-status-index"
+    hash_key           = "feedback"
+    range_key          = "timestamp"
+    projection_type    = "ALL"
+    write_capacity     = 3
+    read_capacity      = 3
   }
+
+  # GSI-2: Slack 채널별 조회 (3 WCU/RCU)
   global_secondary_index {
-    name            = "channel-index"
-    hash_key        = "slack_channel_id"
-    range_key       = "timestamp"
-    projection_type = "ALL"
+    name               = "channel-index"
+    hash_key           = "slack_channel_id"
+    range_key          = "timestamp"
+    projection_type    = "ALL"
+    write_capacity     = 3
+    read_capacity      = 3
   }
 
   ttl {
@@ -988,9 +1002,9 @@ resource "aws_dynamodb_table" "pending_feedbacks" {
   billing_mode   = "PROVISIONED"
   hash_key       = "feedback_id"
 
-  # 합산 25 WCU/RCU 무료 범위 내 유지: query_history 13 + pending_feedbacks 12 = 25
-  write_capacity = 12
-  read_capacity  = 12
+  # 테이블 기본 용량 7 WCU/RCU
+  write_capacity = 7
+  read_capacity  = 7
 
   attribute {
     name = "feedback_id"
@@ -1005,11 +1019,14 @@ resource "aws_dynamodb_table" "pending_feedbacks" {
     type = "S"
   }
 
+  # GSI-1: 피드백 상태별 조회 (4 WCU/RCU)
   global_secondary_index {
-    name            = "status-index"
-    hash_key        = "status"
-    range_key       = "created_at"
-    projection_type = "ALL"
+    name               = "status-index"
+    hash_key           = "status"
+    range_key          = "created_at"
+    projection_type    = "ALL"
+    write_capacity     = 4
+    read_capacity      = 4
   }
 
   ttl {
