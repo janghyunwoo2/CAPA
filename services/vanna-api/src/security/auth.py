@@ -62,3 +62,14 @@ class InternalTokenMiddleware(BaseHTTPMiddleware):
             )
 
         return await call_next(request)
+
+
+async def verify_internal_token(request: Request) -> None:
+    """DELETE 엔드포인트용 FastAPI Depends 인증 함수 (SEC-05).
+    INTERNAL_API_TOKEN 미설정 시 개발 환경으로 간주하고 통과.
+    """
+    if not INTERNAL_SERVICE_TOKEN:
+        return
+    token = request.headers.get("X-Internal-Token", "")
+    if not token or not secrets.compare_digest(token, INTERNAL_SERVICE_TOKEN):
+        raise HTTPException(status_code=403, detail="접근이 거부되었습니다")

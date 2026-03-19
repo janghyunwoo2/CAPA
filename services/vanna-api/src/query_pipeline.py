@@ -47,6 +47,8 @@ from .history_recorder import HistoryRecorder
 
 logger = logging.getLogger(__name__)
 
+PHASE2_RAG_ENABLED = os.getenv("PHASE2_RAG_ENABLED", "false").lower() == "true"
+
 
 class _VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
     """환경변수 기반 자동 초기화용 내부 Vanna 구현체"""
@@ -161,11 +163,17 @@ class QueryPipeline:
         ctx.keywords = self._keyword_extractor.extract(ctx.refined_question)
         logger.info(f"Step 3 키워드: {ctx.keywords}")
 
-        # Step 4: RAG 검색
-        ctx.rag_context = self._rag_retriever.retrieve(
-            question=ctx.refined_question,
-            keywords=ctx.keywords,
-        )
+        # Step 4: RAG 검색 (Phase 2: PHASE2_RAG_ENABLED=true 시 3단계 RAG 사용)
+        if PHASE2_RAG_ENABLED:
+            ctx.rag_context = self._rag_retriever.retrieve_v2(
+                question=ctx.refined_question,
+                keywords=ctx.keywords,
+            )
+        else:
+            ctx.rag_context = self._rag_retriever.retrieve(
+                question=ctx.refined_question,
+                keywords=ctx.keywords,
+            )
 
         # Step 5: SQL 생성
         try:

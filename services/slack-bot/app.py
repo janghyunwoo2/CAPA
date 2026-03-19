@@ -35,6 +35,11 @@ INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "")
 # NFR-06: Slack Bot 측 timeout 310초 이상
 VANNA_API_TIMEOUT = int(os.environ.get("VANNA_API_TIMEOUT", "310"))
 
+# Phase 2: 비동기 폴링 모드 (§6.6)
+ASYNC_QUERY_ENABLED = os.environ.get("ASYNC_QUERY_ENABLED", "false").lower() == "true"
+_ASYNC_POLL_INTERVAL = 3    # 폴링 간격 (초)
+_ASYNC_POLL_MAX = 100       # 최대 폴링 횟수 (300초)
+
 app = App(token=SLACK_BOT_TOKEN)
 flask_app = Flask(__name__)
 
@@ -74,6 +79,26 @@ def _format_results_table(results: list, sql: str) -> str:
     # SQL에서 테이블명·WHERE 조건 간략 추출
     sql_summary = sql.split("FROM")[-1].split("GROUP")[0].strip() if "FROM" in sql else sql
     return "\n".join(lines)
+
+
+def _handle_error_response(response: requests.Response, say) -> None:
+    """SEC-07: error_code는 로그에만, 사용자에게는 message만 노출"""
+    try:
+        error = response.json().get("detail", {})
+        if isinstance(error, dict):
+            error_code = error.get("error_code", "UNKNOWN_ERROR")
+            message = error.get("message", "알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+        else:
+            error_code = "UNKNOWN_ERROR"
+            message = "알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+    except Exception:
+        error_code = "PARSE_ERROR"
+        message = "응답을 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+    logger.error(f"vanna-api 오류: HTTP {response.status_code}, error_code={error_code}")
+    say(blocks=[{
+        "type": "section",
+        "text": {"type": "mrkdwn", "text": f"❌ *오류가 발생했습니다*\n{message}"},
+    }])
 
 
 def _build_header_blocks(result: dict) -> list:
@@ -176,71 +201,103 @@ def handle_mention(event, say, client):
     say(f"🔍 <@{user}>님의 질문을 분석 중입니다...")
 
     try:
-        response = requests.post(
-            f"{VANNA_API_URL}/query",
-            json={
-                "question": text,
-                "slack_user_id": user,
-                "slack_channel_id": channel_id,
-            },
-            headers=_build_internal_headers(),
-            timeout=VANNA_API_TIMEOUT,  # NFR-06
-        )
+        if ASYNC_QUERY_ENABLED:
+            # Phase 2: 비동기 폴링 방식 (§6.6)
+            # ① POST /query → 202 + task_id
+            post_resp = requests.post(
+                f"{VANNA_API_URL}/query",
+                json={
+                    "question": text,
+                    "slack_user_id": user,
+                    "slack_channel_id": channel_id,
+                },
+                headers=_build_internal_headers(),
+                timeout=30,
+            )
+            if post_resp.status_code not in (200, 202):
+                _handle_error_response(post_resp, say)
+                return
 
-        if response.status_code == 200:
-            result = response.json()
-            chart_base64 = result.get("chart_image_base64")
+            task_id = post_resp.json().get("task_id")
+            if not task_id:
+                say("⚠️ AI 서버 응답에서 task_id를 찾을 수 없습니다.")
+                return
 
-            # ① 헤더 + 질문 + SQL + 결과 테이블 먼저 전송
-            say(blocks=_build_header_blocks(result))
+            # ② "처리 중" 메시지 먼저 전송
+            say("⏳ 처리 중입니다... 완료되면 알려드리겠습니다.")
 
-            # ② 차트 업로드 후 채널에 실제 게시될 때까지 대기
-            if chart_base64:
-                try:
-                    image_bytes = base64.b64decode(chart_base64)
-                    response = client.files_upload_v2(
-                        channel=channel_id,
-                        content=image_bytes,
-                        filename="chart.png",
-                        title="분석 차트",
-                    )
-                    # 채널에 파일이 실제로 나타날 때까지 폴링 (최대 3초)
-                    file_id = response["files"][0]["id"]
-                    for _ in range(15):
-                        history = client.conversations_history(channel=channel_id, limit=5)
-                        posted = any(
-                            file_id in [f["id"] for f in msg.get("files", [])]
-                            for msg in history.get("messages", [])
-                        )
-                        if posted:
-                            break
-                        time.sleep(0.2)
-                    logger.info("차트 이미지 업로드 완료")
-                except Exception as e:
-                    logger.error(f"차트 업로드 실패: {e}")
+            # ③ GET /query/{task_id} 폴링 (3초 간격, 최대 100회)
+            result = None
+            for _ in range(_ASYNC_POLL_MAX):
+                time.sleep(_ASYNC_POLL_INTERVAL)
+                poll_resp = requests.get(
+                    f"{VANNA_API_URL}/query/{task_id}",
+                    headers=_build_internal_headers(),
+                    timeout=10,
+                )
+                if poll_resp.status_code == 202:
+                    continue  # 아직 처리 중
+                if poll_resp.status_code == 200:
+                    result = poll_resp.json()
+                    break
+                # 오류 응답
+                _handle_error_response(poll_resp, say)
+                return
 
-            # ③ AI 분석 + Redash 링크 + 피드백 버튼 (차트 업로드 완료 후)
-            say(blocks=_build_footer_blocks(result))
+            if result is None:
+                say("⚠️ 쿼리 처리 시간이 초과되었습니다. 조회 범위를 좁혀 다시 시도해 주세요.")
+                return
 
         else:
-            # SEC-07: error_code는 로그에만, 사용자에게는 message만 노출
-            try:
-                error = response.json().get("detail", {})
-                if isinstance(error, dict):
-                    error_code = error.get("error_code", "UNKNOWN_ERROR")
-                    message = error.get("message", "알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
-                else:
-                    error_code = "UNKNOWN_ERROR"
-                    message = "알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
-            except Exception:
-                error_code = "PARSE_ERROR"
-                message = "응답을 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+            # Phase 1: 동기 방식 (하위 호환)
+            response = requests.post(
+                f"{VANNA_API_URL}/query",
+                json={
+                    "question": text,
+                    "slack_user_id": user,
+                    "slack_channel_id": channel_id,
+                },
+                headers=_build_internal_headers(),
+                timeout=VANNA_API_TIMEOUT,  # NFR-06
+            )
+            if response.status_code != 200:
+                _handle_error_response(response, say)
+                return
+            result = response.json()
 
-            logger.error(f"vanna-api 오류: HTTP {response.status_code}, error_code={error_code}")
-            say(blocks=[{
-                "type": "section",
-                "text": {"type": "mrkdwn", "text": f"❌ *오류가 발생했습니다*\n{message}"},
-            }])
+        # ④ 결과 전송 (동기/비동기 공통)
+        chart_base64 = result.get("chart_image_base64")
+
+        # ① 헤더 + 질문 + SQL + 결과 테이블 먼저 전송
+        say(blocks=_build_header_blocks(result))
+
+        # ② 차트 업로드 후 채널에 실제 게시될 때까지 대기
+        if chart_base64:
+            try:
+                image_bytes = base64.b64decode(chart_base64)
+                upload_resp = client.files_upload_v2(
+                    channel=channel_id,
+                    content=image_bytes,
+                    filename="chart.png",
+                    title="분석 차트",
+                )
+                # 채널에 파일이 실제로 나타날 때까지 폴링 (최대 3초)
+                file_id = upload_resp["files"][0]["id"]
+                for _ in range(15):
+                    history = client.conversations_history(channel=channel_id, limit=5)
+                    posted = any(
+                        file_id in [f["id"] for f in msg.get("files", [])]
+                        for msg in history.get("messages", [])
+                    )
+                    if posted:
+                        break
+                    time.sleep(0.2)
+                logger.info("차트 이미지 업로드 완료")
+            except Exception as e:
+                logger.error(f"차트 업로드 실패: {e}")
+
+        # ③ AI 분석 + Redash 링크 + 피드백 버튼 (차트 업로드 완료 후)
+        say(blocks=_build_footer_blocks(result))
 
     except requests.Timeout:
         logger.error(f"vanna-api 타임아웃 ({VANNA_API_TIMEOUT}초)")

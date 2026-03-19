@@ -665,6 +665,54 @@ resource "kubernetes_deployment" "vanna_api" {
             value = var.redash_public_url
           }
 
+          # ---------------------------------------------------------------
+          # Phase 2: Feature Flags (§8.1 기준, 점진 전환 — 기본값 false)
+          # ---------------------------------------------------------------
+          env {
+            name  = "PHASE2_RAG_ENABLED"
+            value = tostring(var.phase2_rag_enabled)
+          }
+          env {
+            name  = "PHASE2_FEEDBACK_ENABLED"
+            value = tostring(var.phase2_feedback_enabled)
+          }
+          env {
+            name  = "ASYNC_QUERY_ENABLED"
+            value = tostring(var.async_query_enabled)
+          }
+          env {
+            name  = "DYNAMODB_ENABLED"
+            value = tostring(var.dynamodb_enabled)
+          }
+
+          # Phase 2: DynamoDB 테이블명 (§8.1)
+          env {
+            name  = "DYNAMODB_HISTORY_TABLE"
+            value = var.dynamodb_history_table
+          }
+          env {
+            name  = "DYNAMODB_FEEDBACK_TABLE"
+            value = var.dynamodb_feedback_table
+          }
+          env {
+            name  = "DYNAMODB_ASYNC_TABLE"
+            value = var.dynamodb_async_table
+          }
+          env {
+            name  = "DYNAMODB_QUERY_HASH_TABLE"
+            value = var.dynamodb_query_hash_table
+          }
+
+          # Phase 2: Reranker 설정 (§8.1)
+          env {
+            name  = "RERANKER_MODEL_NAME"
+            value = var.reranker_model_name
+          }
+          env {
+            name  = "RERANKER_TOP_K"
+            value = tostring(var.reranker_top_k)
+          }
+
           # 히스토리 저장 경로 (history_recorder.py)
           # NFR-07: emptyDir 마운트 — Pod 재시작 시 이력 소실. 운영환경은 EFS PVC로 교체 필요
           volume_mount {
@@ -902,6 +950,12 @@ resource "kubernetes_deployment" "slack_bot" {
           env {
             name  = "VANNA_API_URL"
             value = "http://vanna-api.vanna.svc.cluster.local:8000"
+          }
+
+          # Phase 2: 비동기 폴링 모드 전환 플래그 (§6.6)
+          env {
+            name  = "ASYNC_QUERY_ENABLED"
+            value = tostring(var.async_query_enabled)
           }
 
           # 내부 서비스 인증 토큰 (SEC-17, vanna-api 호출용)

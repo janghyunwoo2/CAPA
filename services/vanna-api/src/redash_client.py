@@ -238,6 +238,62 @@ class RedashClient:
             logger.error(f"Redash 결과 조회 네트워크 오류: {e}")
             raise RedashAPIError(f"Redash 연결 오류: {str(e)}")
 
+    async def create_or_reuse_query(
+        self,
+        sql: str,
+        dynamodb_table: Optional[Any] = None,
+        name: Optional[str] = None,
+    ) -> int:
+        """SQL 해시 기반 기존 Redash 쿼리 재사용 또는 신규 생성 (Phase 2, FR-17).
+
+        Args:
+            sql: 실행할 SQL 문자열
+            dynamodb_table: DynamoDB Table 리소스 (None이면 해시 조회 스킵)
+            name: 쿼리 이름 (없으면 자동 생성)
+
+        Returns:
+            query_id (int)
+        """
+        from .pipeline.sql_hash import compute_sql_hash
+        from botocore.exceptions import ClientError as _ClientError
+        import time as _time
+
+        sql_hash = compute_sql_hash(sql)
+
+        # DynamoDB에서 기존 query_id 조회
+        if dynamodb_table is not None:
+            try:
+                resp = dynamodb_table.get_item(Key={"sql_hash": sql_hash})
+                item = resp.get("Item")
+                if item and item.get("query_id"):
+                    cached_query_id = int(item["query_id"])
+                    logger.info(
+                        f"SQL 해시 캐시 히트: sql_hash={sql_hash[:16]}..., query_id={cached_query_id}"
+                    )
+                    return cached_query_id
+            except _ClientError as e:
+                logger.warning(f"DynamoDB 쿼리 해시 조회 실패 (신규 생성으로 진행): {e}")
+
+        # 신규 Redash 쿼리 생성
+        query_id = await self.create_query(sql=sql, name=name)
+
+        # DynamoDB에 해시 저장 (TTL 90일)
+        if dynamodb_table is not None:
+            try:
+                from datetime import datetime as _dt, timedelta as _td
+                ttl = int((_dt.utcnow() + _td(days=90)).timestamp())
+                dynamodb_table.put_item(Item={
+                    "sql_hash": sql_hash,
+                    "query_id": query_id,
+                    "created_at": _dt.utcnow().isoformat(),
+                    "ttl": ttl,
+                })
+                logger.info(f"SQL 해시 DynamoDB 저장 완료: sql_hash={sql_hash[:16]}..., query_id={query_id}")
+            except _ClientError as e:
+                logger.warning(f"DynamoDB 쿼리 해시 저장 실패 (무시): {e}")
+
+        return query_id
+
     def build_public_url(self, query_id: int) -> str:
         """사용자 전달용 Redash 공개 URL 생성"""
         return f"{self._config.public_url}/queries/{query_id}"

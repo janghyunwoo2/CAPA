@@ -1,7 +1,13 @@
 """
 Vanna AI API - Text-to-SQL Service (v2)
 11-Step QueryPipeline 위임 방식 (T3)
-설계 문서 §3, §5 기준
+설계 문서 §3, §5, §6.5 기준
+
+Phase 2 추가:
+- ASYNC_QUERY_ENABLED=true 시 POST /query → 202 + task_id
+- GET /query/{task_id} 폴링 엔드포인트
+- DELETE /training-data/{training_id}
+- DYNAMODB_ENABLED=true 시 DynamoDB History/Feedback 초기화
 """
 
 import json
@@ -13,7 +19,8 @@ from typing import AsyncGenerator, Optional
 
 import boto3
 import chromadb
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from vanna.anthropic import Anthropic_Chat
 from vanna.chromadb import ChromaDB_VectorStore
@@ -30,10 +37,11 @@ from .models.api import (
     TrainRequest,
     TrainResponse,
 )
+from .models.async_task import AsyncTaskStatus
 from .models.domain import FeedbackType, TrainDataType
 from .models.redash import RedashConfig
 from .query_pipeline import QueryPipeline
-from .security.auth import InternalTokenMiddleware
+from .security.auth import InternalTokenMiddleware, verify_internal_token
 from .security.error_handler import generic_exception_handler
 
 logging.basicConfig(level=logging.INFO)
@@ -54,6 +62,13 @@ REDASH_QUERY_TIMEOUT_SEC = int(os.getenv("REDASH_QUERY_TIMEOUT_SEC", "300"))
 REDASH_POLL_INTERVAL_SEC = int(os.getenv("REDASH_POLL_INTERVAL_SEC", "3"))
 REDASH_PUBLIC_URL = os.getenv("REDASH_PUBLIC_URL", "https://redash.capa.internal")
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+
+# Phase 2 Feature Flags
+DYNAMODB_ENABLED = os.getenv("DYNAMODB_ENABLED", "false").lower() == "true"
+ASYNC_QUERY_ENABLED = os.getenv("ASYNC_QUERY_ENABLED", "false").lower() == "true"
+DYNAMODB_HISTORY_TABLE = os.getenv("DYNAMODB_HISTORY_TABLE", "capa-dev-query-history")
+DYNAMODB_FEEDBACK_TABLE = os.getenv("DYNAMODB_FEEDBACK_TABLE", "capa-dev-pending-feedbacks")
+DYNAMODB_ASYNC_TABLE = os.getenv("DYNAMODB_ASYNC_TABLE", "capa-dev-async-tasks")
 
 
 class VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
@@ -102,11 +117,55 @@ def _init_pipeline(vanna: VannaAthena) -> QueryPipeline:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Vanna API 시작 중...")
     vanna = _init_vanna()
-    recorder = HistoryRecorder()
     app.state.vanna = vanna
     app.state.pipeline = _init_pipeline(vanna)
+
+    # Phase 2: DynamoDB 기반 History/Feedback 초기화
+    if DYNAMODB_ENABLED:
+        try:
+            from .stores.dynamodb_history import DynamoDBHistoryRecorder
+            from .stores.dynamodb_feedback import DynamoDBFeedbackStore
+            dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+            recorder = DynamoDBHistoryRecorder(
+                dynamodb_resource=dynamodb,
+                table_name=DYNAMODB_HISTORY_TABLE,
+            )
+            feedback_store = DynamoDBFeedbackStore(
+                dynamodb_resource=dynamodb,
+                table_name=DYNAMODB_FEEDBACK_TABLE,
+            )
+            logger.info("DynamoDB History/Feedback 초기화 완료")
+        except Exception as e:
+            logger.error(f"DynamoDB 초기화 실패, JSON Lines 폴백: {e}")
+            recorder = HistoryRecorder()
+            feedback_store = None
+    else:
+        recorder = HistoryRecorder()
+        feedback_store = None
+
     app.state.recorder = recorder
-    app.state.feedback_manager = FeedbackManager(vanna_instance=vanna, history_recorder=recorder)
+    app.state.feedback_manager = FeedbackManager(
+        vanna_instance=vanna,
+        history_recorder=recorder,
+        feedback_store=feedback_store,
+    )
+
+    # Phase 2: 비동기 Task 관리자 초기화
+    if ASYNC_QUERY_ENABLED and DYNAMODB_ENABLED:
+        try:
+            from .async_query_manager import AsyncQueryManager
+            dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+            app.state.async_manager = AsyncQueryManager(
+                dynamodb_resource=dynamodb,
+                table_name=DYNAMODB_ASYNC_TABLE,
+            )
+            logger.info("AsyncQueryManager 초기화 완료")
+        except Exception as e:
+            logger.error(f"AsyncQueryManager 초기화 실패: {e}")
+            app.state.async_manager = None
+    else:
+        app.state.async_manager = None
+
     yield
     logger.info("Vanna API 종료 중...")
 
@@ -132,14 +191,93 @@ async def health_check() -> HealthResponse:
             "chromadb": f"{CHROMA_HOST}:{CHROMA_PORT}",
             "athena": ATHENA_DATABASE,
             "redash": "enabled" if REDASH_ENABLED else "disabled",
+            "dynamodb": "enabled" if DYNAMODB_ENABLED else "disabled",
+            "async_query": "enabled" if ASYNC_QUERY_ENABLED else "disabled",
         },
     )
 
 
-@app.post("/query", response_model=NewQueryResponse)
-async def query_natural_language(request: QueryRequest) -> NewQueryResponse:
-    """자연어 질의 → 11-Step 파이프라인 실행"""
+async def _run_pipeline_async(
+    task_id: str,
+    request: "QueryRequest",
+    pipeline: QueryPipeline,
+    async_manager: "AsyncQueryManager",
+) -> None:
+    """BackgroundTasks에서 실행되는 파이프라인 비동기 래퍼"""
+    from .async_query_manager import AsyncQueryManager as _AM
+    try:
+        async_manager.update_status(task_id, AsyncTaskStatus.RUNNING)
+        ctx = await pipeline.run(
+            question=request.question,
+            slack_user_id=request.slack_user_id,
+            slack_channel_id=request.slack_channel_id,
+        )
+        if ctx.error:
+            async_manager.update_status(
+                task_id,
+                AsyncTaskStatus.FAILED,
+                error={
+                    "error_code": ctx.error.error_code,
+                    "message": ctx.error.error_message,
+                },
+            )
+        else:
+            validated_sql = (
+                ctx.validation_result.normalized_sql
+                if ctx.validation_result and ctx.validation_result.normalized_sql
+                else ctx.generated_sql
+            )
+            result = {
+                "query_id": ctx.history_id or "",
+                "intent": ctx.intent.value if ctx.intent else None,
+                "refined_question": ctx.refined_question,
+                "sql": validated_sql,
+                "sql_validated": ctx.validation_result.is_valid if ctx.validation_result else False,
+                "results": ctx.query_results.rows[:10] if ctx.query_results else None,
+                "answer": ctx.analysis.answer if ctx.analysis else None,
+                "chart_image_base64": ctx.chart_base64,
+                "redash_url": ctx.redash_url,
+                "redash_query_id": ctx.redash_query_id,
+                "execution_path": ctx.query_results.execution_path if ctx.query_results else "unknown",
+            }
+            async_manager.update_status(task_id, AsyncTaskStatus.COMPLETED, result=result)
+    except Exception as e:
+        logger.error(f"비동기 파이프라인 실패: task_id={task_id}, {e}", exc_info=True)
+        async_manager.update_status(
+            task_id,
+            AsyncTaskStatus.FAILED,
+            error={"error_code": "INTERNAL_ERROR", "message": "요청 처리 중 오류가 발생했습니다."},
+        )
+
+
+@app.post("/query")
+async def query_natural_language(
+    request: QueryRequest,
+    background_tasks: BackgroundTasks,
+) -> dict:
+    """자연어 질의 → 파이프라인 실행.
+
+    ASYNC_QUERY_ENABLED=true: 202 Accepted + task_id 즉시 반환 (BackgroundTasks)
+    ASYNC_QUERY_ENABLED=false: 기존 동기 응답 유지 (Phase 1 하위 호환)
+    """
     pipeline: QueryPipeline = app.state.pipeline
+
+    # Phase 2: 비동기 모드
+    if ASYNC_QUERY_ENABLED and app.state.async_manager is not None:
+        manager = app.state.async_manager
+        task_id = manager.create_task(
+            question=request.question,
+            slack_user_id=request.slack_user_id,
+        )
+        background_tasks.add_task(
+            _run_pipeline_async, task_id, request, pipeline, manager
+        )
+        return JSONResponse(
+            status_code=202,
+            content={"task_id": task_id, "status": "pending"},
+        )
+
+    # Phase 1: 동기 모드 (하위 호환)
     start_time = time.time()
     logger.info(f"질의 처리 시작: {request.question[:100]}")
     try:
@@ -198,6 +336,33 @@ async def query_natural_language(request: QueryRequest) -> NewQueryResponse:
     )
 
 
+@app.get("/query/{task_id}")
+async def get_query_result(task_id: str) -> dict:
+    """비동기 쿼리 결과 조회 (Phase 2, §6.5).
+    ASYNC_QUERY_ENABLED=false 시 404 반환.
+    """
+    if not ASYNC_QUERY_ENABLED or app.state.async_manager is None:
+        raise HTTPException(status_code=404, detail="비동기 쿼리 모드가 비활성화되어 있습니다.")
+
+    manager = app.state.async_manager
+    task = manager.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task를 찾을 수 없습니다.")
+
+    if task.status in (AsyncTaskStatus.PENDING, AsyncTaskStatus.RUNNING):
+        return JSONResponse(
+            status_code=202,
+            content={"task_id": task_id, "status": task.status.value},
+        )
+    if task.status == AsyncTaskStatus.COMPLETED:
+        return task.result or {}
+    # FAILED
+    raise HTTPException(
+        status_code=500,
+        detail=task.error or {"error_code": "UNKNOWN_ERROR", "message": "알 수 없는 오류가 발생했습니다."},
+    )
+
+
 @app.post("/feedback", response_model=FeedbackResponse)
 async def post_feedback(request: FeedbackRequest) -> FeedbackResponse:
     """피드백 수집 (FR-21)"""
@@ -217,18 +382,18 @@ async def train_model(request: TrainRequest) -> TrainResponse:
     try:
         if request.data_type == TrainDataType.DDL and request.ddl:
             vanna.train(ddl=request.ddl)
-            logger.info(f"DDL 학습 완료")
+            logger.info("DDL 학습 완료")
         elif request.data_type == TrainDataType.DOCUMENTATION and request.documentation:
             vanna.train(documentation=request.documentation)
-            logger.info(f"Documentation 학습 완료")
+            logger.info("Documentation 학습 완료")
         elif request.data_type == TrainDataType.SQL and request.sql:
             vanna.train(sql=request.sql)
-            logger.info(f"SQL 학습 완료")
+            logger.info("SQL 학습 완료")
         elif request.data_type == TrainDataType.QA_PAIR:
             if not request.question or not request.sql:
                 raise HTTPException(status_code=400, detail={"error_code": "INVALID_INPUT", "message": "qa_pair 유형은 question과 sql이 필요합니다."})
             vanna.train(question=request.question, sql=request.sql)
-            logger.info(f"QA pair 학습 완료")
+            logger.info("QA pair 학습 완료")
         else:
             raise HTTPException(status_code=400, detail={"error_code": "INVALID_INPUT", "message": "유효하지 않은 학습 데이터입니다."})
         training_data = vanna.get_training_data()
@@ -243,9 +408,26 @@ async def train_model(request: TrainRequest) -> TrainResponse:
 
 @app.get("/history")
 async def get_history(limit: int = 50) -> dict:
-    """쿼리 이력 조회 (FR-10)"""
-    recorder: HistoryRecorder = app.state.recorder
+    """쿼리 이력 조회 (FR-10)
+    DYNAMODB_ENABLED=true 시 DynamoDB 조회, false 시 JSON Lines 파일 조회.
+    """
+    recorder = app.state.recorder
     try:
+        if DYNAMODB_ENABLED:
+            # DynamoDB 모드: scan으로 최근 limit건 반환
+            from .stores.dynamodb_history import DynamoDBHistoryRecorder
+            if isinstance(recorder, DynamoDBHistoryRecorder):
+                from boto3.dynamodb.conditions import Key
+                try:
+                    resp = recorder._table.scan(Limit=limit)
+                    items = resp.get("Items", [])
+                    items.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+                    return {"data": items[:limit], "total": len(items)}
+                except Exception as e:
+                    logger.error(f"DynamoDB 이력 조회 오류: {e}", exc_info=True)
+                    raise HTTPException(status_code=500, detail={"error_code": "INTERNAL_ERROR", "message": "이력 조회 중 오류가 발생했습니다."})
+
+        # JSON Lines 모드 (Phase 1 하위 호환)
         if not recorder._file.exists():
             return {"data": [], "total": 0}
         lines = recorder._file.read_text(encoding="utf-8").splitlines()
@@ -260,6 +442,8 @@ async def get_history(limit: int = 50) -> dict:
             if len(records) >= limit:
                 break
         return {"data": records, "total": len(records)}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"이력 조회 오류: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"error_code": "INTERNAL_ERROR", "message": "이력 조회 중 오류가 발생했습니다."})
@@ -276,6 +460,24 @@ async def get_training_data() -> dict:
     except Exception as e:
         logger.error(f"학습 데이터 조회 오류: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"error_code": "INTERNAL_ERROR", "message": "학습 데이터 조회 중 오류가 발생했습니다."})
+
+
+@app.delete("/training-data/{training_id}")
+async def delete_training_data(
+    training_id: str,
+    _: None = Depends(verify_internal_token),
+) -> dict:
+    """학습 데이터 삭제 (Phase 2, FR-13~15, §4.3.3).
+    training_id: GET /training-data 응답의 id 필드값.
+    """
+    vanna: VannaAthena = app.state.vanna
+    try:
+        vanna.remove_training_data(id=training_id)
+        logger.info(f"학습 데이터 삭제 완료: {training_id}")
+        return {"status": "deleted", "training_id": training_id}
+    except Exception as e:
+        logger.error(f"학습 데이터 삭제 실패: {training_id}: {e}")
+        raise HTTPException(status_code=400, detail={"error_code": "DELETE_FAILED", "message": "학습 데이터 삭제에 실패했습니다."})
 
 
 class _LegacyRequest(BaseModel):
