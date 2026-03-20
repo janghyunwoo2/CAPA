@@ -56,11 +56,14 @@ class FeedbackManager:
         if PHASE2_FEEDBACK_ENABLED:
             # Phase 2: DynamoDB에 pending으로 저장만 (즉시 학습 제거)
             if record.refined_question and record.generated_sql and self._feedback_store:
-                self._feedback_store.save_pending(
-                    history_id=history_id,
-                    question=record.refined_question,
-                    sql=record.generated_sql,
-                )
+                try:
+                    self._feedback_store.save_pending(
+                        history_id=history_id,
+                        question=record.refined_question,
+                        sql=record.generated_sql,
+                    )
+                except Exception as e:
+                    logger.error(f"피드백 pending 저장 실패 (무시): {e}")
             self._recorder.update_feedback(
                 history_id=history_id,
                 feedback=FeedbackType.POSITIVE.value,
