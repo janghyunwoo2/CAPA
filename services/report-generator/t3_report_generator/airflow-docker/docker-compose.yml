@@ -90,7 +90,7 @@ services:
       - ./dags:/opt/airflow/dags
       - ../../../:/opt/airflow/parent
     ports:
-      - "8080:8080"
+      - "8082:8080"
     command: webserver
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]

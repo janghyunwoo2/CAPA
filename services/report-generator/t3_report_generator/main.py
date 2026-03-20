@@ -51,7 +51,7 @@ def _get_previous_month_range(date: datetime) -> tuple[str, str]:
     return prev_month_start.strftime("%Y-%m-%d"), prev_month_end.strftime("%Y-%m-%d")
 
 
-def _save_and_send(markdown: str, daily_breakdown: list, date: datetime, report_type: str):
+def _save_and_send(markdown: str, daily_breakdown: list, date: datetime, report_type: str, only_upload: bool = False):
     """마크다운 저장 → PDF 생성 → Slack 전송"""
     date_str = date.strftime("%Y-%m-%d")
 
@@ -75,8 +75,8 @@ def _save_and_send(markdown: str, daily_breakdown: list, date: datetime, report_
         logger.info(f"PDF 저장: {pdf_path}")
 
         # Slack 전송
-        if slack_notifier.send_report_to_slack(pdf_path, date_str, report_type):
-            logger.info("Slack 전송 완료")
+        if slack_notifier.send_report_to_slack(pdf_path, date_str, report_type, only_upload=only_upload):
+            logger.info(f"Slack 전송 완료 (only_upload={only_upload})")
         else:
             logger.info("Slack 전송 실패 또는 설정 안 됨")
 
@@ -90,7 +90,7 @@ def _save_and_send(markdown: str, daily_breakdown: list, date: datetime, report_
 # 일간 보고서
 # ============================================================================
 
-def generate_daily_report(date_str: str = None) -> dict[str, Any]:
+def generate_daily_report(date_str: str = None, only_upload: bool = False) -> dict[str, Any]:
     """일간 보고서 생성 - 현월 누적 (월초~어제)"""
     date = _parse_date(date_str)
     logger.info(f"[일간] 보고서 생성 시작: {date.strftime('%Y-%m-%d')}")
@@ -105,7 +105,7 @@ def generate_daily_report(date_str: str = None) -> dict[str, Any]:
         data = get_daily_kpi(start_str, end_str)
         markdown = markdown_builder.build_daily(date, data, start_str, end_str)
 
-        _save_and_send(markdown, data.get("daily_breakdown", []), date, "daily")
+        _save_and_send(markdown, data.get("daily_breakdown", []), date, "daily", only_upload=only_upload)
 
         logger.info("[일간] 보고서 생성 완료")
         return {"status": "success", "date": date.strftime("%Y-%m-%d"), "markdown": markdown}
@@ -119,7 +119,7 @@ def generate_daily_report(date_str: str = None) -> dict[str, Any]:
 # 주간 보고서
 # ============================================================================
 
-def generate_weekly_report(date_str: str = None) -> dict[str, Any]:
+def generate_weekly_report(date_str: str = None, only_upload: bool = False) -> dict[str, Any]:
     """주간 보고서 생성 - 지난주 월요일~일요일"""
     date = _parse_date(date_str)
     logger.info(f"[주간] 보고서 생성 시작: {date.strftime('%Y-%m-%d')}")
@@ -143,7 +143,7 @@ def generate_weekly_report(date_str: str = None) -> dict[str, Any]:
         }
         markdown = markdown_builder.build_weekly(date, weekly_data)
 
-        _save_and_send(markdown, data.get("daily_breakdown", []), date, "weekly")
+        _save_and_send(markdown, data.get("daily_breakdown", []), date, "weekly", only_upload=only_upload)
 
         logger.info("[주간] 보고서 생성 완료")
         return {"status": "success", "date": date.strftime("%Y-%m-%d"), "markdown": markdown}
@@ -157,7 +157,7 @@ def generate_weekly_report(date_str: str = None) -> dict[str, Any]:
 # 월간 보고서
 # ============================================================================
 
-def generate_monthly_report(date_str: str = None) -> dict[str, Any]:
+def generate_monthly_report(date_str: str = None, only_upload: bool = False) -> dict[str, Any]:
     """월간 보고서 생성 - 전월 전체"""
     date = _parse_date(date_str)
     logger.info(f"[월간] 보고서 생성 시작: {date.strftime('%Y-%m-%d')}")
@@ -183,7 +183,7 @@ def generate_monthly_report(date_str: str = None) -> dict[str, Any]:
         }
         markdown = markdown_builder.build_monthly(date, monthly_data, start_str, end_str)
 
-        _save_and_send(markdown, summary_data.get("daily_breakdown", []), date, "monthly")
+        _save_and_send(markdown, summary_data.get("daily_breakdown", []), date, "monthly", only_upload=only_upload)
 
         logger.info("[월간] 보고서 생성 완료")
         return {"status": "success", "date": date.strftime("%Y-%m-%d"), "markdown": markdown}
@@ -191,6 +191,12 @@ def generate_monthly_report(date_str: str = None) -> dict[str, Any]:
     except Exception as e:
         logger.error(f"[월간] 보고서 생성 실패: {e}", exc_info=True)
         return {"status": "error", "date": date.strftime("%Y-%m-%d"), "error": str(e)}
+
+
+def send_final_notification(report_types: list[str], date_str: str = None) -> bool:
+    """통합 알림 전송 래퍼"""
+    date = _parse_date(date_str)
+    return slack_notifier.send_combined_notification(report_types, date.strftime("%Y-%m-%d"))
 
 
 # ============================================================================

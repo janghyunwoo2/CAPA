@@ -35,9 +35,12 @@ def run_daily(**context):
     from main import generate_daily_report
 
     date_str = datetime.now().strftime('%Y-%m-%d')
-    result = generate_daily_report(date_str)
+    # 통합 알림을 위해 파일만 업로드
+    result = generate_daily_report(date_str, only_upload=True)
 
-    if result['status'] != 'success':
+    if result['status'] == 'success':
+        context['ti'].xcom_push(key='report_created', value='daily')
+    else:
         from airflow.exceptions import AirflowException
         raise AirflowException(f"일간 보고서 실패: {result.get('error')}")
 
@@ -52,9 +55,12 @@ def run_weekly(**context):
         return
 
     date_str = datetime.now().strftime('%Y-%m-%d')
-    result = generate_weekly_report(date_str)
+    # 통합 알림을 위해 파일만 업로드
+    result = generate_weekly_report(date_str, only_upload=True)
 
-    if result['status'] != 'success':
+    if result['status'] == 'success':
+        context['ti'].xcom_push(key='report_created', value='weekly')
+    else:
         from airflow.exceptions import AirflowException
         raise AirflowException(f"주간 보고서 실패: {result.get('error')}")
 
@@ -69,11 +75,36 @@ def run_monthly(**context):
         return
 
     date_str = datetime.now().strftime('%Y-%m-%d')
-    result = generate_monthly_report(date_str)
+    # 통합 알림을 위해 파일만 업로드
+    result = generate_monthly_report(date_str, only_upload=True)
 
-    if result['status'] != 'success':
+    if result['status'] == 'success':
+        context['ti'].xcom_push(key='report_created', value='monthly')
+    else:
         from airflow.exceptions import AirflowException
         raise AirflowException(f"월간 보고서 실패: {result.get('error')}")
+
+
+def notify_slack(**context):
+    sys.path.insert(0, '/opt/airflow/parent/report-generator/t3_report_generator')
+    from main import send_final_notification
+
+    # XCom에서 생성된 보고서 목록 취합
+    ti = context['ti']
+    dag_run = context['dag_run']
+    
+    created_reports = []
+    for task_id in ['daily_report', 'weekly_report', 'monthly_report']:
+        val = ti.xcom_pull(task_ids=task_id, key='report_created')
+        if val:
+            created_reports.append(val)
+
+    if not created_reports:
+        print("생성된 보고서가 없어 알림을 건너뜁니다.")
+        return
+
+    date_str = datetime.now().strftime('%Y-%m-%d')
+    send_final_notification(created_reports, date_str)
 
 
 task_daily = PythonOperator(
@@ -97,5 +128,13 @@ task_monthly = PythonOperator(
     dag=dag,
 )
 
-# 순서 보장: 일간 → 주간 → 월간
-task_daily >> task_weekly >> task_monthly
+task_notify = PythonOperator(
+    task_id='notify_slack',
+    python_callable=notify_slack,
+    provide_context=True,
+    trigger_rule='all_done',  # 실패하더라도 일단 알림 시도 (또는 상황에 맞춰 변경)
+    dag=dag,
+)
+
+# 순서 보장: 일간 → 주간 → 월간 → 통합 알림
+task_daily >> task_weekly >> task_monthly >> task_notify
