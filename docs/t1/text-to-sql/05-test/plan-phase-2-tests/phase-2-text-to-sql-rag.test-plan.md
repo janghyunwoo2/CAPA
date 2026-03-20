@@ -23,6 +23,7 @@
 
 **대상 파일**: `services/vanna-api/src/pipeline/sql_hash.py`
 **검증 함수**: `normalize_sql()`, `compute_sql_hash()`
+**요구사항 (FR)**: **FR-17** — SQL 해시 중복 쿼리 방지
 
 | TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
 |----|------|-----------|------|------------|-------------|------|
@@ -41,6 +42,7 @@
 
 **대상 파일**: `services/vanna-api/src/pipeline/reranker.py`
 **검증 클래스**: `CrossEncoderReranker.rerank()`
+**요구사항 (FR)**: **FR-12** — 3단계 RAG 고도화 (Step 4-2: Reranker)
 
 > 구현 특이사항: `__init__`에서 `sentence_transformers` 임포트 실패 시 `self._model = None`으로 graceful degradation 처리됨.
 
@@ -58,6 +60,7 @@
 
 **대상 파일**: `services/vanna-api/src/stores/dynamodb_feedback.py`
 **검증 클래스**: `DynamoDBFeedbackStore.save_pending()`, `DynamoDBFeedbackStore.update_status()`
+**요구사항 (FR)**: **FR-16** — 피드백 루프 품질 제어 (pending_feedbacks 테이블)
 
 > moto `@mock_aws` 데코레이터로 DynamoDB를 Mock 처리한다.
 
@@ -76,6 +79,7 @@
 
 **대상 파일**: `services/vanna-api/src/redash_client.py`
 **검증 메서드**: `RedashClient.create_or_reuse_query()`
+**요구사항 (FR)**: **FR-17** — SQL 해시 → Redash query_id 캐시 (DynamoDB 기반)
 
 > Redash HTTP 호출: `httpx` mock. DynamoDB: moto mock.
 
@@ -89,10 +93,11 @@
 
 ---
 
-### 1.5 `dynamodb_history.py` — DynamoDB 이력 저장 (FR-11)
+### 1.5 `dynamodb_history.py` — DynamoDB 이력 저장
 
 **대상 파일**: `services/vanna-api/src/stores/dynamodb_history.py`
 **검증 클래스**: `DynamoDBHistoryRecorder.record()`, `get_record()`, `update_feedback()`
+**요구사항 (FR)**: **FR-11** — History 저장소 전환 (JSON Lines → DynamoDB query_history 테이블)
 
 > moto `@mock_aws`로 실제 DynamoDB 테이블을 메모리에 생성 → 저장 → 테이블 직접 조회로 검증한다.
 
@@ -121,10 +126,11 @@ def history_table():
 
 ---
 
-### 1.6 Airflow DAG `capa_chromadb_refresh` — 배치 학습 (FR-18)
+### 1.6 Airflow DAG `capa_chromadb_refresh` — 배치 학습
 
 **대상 파일**: `services/airflow-dags/dags/capa_chromadb_refresh.py`
 **검증 함수**: `extract_pending_feedbacks()`, `validate_and_deduplicate()`, `batch_train_chromadb()`
+**요구사항 (FR)**: **FR-18** — 피드백 루프 자동 학습 (Airflow DAG: pending_feedbacks → validate → train → ChromaDB)
 
 > moto로 `pending_feedbacks` 테이블 생성 → 데이터 삽입 → 함수 실행 → 테이블 직접 조회로 상태 변경 검증
 
@@ -154,10 +160,11 @@ def pending_feedbacks_table():
 
 ---
 
-### 1.7 `DELETE /training-data/{id}` — 학습 데이터 삭제 (FR-13~15)
+### 1.7 `DELETE /training-data/{id}` — 학습 데이터 삭제
 
 **대상**: `DELETE /training-data/{id}` FastAPI 엔드포인트
 **검증**: ChromaDB 벡터 삭제, 존재하지 않는 id 처리, 인증 검증
+**요구사항 (FR)**: **FR-13~15** — 학습 데이터 관리 (삭제, 선별, 검증)
 
 | TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
 |----|------|-----------|------|------------|-------------|------|
@@ -167,10 +174,11 @@ def pending_feedbacks_table():
 
 ---
 
-### 1.8 `PipelineContext.sql_hash` 직접 검증 (FR-17 Gap 4)
+### 1.8 `PipelineContext.sql_hash` 직접 검증
 
 **대상**: `query_pipeline.py:273` `ctx.sql_hash = compute_sql_hash(sql)` 할당
 **검증**: 파이프라인 실행 결과 `ctx.sql_hash` 값 확인
+**요구사항 (FR)**: **FR-17** — SQL 해시 파이프라인 컨텍스트 할당 (Gap 4 수정 검증)
 
 | TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
 |----|------|-----------|------|------------|-------------|------|
@@ -179,10 +187,11 @@ def pending_feedbacks_table():
 
 ---
 
-### 1.9 `RAGRetriever` 메서드 단위 테스트 (FR-12)
+### 1.9 `RAGRetriever` 메서드 단위 테스트
 
 **대상 파일**: `services/vanna-api/src/pipeline/rag_retriever.py`
 **검증 메서드**: `retrieve_v2()`, `_retrieve_candidates()`, `_llm_filter()`
+**요구사항 (FR)**: **FR-12** — 3단계 RAG 고도화 (Step 4: 벡터검색→Reranker→LLM선별)
 
 > Vanna(ChromaDB) → MagicMock, Anthropic client → AsyncMock, CrossEncoderReranker → MagicMock
 
@@ -199,10 +208,11 @@ def pending_feedbacks_table():
 
 ---
 
-### 1.10 `AsyncQueryManager` 단위 테스트 (FR-19)
+### 1.10 `AsyncQueryManager` 단위 테스트
 
 **대상 파일**: `services/vanna-api/src/pipeline/async_query_manager.py`
 **검증 메서드**: `create_task()`, `update_status()`, `get_task()`
+**요구사항 (FR)**: **FR-19** — 비동기 쿼리 태스크 관리 (pending_feedbacks 테이블 기반)
 
 > moto `@mock_aws`로 DynamoDB 테이블 생성 → 저장 → 직접 조회로 검증
 
@@ -230,10 +240,11 @@ def async_task_table():
 
 ---
 
-### 1.11 `FeedbackManager.record_positive()` 단위 테스트 (FR-16)
+### 1.11 `FeedbackManager.record_positive()` 단위 테스트
 
 **대상 파일**: `services/vanna-api/src/pipeline/feedback_manager.py` (또는 동등 파일)
 **검증 메서드**: `FeedbackManager.record_positive()`
+**요구사항 (FR)**: **FR-16** — 피드백 루프 자동화 (positive/negative 기록)
 
 > moto로 history 테이블 + feedback 테이블 동시 생성
 
@@ -245,9 +256,10 @@ def async_task_table():
 
 ---
 
-### 1.12 `batch_train_chromadb()` 부분 실패 케이스 (FR-18)
+### 1.12 `batch_train_chromadb()` 부분 실패 케이스
 
 **대상 파일**: `services/airflow-dags/dags/capa_chromadb_refresh.py`
+**요구사항 (FR)**: **FR-18** — 피드백 루프 자동 학습 (에러 처리)
 
 | TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
 |----|------|-----------|------|------------|-------------|------|
@@ -255,7 +267,9 @@ def async_task_table():
 
 ---
 
-### 1.13 `DELETE /training-data/{id}` 삭제 실패 400 (FR-13~15)
+### 1.13 `DELETE /training-data/{id}` 삭제 실패 400
+
+**요구사항 (FR)**: **FR-13~15** — 학습 데이터 관리 (삭제 실패 처리)
 
 | TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
 |----|------|-----------|------|------------|-------------|------|
@@ -265,189 +279,611 @@ def async_task_table():
 
 ## 섹션 2: 통합 테스트 (Integration Tests)
 
-E2E 시나리오 기반으로 파이프라인 전체 흐름을 검증한다. `PHASE2_RAG_ENABLED`, `ASYNC_QUERY_ENABLED` 환경변수로 분기를 제어한다.
-
-> **통합 테스트 원칙 — Mock 데이터 사용 금지**: 비즈니스 로직 컴포넌트(Vanna, RAGRetriever, CrossEncoderReranker, FeedbackManager, AsyncQueryManager 등)는 **실제 인스턴스**를 사용한다. `MagicMock`으로 컴포넌트 전체 또는 메서드를 대체하는 것은 금지한다. 실제 데이터가 컴포넌트 간에 흐르는 것을 검증한다.
-> - **AWS DynamoDB** → `moto` `@mock_aws` 에뮬레이션 (허용)
-> - **Redash HTTP / Anthropic API** → `respx` 실제 HTTP 인터셉터 사용 (허용 — MagicMock이 아닌 실제 HTTP 계층 통과)
-> - **ChromaDB / Vanna** → `chromadb.EphemeralClient()` in-memory 실제 인스턴스 사용
-> - **CrossEncoderReranker** → 실제 모델 로드 (소형 모델 `cross-encoder/ms-marco-MiniLM-L-6-v2` 사용)
-
-### TC-P2-01: PHASE2_RAG_ENABLED=false → Phase 1 RAG 경로 사용
-
-**목적**: 플래그 비활성 시 `retrieve()` 호출, `retrieve_v2()` 미호출 확인
-
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-01 | Step 4 | RAG 분기 | `PHASE2_RAG_ENABLED=false`, 질문="어제 클릭 수" | `retrieve()` 호출 1회, `retrieve_v2()` 호출 0회 | `assert mock_retrieve.call_count == 1` , `assert mock_retrieve_v2.call_count == 0` | 하위 호환성 확인 |
+> **통합 테스트 원칙**: Phase 1 통합 테스트(`plan-phase-1-tests/phase-2-integration-test-plan.md`)에서 검증 완료된 스텝(Step 1~3, 5~6, 9~10)은 본 섹션에서 기본 통과 확인(`assert http_status == 200`)만 수행하며, 상세 assert는 생략하고 "Phase 1 완료" 주석으로 표기한다.
+> Phase 2 신규 기능(Step 4 Reranker, Step 7~8 query_id 캐시, Step 11 DynamoDB 이력, 피드백 pending 저장, 비동기 쿼리, Airflow DAG 배치 학습, DELETE /training-data)에 집중하여 검증한다.
+>
+> **실제 AWS DynamoDB 사용**: 단위 테스트와 달리 통합/배포 후 테스트에서는 moto 에뮬레이션이 아닌 실제 AWS DynamoDB(`capa-dev-query-history`, `capa-dev-pending-feedbacks`) 테이블을 사용한다. 조회 명령은 AWS CLI로 수행한다.
+>
+> **로컬 환경**: Docker Compose(vanna-api + ChromaDB + Redash) + Airflow 로컬 설치(localhost:8080)
+>
+> **공통 PowerShell 변수** (모든 TC에서 동일하게 사용):
+> ```powershell
+> $API_BASE = "http://localhost:8000"
+> $TOKEN = "test-token"
+> ```
 
 ---
 
-### TC-P2-02: PHASE2_RAG_ENABLED=true → 3단계 RAG 전체 흐름
+### 2.0 파이프라인 스텝별 테스트 범위
 
-**목적**: 벡터 검색 → Reranker → LLM 선별 3단계 순서 실행 확인
+#### Phase 1 완료 항목 (기본 통과 확인만)
 
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-02 | Step 4-1 | 벡터 유사도 검색 | `PHASE2_RAG_ENABLED=true`, 질문="이번달 매출" | `_retrieve_candidates()` 호출, candidates 리스트 반환 | `assert len(candidates) > 0` | ChromaDB mock |
-| TC-P2-02 | Step 4-2 | Reranker 재평가 | Step 4-1 결과 | `CrossEncoderReranker.rerank()` 호출 1회 | `assert mock_rerank.call_count == 1` | reranker mock |
-| TC-P2-02 | Step 4-3 | LLM 최종 선별 | Step 4-2 결과 | `_llm_filter()` 호출 1회, RAGContext 반환 | `assert isinstance(rag_context, RAGContext)` | anthropic mock |
-| TC-P2-02 | 전체 | retrieve_v2 반환 | 위 3단계 완료 | RAGContext (ddl_context, documentation_context, sql_examples 포함) | `assert ctx.rag_context is not None` | - |
+| Step | 내용 | 테스트 계획서 |
+|------|------|--------------|
+| Step 1 | 의도 분류 (DATA_QUERY / GENERAL 분기) | `plan-phase-1-tests/phase-2-integration-test-plan.md` TC-A, TC-B |
+| Step 2 | 질문 정제 (QuestionRefiner) | 동일 문서 |
+| Step 3 | 키워드 추출 (KeywordExtractor) | 동일 문서 |
+| Step 5 | SQL 생성 (VannaSQLGenerator) | 동일 문서 |
+| Step 6 | SQL 검증 (SQLValidator — EXPLAIN) | 동일 문서 |
+| Step 9 | Athena 직접 실행 (Redash 실패 fallback) | 동일 문서 |
+| Step 10 | AI 분석 + 차트 추천 | 동일 문서 |
+| EX-1~10 | 에러 케이스 (의도 분류 실패, SQL 생성 실패, 타임아웃 등) | 동일 문서 |
+| SEC | 보안 검증 (인증 토큰, Rate Limit) | 동일 문서 |
 
----
+#### Phase 2 신규 검증 항목
 
-### TC-P2-03: FR-17 중복 쿼리 방지 — 동일 SQL 2회 요청
-
-**목적**: 동일 SQL 2회 요청 시 두 번째는 Redash 신규 생성 없이 기존 query_id 반환
-
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-03 | Step 7 (1회차) | Redash 신규 생성 | SQL="SELECT COUNT(*) FROM ad_clicks WHERE date='2026-03-19'" | Redash POST 호출 1회, `query_id=100` 반환, DynamoDB 저장 | `assert redash_post.call_count == 1` | moto DynamoDB |
-| TC-P2-03 | Step 7 (2회차) | 캐시 히트 | 동일 SQL (포맷 무관) | Redash POST 호출 0회, `query_id=100` 반환 | `assert redash_post.call_count == 0` , `assert result == 100` | 중복 방지 핵심 |
-
----
-
-### TC-P2-04: FR-16 피드백 루프 — 배치 저장 전용 확인
-
-**목적**: 👍 피드백 시 DynamoDB pending 저장, `vanna.train()` 즉시 미호출 확인
-
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-04 | Step 13 | 피드백 수신 | `POST /feedback {history_id="h1", feedback="positive"}` | HTTP 200, `{"status": "accepted", "trained": false}` | `assert resp.status_code == 200` , `assert resp.json()["trained"] is False` | - |
-| TC-P2-04 | Step 13 | DynamoDB pending 저장 | 위 요청 처리 후 | `pending_feedbacks` 테이블에 항목 존재, `status="pending"` | `assert item["status"] == "pending"` | moto DynamoDB |
-| TC-P2-04 | Step 13 | vanna.train() 미호출 | 위 요청 처리 후 | `vanna.train()` 호출 0회 | `assert mock_vanna_train.call_count == 0` | Phase 2 핵심 변경 |
+| TC ID | Step | Phase 2 신규 기능 | 관련 FR |
+|-------|------|-----------------|---------|
+| TC-IT-P2-01 | Step 4 | 3단계 RAG (CrossEncoderReranker + LLM filter) | FR-12 |
+| TC-IT-P2-02 | Step 11 | DynamoDB 쿼리 이력 저장 | FR-11 |
+| TC-IT-P2-03 | Step 7~8 | Redash query_id DynamoDB 캐시 | FR-17 |
+| TC-IT-P2-04 | Feedback | 피드백 pending 저장 (즉시 학습 제거) | FR-16 |
+| TC-IT-P2-05 | Async | 비동기 쿼리 (202 즉시 응답 + 폴링) | FR-19 |
+| TC-IT-P2-06 | DELETE | DELETE /training-data/{id} | FR-13~15 |
+| TC-IT-P2-07 | Airflow | Airflow DAG 배치 학습 (pending → trained) | FR-18 |
+| TC-IT-E2E-01 | 전체 | Phase 1 + Phase 2 전체 흐름 E2E | FR-11~19 |
 
 ---
 
-### TC-P2-05: FR-19 비동기 쿼리 처리 — POST/GET 폴링 흐름
+### 2.1 테스트 환경 구성
 
-**목적**: `POST /query` → 202 즉시 응답 + `GET /query/{task_id}` 폴링으로 최종 결과 수신
+#### 2.1.1 .env 파일 (Phase 2 추가 설정)
 
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-05 | POST /query | 비동기 접수 | `ASYNC_QUERY_ENABLED=true`, `{"question": "어제 클릭 수", "slack_user_id": "U001"}` | HTTP 202, `{"task_id": "<uuid>", "status": "pending"}` | `assert resp.status_code == 202` , `assert "task_id" in resp.json()` | - |
-| TC-P2-05 | GET /query/{task_id} (처리 중) | 폴링 — pending | task_id로 즉시 조회 | HTTP 202, `status in ("pending", "running")` | `assert resp.status_code == 202` | BackgroundTask 실행 중 |
-| TC-P2-05 | GET /query/{task_id} (완료) | 폴링 — completed | 파이프라인 완료 후 조회 | HTTP 200, QueryResponse 포함 | `assert resp.status_code == 200` , `assert "sql" in resp.json()` | 완료 응답 검증 |
-| TC-P2-05 | GET /query/{task_id} (없는 task) | 404 처리 | 존재하지 않는 task_id | HTTP 404 | `assert resp.status_code == 404` | 경계값 |
+Phase 1 `.env`에 아래 변수를 추가한다. 민감 정보는 `<실제값>` 플레이스홀더로 표기한다.
 
----
+```dotenv
+# === Phase 2 신규 추가 변수 ===
 
-### TC-P2-06: EXPLAIN 실패 시 PipelineError 반환
+# 3단계 RAG 활성화 (true: CrossEncoderReranker + LLM filter 사용)
+PHASE2_RAG_ENABLED=true
 
-**목적**: Step 6(SQLValidator)에서 EXPLAIN 실패 시 파이프라인이 적절한 에러 응답 반환
+# 비동기 쿼리 활성화 (true: POST /query → 202, GET /query/{task_id} 폴링)
+ASYNC_QUERY_ENABLED=true
 
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-06 | Step 6 | EXPLAIN 검증 실패 | 의도적 잘못된 SQL (예: `"SELECT invalid syntax"`) → Athena EXPLAIN 실패 | HTTP 200, `error_code="SQL_VALIDATION_FAILED"` 또는 동등 에러 | `assert "error" in resp.json()` | SQLValidator mock |
-| TC-P2-06 | Step 6 | 에러 응답 구조 | 위 실패 응답 | 에러 메시지 한국어 포함 | `assert resp.json().get("error") is not None` | PipelineError 구조 확인 |
+# DynamoDB 연동 활성화
+DYNAMODB_ENABLED=true
 
----
+# DynamoDB 테이블명 (실제 AWS에 생성된 테이블)
+DYNAMODB_HISTORY_TABLE=capa-dev-query-history
+DYNAMODB_FEEDBACK_TABLE=capa-dev-pending-feedbacks
 
-### TC-P2-07: FR-11 파이프라인 완료 후 DynamoDB 이력 저장 확인
+# Phase 2 피드백 루프 활성화 (true: pending 저장 방식, false: Phase 1 즉시 학습)
+PHASE2_FEEDBACK_ENABLED=true
 
-**목적**: 파이프라인 Step 11에서 `DynamoDBHistoryRecorder.record()`가 실행되어 이력이 실제 테이블에 저장됨을 확인
+# Reranker 모델명 (sentence-transformers)
+RERANKER_MODEL_NAME=cross-encoder/ms-marco-MiniLM-L-6-v2
 
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-07 | Step 11 | DynamoDB 이력 저장 | 정상 질문 → 파이프라인 완료 | `ctx.history_id` 존재, moto 테이블 조회 시 항목 존재 | `assert ctx.history_id is not None`, `table.get_item(Key={"history_id": ctx.history_id})["Item"]` 존재 | moto 테이블 생성 후 E2E 실행 |
-| TC-P2-07 | Step 11 | DynamoDB 장애 시 응답 정상 | Step 11에서 `ClientError` 발생 | 파이프라인 결과 정상 반환 (ctx.error 없음) | `assert ctx.error is None` | Step 11 장애가 사용자 응답에 영향 없음 |
+# AWS 자격증명 (로컬 테스트용 — ai-en-6 계정)
+AWS_ACCESS_KEY_ID=<실제값>
+AWS_SECRET_ACCESS_KEY=<실제값>
+AWS_DEFAULT_REGION=ap-northeast-2
+```
 
----
+#### 2.1.2 환경 적용 후 vanna-api 재시작
 
-### TC-P2-08: FR-18 Airflow DAG E2E — pending → trained 전체 흐름
+```powershell
+# Docker Compose 재시작 (환경변수 재적용)
+docker compose down
+docker compose --env-file .env up -d
 
-**목적**: pending 피드백이 DAG 실행 후 ChromaDB에 학습되고 status가 `trained`로 변경됨을 확인
+# 로그 확인
+docker compose logs -f vanna-api
+```
 
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-08 | Task 1 | pending 항목 추출 | 테이블에 valid SQL 2건 pending | 2건 추출 | `assert len(pending) == 2` | moto 테이블 |
-| TC-P2-08 | Task 2 | EXPLAIN 검증 통과 | Athena EXPLAIN mock → 성공 | 2건 모두 필터 통과 | `assert len(validated) == 2` | Athena mock |
-| TC-P2-08 | Task 3 | ChromaDB 학습 + trained 마킹 | 검증된 2건 | `vanna.train()` 2회, 테이블 `status="trained"` | `assert mock_train.call_count == 2`, `assert item["status"] == "trained"` | vanna mock |
+#### 2.1.3 Phase 2 환경 스모크 테스트
 
----
+환경 구성 후 `/health` 엔드포인트에서 DynamoDB 연결 상태를 확인한다.
 
-### TC-P2-09: FR-18 DAG — 0건 ShortCircuit
+```powershell
+# /health 응답에서 dynamodb: connected 확인
+$response = Invoke-RestMethod -Uri "$API_BASE/health" -Method GET
+$response | ConvertTo-Json
 
-**목적**: pending 항목이 없을 때 DAG이 조기 종료되고 이후 Task가 실행되지 않음을 확인
+# 기대 응답 예시:
+# {
+#   "status": "healthy",
+#   "dynamodb": "connected",
+#   "chromadb": "connected",
+#   "phase2_rag_enabled": true,
+#   "async_query_enabled": true
+# }
+```
 
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-09 | Task 1 | 0건 ShortCircuit | 빈 테이블 | `extract_pending_feedbacks()` → `[]`, Task 2/3 미실행 | `assert result == []`, `assert mock_train.call_count == 0` | 경계값 |
-
----
-
-### TC-P2-10: FR-19 비동기 FAILED 상태 처리
-
-**목적**: 파이프라인 내부 예외 발생 시 `GET /query/{task_id}` 폴링에서 FAILED 상태 반환
-
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-10 | POST /query | 비동기 접수 | `ASYNC_QUERY_ENABLED=true`, 의도적 실패 유발 질문 | HTTP 202, task_id 반환 | `assert resp.status_code == 202` | - |
-| TC-P2-10 | GET /query/{task_id} | FAILED 상태 폴링 | 파이프라인 예외 발생 후 조회 | HTTP 200, `status="failed"`, error 메시지 포함 | `assert resp.json()["status"] == "failed"`, `assert "error" in resp.json()` | BackgroundTask 예외 처리 |
-
----
-
-### TC-P2-11: FR-19 `ASYNC_QUERY_ENABLED=false` — 동기 경로 하위 호환성
-
-**목적**: 플래그 비활성 시 POST /query가 202가 아닌 200으로 직접 결과 반환 (Slack Bot 하위 호환)
-
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-11 | POST /query | 동기 즉시 응답 | `ASYNC_QUERY_ENABLED=false`, 정상 질문 | HTTP 200, QueryResponse 본문 직접 포함 | `assert resp.status_code == 200`, `assert "sql" in resp.json()` | 202 아님 주의 |
-| TC-P2-11 | POST /query | task_id 미포함 | 동기 응답 확인 | 응답 바디에 `task_id` 필드 없음 | `assert "task_id" not in resp.json()` | 비동기 응답과 구분 |
+| 항목 | 기대값 | assert |
+|------|--------|--------|
+| `status` | `"healthy"` | `assert response["status"] == "healthy"` |
+| `dynamodb` | `"connected"` | `assert response["dynamodb"] == "connected"` |
+| `phase2_rag_enabled` | `true` | `assert response["phase2_rag_enabled"] == True` |
 
 ---
 
-### TC-P2-12: RAGRetriever 에러 처리 — 파이프라인 계속 진행 (FR-12)
-
-**목적**: Step 4에서 RAG 실패 시 빈 RAGContext로 SQL 생성을 계속 시도하는지 검증
-
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-12 | Step 4-1 | 벡터 검색 실패 → 파이프라인 계속 | `_retrieve_candidates()` → `RuntimeError`, 이후 Steps는 정상 | `ctx.error`가 없거나 Step 4 이후 단계에서 에러 (Step 4 자체에서 중단 안 됨), `ctx.rag_context == RAGContext()` | `assert ctx.rag_context is not None`, `assert ctx.rag_context.ddl_context == []` | 설계 §3.6: 빈 RAGContext로 LLM 자체 지식 활용 |
-| TC-P2-12 | Step 4-3 | LLM 선별 실패 → Reranker 결과로 계속 | `_llm_filter()` → `Exception` | `ctx.rag_context`가 None이 아님, Reranker 상위 결과 기반 RAGContext 반환 | `assert ctx.rag_context is not None` | graceful degradation E2E |
+### 2.2 기능별 통합 테스트
 
 ---
 
-### TC-P2-13: AsyncQueryManager DynamoDB 영속성 E2E (FR-19)
+#### TC-IT-P2-01: 3단계 RAG 동작 확인 (Step 4, FR-12)
 
-**목적**: POST /query로 생성된 task가 DynamoDB에 저장되고, GET /query/{task_id}가 DynamoDB에서 올바르게 조회하는지 검증
+**목적**: `PHASE2_RAG_ENABLED=true` 환경에서 POST /query 실행 시 CrossEncoderReranker와 LLM filter가 실제로 호출되는지 확인.
+**사전 조건**: ChromaDB에 DDL/문서/SQL 예제 시딩 완료.
 
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-13 | POST /query | task 생성 + DynamoDB 저장 확인 | `ASYNC_QUERY_ENABLED=true`, 정상 질문 | HTTP 202, task_id 반환, moto 테이블에 `status="pending"` 항목 존재 | `assert resp.status_code == 202`, `table.get_item(Key={"task_id": task_id})["Item"]["status"] == "pending"` | moto 테이블 직접 조회 |
-| TC-P2-13 | GET /query/{task_id} | DynamoDB 조회 → 응답 변환 | 파이프라인 완료 후 task_id 조회 | HTTP 200, DynamoDB `status="completed"`, 응답 본문에 결과 포함 | `assert item["status"] == "completed"`, `assert "sql" in resp.json()` | DynamoDB → API 응답 변환 검증 |
+**Phase 1에서 이미 검증된 스텝**:
+
+| Step | 내용 | Phase 1 결과 |
+|------|------|-------------|
+| Step 1 | 의도 분류 | 완료 — 기본 통과만 확인 |
+| Step 2 | 질문 정제 | 완료 — 기본 통과만 확인 |
+| Step 3 | 키워드 추출 | 완료 — 기본 통과만 확인 |
+| Step 5 | SQL 생성 | 완료 — 기본 통과만 확인 |
+| Step 6 | SQL 검증 | 완료 — 기본 통과만 확인 |
+
+**테스트 명령**:
+
+```powershell
+# POST /query 실행
+$body = @{
+    question = "2026-02-01 캠페인별 CTR 알려줘"
+    slack_user_id = "test-user"
+} | ConvertTo-Json
+
+$response = Invoke-RestMethod `
+    -Uri "$API_BASE/query" `
+    -Method POST `
+    -ContentType "application/json" `
+    -Headers @{ Authorization = "Bearer $TOKEN" } `
+    -Body $body
+
+$response | ConvertTo-Json -Depth 5
+
+# Reranker 호출 로그 확인
+docker compose logs vanna-api | Select-String -Pattern "Reranker|rerank|CrossEncoder"
+```
+
+| TC | Step | 스텝 역할 | 인풋 | 아웃풋 (실제값) | assert 단언 | 판정 | 비고 |
+|----|------|-----------|------|----------------|-------------|------|------|
+| TC-IT-P2-01 | Step 1~3 | 의도 분류·정제·키워드 추출 | 질문 "2026-02-01 캠페인별 CTR 알려줘" | `http_status == 200` | `assert http_status == 200` | | Phase 1 완료 항목 |
+| TC-IT-P2-01 | Step 4 | 3단계 RAG 실행 | `PHASE2_RAG_ENABLED=true` | `response["rag_results"]["ddl_count"] >= 1` | `assert response["rag_results"]["ddl_count"] >= 1` | | Phase 2 신규 |
+| TC-IT-P2-01 | Step 4-2 | Reranker 호출 확인 | Step 4-1 결과 | `response["rag_results"]["reranked"] == True` (또는 로그에 Reranker 출력 존재) | `assert response["rag_results"]["reranked"] == True` | | `docker compose logs`로 교차 확인 |
+| TC-IT-P2-01 | Step 5~6 | SQL 생성·검증 | Phase 2 RAG context | `http_status == 200` | `assert http_status == 200` | | Phase 1 완료 항목 |
+
+**성공 기준**: Step 4 assert 2건 모두 통과 + Reranker 로그 확인
 
 ---
 
-### TC-P2-14: POST /feedback E2E — history 조회 → pending 저장 전체 흐름 (FR-16)
+#### TC-IT-P2-02: DynamoDB 쿼리 이력 저장 (Step 11, FR-11)
 
-**목적**: 피드백 API가 history 테이블 조회 후 feedback 테이블에 pending 저장하는 전체 흐름 검증
+**목적**: 파이프라인 완료 후 `history_id`가 응답에 포함되고, 실제 AWS DynamoDB `capa-dev-query-history` 테이블에 항목이 저장되는지 확인.
+**사전 조건**: `DYNAMODB_ENABLED=true`, `capa-dev-query-history` 테이블 ACTIVE 상태.
 
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-14 | POST /feedback | history 조회 → pending 저장 | `{history_id: "h1", feedback: "positive"}`, moto history 테이블에 `h1` 존재 | HTTP 200, feedback 테이블에 `status="pending"`, `history_id="h1"` 항목 존재 | `assert resp.status_code == 200`, `assert fb_item["history_id"] == "h1"`, `assert fb_item["status"] == "pending"` | 두 테이블 모두 moto로 생성 |
-| TC-P2-14 | POST /feedback | history 없을 때 오류 반환 | `{history_id: "nonexistent", feedback: "positive"}` | HTTP 404 또는 400, 에러 메시지 포함 | `assert resp.status_code in (400, 404)` | history 조회 실패 경로 E2E |
+**Phase 1에서 이미 검증된 스텝**:
+
+| Step | 내용 | Phase 1 결과 |
+|------|------|-------------|
+| Step 1~6 | 의도 분류 ~ SQL 검증 | 완료 — 기본 통과만 확인 |
+| Step 9~10 | Athena 실행 / AI 분석 | 완료 — 기본 통과만 확인 |
+
+**테스트 명령**:
+
+```powershell
+# Step 1: POST /query 실행
+$body = @{
+    question = "어제 광고 클릭 수 알려줘"
+    slack_user_id = "test-user"
+} | ConvertTo-Json
+
+$response = Invoke-RestMethod `
+    -Uri "$API_BASE/query" `
+    -Method POST `
+    -ContentType "application/json" `
+    -Headers @{ Authorization = "Bearer $TOKEN" } `
+    -Body $body
+
+$historyId = $response.history_id
+Write-Host "history_id: $historyId"
+
+# Step 2: AWS CLI로 DynamoDB 직접 조회 (실제 AWS 테이블)
+aws dynamodb get-item `
+    --table-name capa-dev-query-history `
+    --key "{`"history_id`": {`"S`": `"$historyId`"}}" `
+    --region ap-northeast-2
+```
+
+| TC | Step | 스텝 역할 | 인풋 | 아웃풋 (실제값) | assert 단언 | 판정 | 비고 |
+|----|------|-----------|------|----------------|-------------|------|------|
+| TC-IT-P2-02 | Step 11 | history_id 응답 포함 | POST /query 응답 | `response["history_id"] is not None` | `assert response["history_id"] is not None` | | Phase 2 신규 |
+| TC-IT-P2-02 | Step 11 | DynamoDB 항목 존재 | AWS CLI get-item 결과 | `Item` 키 존재 | `assert "Item" in dynamodb_result` | | 실제 AWS DynamoDB 조회 |
+| TC-IT-P2-02 | Step 11 | 저장 필드 확인 | DynamoDB Item 내용 | `item["question"]`, `item["sql"]`, `item["ttl"]` 필드 존재 | `assert all(f in item for f in ["question", "sql", "ttl"])` | | TTL 90일 설정 검증 포함 |
+
+**성공 기준**: assert 3건 모두 통과
 
 ---
 
-### TC-P2-15: DAG 부분 실패 E2E — train_failed 마킹 후 계속 진행 (FR-18)
+#### TC-IT-P2-03: Redash query_id DynamoDB 캐시 (Step 7~8, FR-17)
 
-**목적**: 일부 항목 학습 실패 시 해당 항목만 train_failed로 마킹되고 나머지는 정상 처리되는지 검증
+**목적**: 동일한 SQL 해시에 대해 2회차 요청 시 Redash 신규 쿼리 생성 없이 DynamoDB에 캐시된 query_id를 재사용하는지 확인.
+**사전 조건**: `DYNAMODB_ENABLED=true`, `REDASH_ENABLED=true`.
 
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-15 | Task 3 (부분 실패) | 3건 중 1건 실패 → train_failed, 나머지 trained | 2번째 항목 `vanna.train()` → `Exception` | 1번째 `status="trained"`, 2번째 `status="train_failed"`, 3번째 `status="trained"` | `assert mock_train.call_count == 3`, `assert items[0]["status"] == "trained"`, `assert items[1]["status"] == "train_failed"`, `assert items[2]["status"] == "trained"` | 전체 3건 DynamoDB 조회로 최종 상태 확인 |
+**Phase 1에서 이미 검증된 스텝**:
+
+| Step | 내용 | Phase 1 결과 |
+|------|------|-------------|
+| Step 7~8 기본 | Redash 신규 쿼리 생성 및 실행 | 완료 — 캐시 없는 경로 |
+
+**테스트 명령**:
+
+```powershell
+$question = "2026-02-01 캠페인별 노출 수 알려줘"
+$body = @{ question = $question; slack_user_id = "test-user" } | ConvertTo-Json
+
+# 1회차 요청
+$resp1 = Invoke-RestMethod `
+    -Uri "$API_BASE/query" -Method POST `
+    -ContentType "application/json" `
+    -Headers @{ Authorization = "Bearer $TOKEN" } `
+    -Body $body
+$sqlHash1 = $resp1.sql_hash
+Write-Host "1회차 sql_hash: $sqlHash1"
+
+# 2회차 요청 (동일 질문 — 동일 SQL 생성 기대)
+$resp2 = Invoke-RestMethod `
+    -Uri "$API_BASE/query" -Method POST `
+    -ContentType "application/json" `
+    -Headers @{ Authorization = "Bearer $TOKEN" } `
+    -Body $body
+
+# DynamoDB 캐시 항목 확인 (sql_hash로 스캔)
+aws dynamodb scan `
+    --table-name capa-dev-query-history `
+    --filter-expression "sql_hash = :h" `
+    --expression-attribute-values "{`":h`": {`"S`": `"$sqlHash1`"}}" `
+    --region ap-northeast-2
+
+# 캐시 히트 로그 확인
+docker compose logs vanna-api | Select-String -Pattern "캐시|cache_hit|sql_hash"
+```
+
+| TC | Step | 스텝 역할 | 인풋 | 아웃풋 (실제값) | assert 단언 | 판정 | 비고 |
+|----|------|-----------|------|----------------|-------------|------|------|
+| TC-IT-P2-03 | Step 7 (1회차) | Redash 신규 생성 + DynamoDB 저장 | 동일 질문 1회차 | `resp1.sql_hash is not None`, DynamoDB 스캔 결과 1건 이상 | `assert resp1.sql_hash is not None` | | 캐시 미스 — 신규 생성 |
+| TC-IT-P2-03 | Step 7 (2회차) | 캐시 히트 — Redash 미호출 | 동일 질문 2회차 | 로그에 "캐시" 또는 "cache_hit" 출력, `resp2.sql_hash == resp1.sql_hash` | `assert resp2.sql_hash == resp1.sql_hash` | | Phase 2 핵심 — Redash 신규 생성 스킵 |
+| TC-IT-P2-03 | DynamoDB 확인 | sql_hash 캐시 항목 존재 | AWS CLI scan 결과 | `Count >= 1` | `assert scan_result["Count"] >= 1` | | 실제 AWS DynamoDB 스캔 |
+
+**성공 기준**: assert 3건 모두 통과 + 캐시 히트 로그 확인
 
 ---
 
-### TC-P2-16: DELETE /training-data/{id} 실패 E2E (FR-13~15)
+#### TC-IT-P2-04: Phase 2 피드백 루프 — pending 저장 (FR-16)
 
-**목적**: ChromaDB 삭제 실패 시 HTTP 400이 FastAPI까지 전파되는지 E2E 검증
+**목적**: 긍정 피드백 시 `trained=false`(즉시 학습 없음)로 응답하고, AWS DynamoDB `capa-dev-pending-feedbacks` 테이블에 `status=pending`으로 저장되는지 확인. Phase 1과의 동작 차이(Phase 1: `trained=true`) 교차 검증.
+**사전 조건**: TC-IT-P2-02 완료로 `history_id` 확보, `PHASE2_FEEDBACK_ENABLED=true`.
 
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-16 | DELETE /training-data/{id} | ChromaDB 삭제 실패 → 400 전파 | 존재하는 id, `vanna.delete_training_data()` → `Exception` | HTTP 400, 에러 메시지 한국어 포함 | `assert resp.status_code == 400`, `assert resp.json().get("detail") is not None` | 에러가 API 레이어까지 올바르게 전파되는지 확인 |
+**테스트 명령**:
+
+```powershell
+# Step 1: POST /query로 history_id 획득
+$qBody = @{ question = "어제 클릭 수 알려줘"; slack_user_id = "test-user" } | ConvertTo-Json
+$qResp = Invoke-RestMethod -Uri "$API_BASE/query" -Method POST `
+    -ContentType "application/json" `
+    -Headers @{ Authorization = "Bearer $TOKEN" } -Body $qBody
+$historyId = $qResp.history_id
+
+# Step 2: POST /feedback
+$fbBody = @{
+    history_id = $historyId
+    feedback   = "positive"
+    slack_user_id = "test-user"
+} | ConvertTo-Json
+
+$fbResp = Invoke-RestMethod `
+    -Uri "$API_BASE/feedback" -Method POST `
+    -ContentType "application/json" `
+    -Headers @{ Authorization = "Bearer $TOKEN" } `
+    -Body $fbBody
+
+Write-Host "trained: $($fbResp.trained)"
+
+# Step 3: AWS CLI로 pending_feedbacks 테이블 스캔
+aws dynamodb scan `
+    --table-name capa-dev-pending-feedbacks `
+    --region ap-northeast-2
+```
+
+| TC | Step | 스텝 역할 | 인풋 | 아웃풋 (실제값) | assert 단언 | 판정 | 비고 |
+|----|------|-----------|------|----------------|-------------|------|------|
+| TC-IT-P2-04 | POST /feedback | 즉시 응답 확인 | `{history_id, feedback: "positive"}` | HTTP 200, `trained == false` | `assert fbResp.trained == False` | | Phase 1(`trained=true`)과 다름 — Phase 2 핵심 |
+| TC-IT-P2-04 | DynamoDB 저장 | pending 항목 존재 | AWS CLI scan 결과 | `Count >= 1`, `item["status"] == "pending"` | `assert scan_result["Count"] >= 1` | | 실제 AWS DynamoDB 스캔 |
+| TC-IT-P2-04 | DynamoDB 저장 | history_id 연결 확인 | scan 결과 Item 내용 | `item["history_id"] == historyId` | `assert item["history_id"] == historyId` | | 피드백-이력 연결 검증 |
+
+**성공 기준**: assert 3건 모두 통과
+
+---
+
+#### TC-IT-P2-05: 비동기 쿼리 — 202 즉시 응답 + 폴링 (FR-19)
+
+**목적**: `ASYNC_QUERY_ENABLED=true` 환경에서 POST /query가 202를 즉시 반환하고, GET /query/{task_id} 폴링으로 최종 결과를 수신하는 전체 흐름 확인.
+**사전 조건**: `ASYNC_QUERY_ENABLED=true`.
+
+**테스트 명령**:
+
+```powershell
+# Step 1: POST /query → 202
+$body = @{ question = "어제 캠페인별 클릭 수"; slack_user_id = "test-user" } | ConvertTo-Json
+$resp202 = Invoke-WebRequest `
+    -Uri "$API_BASE/query" -Method POST `
+    -ContentType "application/json" `
+    -Headers @{ Authorization = "Bearer $TOKEN" } -Body $body
+
+Write-Host "HTTP Status: $($resp202.StatusCode)"
+$taskId = ($resp202.Content | ConvertFrom-Json).task_id
+Write-Host "task_id: $taskId"
+
+# Step 2: GET /query/{task_id} 폴링 (1초 간격, 3회)
+for ($i = 1; $i -le 3; $i++) {
+    Start-Sleep -Seconds 1
+    $pollResp = Invoke-RestMethod `
+        -Uri "$API_BASE/query/$taskId" -Method GET `
+        -Headers @{ Authorization = "Bearer $TOKEN" }
+    Write-Host "폴링 $i 회차: status=$($pollResp.status)"
+    if ($pollResp.status -eq "completed") { break }
+}
+
+# Step 3: 없는 task_id 조회 → 404 확인
+try {
+    Invoke-RestMethod -Uri "$API_BASE/query/nonexistent-task-id" `
+        -Method GET -Headers @{ Authorization = "Bearer $TOKEN" }
+} catch {
+    Write-Host "404 응답 확인: $($_.Exception.Response.StatusCode)"
+}
+```
+
+| TC | Step | 스텝 역할 | 인풋 | 아웃풋 (실제값) | assert 단언 | 판정 | 비고 |
+|----|------|-----------|------|----------------|-------------|------|------|
+| TC-IT-P2-05 | POST /query | 202 즉시 응답 | `ASYNC_QUERY_ENABLED=true`, 질문 | HTTP 202, `task_id` 포함 | `assert resp202.StatusCode == 202` | | 동기 200이면 실패 |
+| TC-IT-P2-05 | GET 폴링 (처리 중) | pending/running 상태 | task_id 즉시 조회 | `status in ("pending", "running")` | `assert pollResp.status in ("pending", "running")` | | BackgroundTask 실행 확인 |
+| TC-IT-P2-05 | GET 폴링 (완료) | completed + 결과 포함 | 파이프라인 완료 후 조회 | HTTP 200, `sql` 필드 포함 | `assert pollResp.status == "completed"` , `assert "sql" in pollResp` | | 최종 결과 구조 검증 |
+| TC-IT-P2-05 | GET 없는 task_id | 404 반환 | `task_id="nonexistent-task-id"` | HTTP 404 | `assert exception.StatusCode == 404` | | 경계값 |
+
+**성공 기준**: assert 4건 모두 통과
+
+---
+
+#### TC-IT-P2-06: DELETE /training-data/{id} (FR-13~15)
+
+**목적**: 내부 인증 토큰으로 ChromaDB 학습 데이터를 삭제하고, 재조회 시 해당 id가 사라지는지 확인. 인증 없는 요청은 403으로 차단됨을 검증.
+**사전 조건**: GET /training-data로 학습 데이터 목록 조회 가능한 상태.
+
+**Phase 1에서 이미 검증된 스텝**:
+
+| Step | 내용 | Phase 1 결과 |
+|------|------|-------------|
+| GET /training-data | 학습 데이터 목록 조회 | 완료 |
+
+**테스트 명령**:
+
+```powershell
+# Step 1: 학습 데이터 목록 조회 — 임의 id 선택
+$listResp = Invoke-RestMethod `
+    -Uri "$API_BASE/training-data" -Method GET `
+    -Headers @{ Authorization = "Bearer $TOKEN" }
+$targetId = $listResp.data[0].id
+Write-Host "삭제 대상 id: $targetId"
+
+# Step 2: DELETE /training-data/{id} (X-Internal-Token 헤더 포함)
+$deleteResp = Invoke-RestMethod `
+    -Uri "$API_BASE/training-data/$targetId" -Method DELETE `
+    -Headers @{
+        Authorization      = "Bearer $TOKEN"
+        "X-Internal-Token" = "<internal-token>"
+    }
+Write-Host "삭제 응답: $($deleteResp | ConvertTo-Json)"
+
+# Step 3: 삭제 후 재조회 — id 미존재 확인
+$listAfter = Invoke-RestMethod `
+    -Uri "$API_BASE/training-data" -Method GET `
+    -Headers @{ Authorization = "Bearer $TOKEN" }
+$ids = $listAfter.data | ForEach-Object { $_.id }
+Write-Host "삭제 후 id 목록에 포함 여부: $($ids -contains $targetId)"
+
+# Step 4: 인증 없이 요청 → 403 확인
+try {
+    Invoke-RestMethod -Uri "$API_BASE/training-data/$targetId" -Method DELETE
+} catch {
+    Write-Host "인증 없는 요청 응답: $($_.Exception.Response.StatusCode)"
+}
+```
+
+| TC | Step | 스텝 역할 | 인풋 | 아웃풋 (실제값) | assert 단언 | 판정 | 비고 |
+|----|------|-----------|------|----------------|-------------|------|------|
+| TC-IT-P2-06 | DELETE 요청 | 정상 삭제 | 존재하는 id, `X-Internal-Token` 포함 | HTTP 200 | `assert deleteResp.StatusCode == 200` | | Phase 2 신규 엔드포인트 |
+| TC-IT-P2-06 | GET 재조회 | 삭제 후 미존재 확인 | 삭제된 id로 목록 검색 | `ids`에 `targetId` 미포함 | `assert targetId not in ids` | | ChromaDB 실제 삭제 검증 |
+| TC-IT-P2-06 | 인증 없는 요청 | 403 차단 | Authorization 헤더 없음 | HTTP 403 | `assert exception.StatusCode == 403` | | 무단 삭제 방지 |
+
+**성공 기준**: assert 3건 모두 통과
+
+---
+
+#### TC-IT-P2-07: Airflow DAG — pending → trained 배치 학습 (FR-18)
+
+**목적**: TC-IT-P2-04에서 저장된 pending 항목을 Airflow DAG `capa_chromadb_refresh`가 처리하여 ChromaDB에 재학습하고 DynamoDB 상태가 `trained`로 변경되는지 확인.
+**사전 조건**: TC-IT-P2-04 완료 후 `capa-dev-pending-feedbacks`에 `status=pending` 항목 1건 이상 존재. Airflow 로컬 환경 기동 완료(localhost:8080).
+
+**Phase 1에서 이미 검증된 스텝**:
+
+| 항목 | 내용 | Phase 1 결과 |
+|------|------|-------------|
+| Airflow DAG 존재 | `capa_chromadb_refresh` DAG 목록 확인 | 미검증 (Phase 2 신규) |
+
+**테스트 명령**:
+
+```powershell
+# Step 1: DAG 수동 트리거 (Airflow REST API — localhost:8080)
+$dagResp = Invoke-RestMethod `
+    -Uri "http://localhost:8080/api/v1/dags/capa_chromadb_refresh/dagRuns" `
+    -Method POST `
+    -ContentType "application/json" `
+    -Headers @{ Authorization = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("admin:admin")) } `
+    -Body '{"conf": {}}'
+
+$dagRunId = $dagResp.dag_run_id
+Write-Host "DAG run_id: $dagRunId"
+
+# Step 2: DAG 실행 완료 대기 (30초 ~ 2분 소요 예상)
+Start-Sleep -Seconds 60
+
+# Step 3: DAG 실행 상태 확인
+$dagStatus = Invoke-RestMethod `
+    -Uri "http://localhost:8080/api/v1/dags/capa_chromadb_refresh/dagRuns/$dagRunId" `
+    -Method GET `
+    -Headers @{ Authorization = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("admin:admin")) }
+Write-Host "DAG 상태: $($dagStatus.state)"
+
+# Step 4: DynamoDB status=trained 항목 확인 (실제 AWS)
+aws dynamodb scan `
+    --table-name capa-dev-pending-feedbacks `
+    --filter-expression "#s = :trained" `
+    --expression-attribute-names '{\"#s\": \"status\"}' `
+    --expression-attribute-values '{\":trained\": {\"S\": \"trained\"}}' `
+    --region ap-northeast-2
+```
+
+| TC | Step | 스텝 역할 | 인풋 | 아웃풋 (실제값) | assert 단언 | 판정 | 비고 |
+|----|------|-----------|------|----------------|-------------|------|------|
+| TC-IT-P2-07 | DAG 트리거 | DAG 실행 시작 | Airflow REST API trigger | `dag_run_id` 반환, HTTP 200 | `assert dagResp.state in ("queued", "running")` | | Airflow localhost:8080 |
+| TC-IT-P2-07 | DAG 완료 대기 | DAG 성공 종료 | DAG run 상태 조회 | `state == "success"` | `assert dagStatus.state == "success"` | | 실패 시 Airflow 로그 확인 필요 |
+| TC-IT-P2-07 | DynamoDB 상태 변경 | pending → trained | AWS CLI scan (status=trained 필터) | `Count >= 1` | `assert trained_scan["Count"] >= 1` | | 실제 AWS DynamoDB 조회 |
+
+**성공 기준**: assert 3건 모두 통과
+
+---
+
+### 2.3 E2E 통합 시나리오 (Phase 1 + Phase 2 전체 흐름)
+
+---
+
+#### TC-IT-E2E-01: 전체 파이프라인 E2E — 비동기 질문 → 이력 저장 → 피드백 → DAG 재학습 확인
+
+**목적**: Phase 1(Step 1~10) + Phase 2 신규 기능(비동기, DynamoDB 이력, Redash 캐시, 피드백 pending, Airflow 재학습)을 하나의 연속 시나리오로 검증.
+**환경 설정**: `PHASE2_RAG_ENABLED=true`, `ASYNC_QUERY_ENABLED=true`, `DYNAMODB_ENABLED=true`, `PHASE2_FEEDBACK_ENABLED=true`
+
+**전체 흐름**:
+
+```
+[Step 1] POST /query → 202 (ASYNC)
+    │
+[Step 2] GET /query/{task_id} 폴링 → 200 완료, history_id 획득
+    │
+[Step 3] AWS CLI: capa-dev-query-history 저장 확인
+    │
+[Step 4] POST /feedback positive → trained=false, DynamoDB pending 확인
+    │
+[Step 5] Airflow DAG trigger → DynamoDB status=trained 확인
+    │
+[Step 6] 동일 SQL 재요청 → Redash 캐시 히트 (로그 확인)
+```
+
+**테스트 명령**:
+
+```powershell
+# === Step 1: 비동기 질문 접수 ===
+$body = @{ question = "2026-02-01 캠페인별 CTR 알려줘"; slack_user_id = "test-user" } | ConvertTo-Json
+$resp202 = Invoke-WebRequest `
+    -Uri "$API_BASE/query" -Method POST `
+    -ContentType "application/json" `
+    -Headers @{ Authorization = "Bearer $TOKEN" } -Body $body
+$taskId = ($resp202.Content | ConvertFrom-Json).task_id
+Write-Host "[Step 1] HTTP: $($resp202.StatusCode) / task_id: $taskId"
+
+# === Step 2: GET 폴링 — 완료까지 대기 ===
+$maxRetry = 10; $completed = $false
+for ($i = 1; $i -le $maxRetry; $i++) {
+    Start-Sleep -Seconds 3
+    $pollResp = Invoke-RestMethod `
+        -Uri "$API_BASE/query/$taskId" -Method GET `
+        -Headers @{ Authorization = "Bearer $TOKEN" }
+    Write-Host "[Step 2] 폴링 $i 회: status=$($pollResp.status)"
+    if ($pollResp.status -eq "completed") { $completed = $true; break }
+}
+$historyId = $pollResp.history_id
+Write-Host "[Step 2] 완료: history_id=$historyId"
+
+# === Step 3: DynamoDB query-history 저장 확인 ===
+$dynResult = aws dynamodb get-item `
+    --table-name capa-dev-query-history `
+    --key "{`"history_id`": {`"S`": `"$historyId`"}}" `
+    --region ap-northeast-2 | ConvertFrom-Json
+Write-Host "[Step 3] DynamoDB Item 존재: $($dynResult.Item -ne $null)"
+
+# === Step 4: POST /feedback positive ===
+$fbBody = @{ history_id = $historyId; feedback = "positive"; slack_user_id = "test-user" } | ConvertTo-Json
+$fbResp = Invoke-RestMethod `
+    -Uri "$API_BASE/feedback" -Method POST `
+    -ContentType "application/json" `
+    -Headers @{ Authorization = "Bearer $TOKEN" } -Body $fbBody
+Write-Host "[Step 4] trained: $($fbResp.trained)"
+
+$pendingScan = aws dynamodb scan `
+    --table-name capa-dev-pending-feedbacks `
+    --region ap-northeast-2 | ConvertFrom-Json
+Write-Host "[Step 4] pending 항목 수: $($pendingScan.Count)"
+
+# === Step 5: Airflow DAG trigger ===
+$dagResp = Invoke-RestMethod `
+    -Uri "http://localhost:8080/api/v1/dags/capa_chromadb_refresh/dagRuns" `
+    -Method POST -ContentType "application/json" `
+    -Headers @{ Authorization = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("admin:admin")) } `
+    -Body '{"conf": {}}'
+$dagRunId = $dagResp.dag_run_id
+Start-Sleep -Seconds 60
+$dagStatus = Invoke-RestMethod `
+    -Uri "http://localhost:8080/api/v1/dags/capa_chromadb_refresh/dagRuns/$dagRunId" `
+    -Method GET `
+    -Headers @{ Authorization = "Basic " + [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes("admin:admin")) }
+Write-Host "[Step 5] DAG 상태: $($dagStatus.state)"
+
+$trainedScan = aws dynamodb scan `
+    --table-name capa-dev-pending-feedbacks `
+    --filter-expression "#s = :trained" `
+    --expression-attribute-names '{\"#s\": \"status\"}' `
+    --expression-attribute-values '{\":trained\": {\"S\": \"trained\"}}' `
+    --region ap-northeast-2 | ConvertFrom-Json
+Write-Host "[Step 5] trained 항목 수: $($trainedScan.Count)"
+
+# === Step 6: 동일 SQL 재요청 → Redash 캐시 히트 ===
+Invoke-RestMethod -Uri "$API_BASE/query" -Method POST `
+    -ContentType "application/json" `
+    -Headers @{ Authorization = "Bearer $TOKEN" } -Body $body | Out-Null
+docker compose logs vanna-api | Select-String -Pattern "캐시|cache_hit|sql_hash"
+```
+
+| TC | 단계 | 스텝 역할 | 인풋 | 아웃풋 (실제값) | assert 단언 | 판정 | 비고 |
+|----|------|-----------|------|----------------|-------------|------|------|
+| TC-IT-E2E-01 | Step 1 | 비동기 질문 접수 | POST /query (ASYNC=true) | HTTP 202, `task_id` 존재 | `assert resp202.StatusCode == 202` , `assert task_id is not None` | | FR-19 |
+| TC-IT-E2E-01 | Step 2 | 폴링 완료 + 결과 | GET /query/{task_id} 반복 | `status == "completed"`, `history_id` 존재, `sql` 포함 | `assert completed == True` , `assert history_id is not None` | | FR-19 + FR-11 |
+| TC-IT-E2E-01 | Step 3 | DynamoDB 이력 저장 확인 | AWS CLI get-item | `Item` 키 존재 | `assert dynResult.Item is not None` | | FR-11 — 실제 AWS |
+| TC-IT-E2E-01 | Step 4-a | 피드백 — 즉시 학습 없음 | POST /feedback positive | `trained == false` | `assert fbResp.trained == False` | | FR-16 Phase 2 핵심 |
+| TC-IT-E2E-01 | Step 4-b | DynamoDB pending 저장 | AWS CLI scan | `Count >= 1` | `assert pendingScan.Count >= 1` | | FR-16 — 실제 AWS |
+| TC-IT-E2E-01 | Step 5-a | Airflow DAG 성공 | DAG run 상태 조회 | `state == "success"` | `assert dagStatus.state == "success"` | | FR-18 |
+| TC-IT-E2E-01 | Step 5-b | DynamoDB status=trained | AWS CLI scan (trained 필터) | `Count >= 1` | `assert trainedScan.Count >= 1` | | FR-18 — 실제 AWS |
+| TC-IT-E2E-01 | Step 6 | Redash 캐시 히트 | 동일 질문 2회차 | 로그에 "캐시" 또는 "cache_hit" 출력 | `assert log_contains("캐시" or "cache_hit")` | | FR-17 — 로그 확인 |
+
+**성공 기준**: assert 8건 모두 통과
+
+**결과 기록 파일**: `docs/t1/text-to-sql/05-test/plan-phase-2-tests/phase-2-text-to-sql-rag.test-result.md` 섹션 3에 위 테이블 형식으로 기록한다.
+
+---
+
+### 2.4 TC 전체 요약
+
+| TC ID | 분류 | 대상 기능 | 관련 FR | assert 수 | 통과 기준 |
+|-------|------|----------|---------|:---------:|----------|
+| TC-IT-P2-01 | 기능 통합 | 3단계 RAG (Reranker + LLM filter) | FR-12 | 4 | 4/4 |
+| TC-IT-P2-02 | 기능 통합 | DynamoDB 쿼리 이력 저장 | FR-11 | 3 | 3/3 |
+| TC-IT-P2-03 | 기능 통합 | Redash query_id DynamoDB 캐시 | FR-17 | 3 | 3/3 |
+| TC-IT-P2-04 | 기능 통합 | 피드백 pending 저장 (즉시 학습 제거) | FR-16 | 3 | 3/3 |
+| TC-IT-P2-05 | 기능 통합 | 비동기 쿼리 (202 + 폴링) | FR-19 | 4 | 4/4 |
+| TC-IT-P2-06 | 기능 통합 | DELETE /training-data/{id} | FR-13~15 | 3 | 3/3 |
+| TC-IT-P2-07 | 기능 통합 | Airflow DAG 배치 학습 | FR-18 | 3 | 3/3 |
+| TC-IT-E2E-01 | E2E | 전체 파이프라인 (Phase 1 + Phase 2) | FR-11~19 | 8 | 8/8 |
+| **합계** | | | | **31** | **31/31** |
 
 ---
 
@@ -534,8 +970,9 @@ def dynamodb_feedback_table():
 
 | 접두사 | 범위 | 예시 |
 |--------|------|------|
-| `TC-P2-U` | 단위 테스트 | TC-P2-U01 ~ TC-P2-U24 |
-| `TC-P2-` (숫자 2자리) | 통합 테스트 | TC-P2-01 ~ TC-P2-06 |
+| `TC-P2-U` | 단위 테스트 | TC-P2-U01 ~ TC-P2-U57 |
+| `TC-P2-` (숫자 2자리) | 통합 테스트 (2.1 기능별) | TC-P2-01 ~ TC-P2-16 |
+| `TC-P2-E2E-` | E2E 시나리오 (2.2 전체 흐름) | TC-P2-E2E-01 ~ TC-P2-E2E-02 |
 
 ---
 
@@ -563,11 +1000,13 @@ def dynamodb_feedback_table():
 | 통합 — 비동기 쿼리 | 4 | AsyncQueryManager + FastAPI | FR-19 |
 | 통합 — EXPLAIN 실패 | 2 | SQLValidator | FR-12 |
 | 통합 — DynamoDB 이력 저장 | 2 | DynamoDBHistoryRecorder | FR-11 |
-| 통합 — Airflow DAG E2E | 5 | capa_chromadb_refresh | FR-18 |
+| 통합 — Airflow DAG E2E | 4 | capa_chromadb_refresh | FR-18 |
 | 통합 — 비동기 FAILED + 동기 경로 | 4 | AsyncQueryManager + FastAPI | FR-19 |
 | 통합 — RAGRetriever 에러 처리 E2E | 2 | RAGRetriever + QueryPipeline | FR-12 |
 | 통합 — AsyncQueryManager DynamoDB 영속성 | 2 | AsyncQueryManager + DynamoDB | FR-19 |
 | 통합 — POST /feedback E2E | 2 | FeedbackManager + DynamoDB | FR-16 |
 | 통합 — DAG 부분 실패 E2E | 1 | capa_chromadb_refresh | FR-18 |
 | 통합 — DELETE 실패 E2E | 1 | FastAPI + Vanna | FR-13~15 |
-| **합계** | **87** | — | — |
+| E2E — Phase 2 전체 기능 통합 | 12 | 전체 파이프라인 | FR-11~19 전체 |
+| E2E — 피드백 루프 중복 제거 | 4 | FeedbackManager + DAG | FR-16~18 |
+| **합계** | **107** | — | — |

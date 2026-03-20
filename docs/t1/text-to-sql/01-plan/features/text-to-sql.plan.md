@@ -693,6 +693,29 @@ tests/
 
 ---
 
+### 11.7 Phase 2 요구사항별 테스트 케이스 매핑
+
+> **목적**: 각 Phase 2 기능 요구사항(FR)이 어떤 테스트 케이스로 검증되는지 명확히 하기 위한 추적 매트릭스.
+> **상세 내용**: `docs/t1/text-to-sql/05-test/plan-phase-2-tests/phase-2-text-to-sql-rag.test-plan.md` 참고
+
+| FR | 기능 설명 | 대상 모듈 | 단위 테스트 (Unit) | 통합 테스트 (Integration) | E2E 시나리오 | 비고 |
+|----|------|------|----------|-----------|------|------|
+| **FR-11** | History 저장소 전환 (JSON Lines → DynamoDB) | `stores/dynamodb_history.py` | TC-P2-U25~U29 (5건) | TC-P2-07 | TC-P2-E2E-01 (단계 4) | DynamoDB 테이블 구조, TTL 90일 |
+| **FR-12** | 3단계 RAG 고도화 (벡터→Reranker→LLM) | `pipeline/rag_retriever.py`, `reranker.py` | TC-P2-U09~U13, U41~U48 (13건) | TC-P2-02, TC-P2-12 | TC-P2-E2E-01 (단계 2, 10) | PHASE2_RAG_ENABLED=true, 재학습 후 개선 확인 |
+| **FR-13~15** | 학습 데이터 삭제 | `FastAPI DELETE /training-data/{id}` | TC-P2-U36~U38, U57 (4건) | TC-P2-16 | TC-P2-E2E-01 (단계 12) | 인증 검증, ChromaDB 삭제 |
+| **FR-16** | 피드백 루프 자동화 | `stores/dynamodb_feedback.py`, `feedback_manager.py` | TC-P2-U14~U19, U53~U55 (9건) | TC-P2-04, TC-P2-14 | TC-P2-E2E-01 (단계 6), TC-P2-E2E-02 (단계 1~2) | pending → Airflow DAG 처리 |
+| **FR-17** | SQL 해시 — Redash query_id DynamoDB 캐싱 | `pipeline/sql_hash.py`, `redash_client.py` | TC-P2-U01~U08, U20~U24, U39~U40 (15건) | TC-P2-03 | TC-P2-E2E-01 (단계 3, 11), TC-P2-E2E-02 (단계 3) | ①Redash 캐싱 ②DAG 재학습 시 중복 SQL 제거(두 가지 역할) |
+| **FR-18** | Airflow DAG 배치 학습 | `airflow-dags/dags/capa_chromadb_refresh.py` | TC-P2-U30~U35, U56 (7건) | TC-P2-08, TC-P2-09, TC-P2-15 | TC-P2-E2E-01 (단계 7~9), TC-P2-E2E-02 (단계 3~4) | extract→validate(중복제거)→train 순서 |
+| **FR-19** | 비동기 쿼리 태스크 관리 | `pipeline/async_query_manager.py`, `/query` API | TC-P2-U49~U52 (4건) | TC-P2-05, TC-P2-10, TC-P2-11, TC-P2-13 | TC-P2-E2E-01 (단계 1, 5) | 202 즉시 응답, 폴링 메커니즘 |
+
+**테스트 커버리지 요약**:
+- **총 테스트 케이스**: 57건 단위 + 16건 통합 + 2건 전체 E2E = **75건**
+- **FR 커버리지**: 7개 FR 전부 단위 + 통합 + E2E 3중 검증됨 ✅
+- **E2E 시나리오**: TC-P2-E2E-01 (전체 12단계 흐름), TC-P2-E2E-02 (중복 피드백 시나리오)
+- **FR-17 중요 구분**: Redash 캐싱(TC-P2-03)과 DAG 중복 SQL 제거(TC-P2-E2E-02)는 다른 기능임
+
+---
+
 ## 12. 일정 / 스프린트 계획
 
 ### 12.1 Phase 1 태스크 분해
