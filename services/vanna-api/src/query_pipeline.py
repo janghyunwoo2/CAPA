@@ -35,6 +35,7 @@ from .pipeline.keyword_extractor import KeywordExtractor
 from .pipeline.rag_retriever import RAGRetriever
 from .pipeline.sql_generator import SQLGenerator, SQLGenerationError
 from .pipeline.sql_validator import SQLValidator
+from .pipeline.sql_hash import compute_sql_hash
 from .pipeline.ai_analyzer import AIAnalyzer
 from .pipeline.chart_renderer import ChartRenderer
 from .redash_client import (
@@ -268,6 +269,9 @@ class QueryPipeline:
 
         # Step 7: Redash 쿼리 생성
         try:
+            # SQL 해시 계산 (FR-17: 중복 쿼리 방지)
+            ctx.sql_hash = compute_sql_hash(sql)
+
             query_name = f"CAPA: {ctx.refined_question or ctx.original_question} [{datetime.utcnow().strftime('%Y-%m-%d %H:%M')}]"
             dynamodb_table = getattr(self._redash_config, "dynamodb_table", None)
             ctx.redash_query_id = await redash.create_or_reuse_query(

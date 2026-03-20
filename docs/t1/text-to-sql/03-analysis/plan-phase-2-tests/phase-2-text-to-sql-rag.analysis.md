@@ -18,8 +18,8 @@
 |------|-----|
 | **이전 Match Rate** | 91% |
 | **현재 Match Rate** | **96%** |
-| 해소된 Gap | Gap 1 (Critical), Gap 2 (Medium) |
-| 남은 Gap | Gap 3, 4 (Low) |
+| 해소된 Gap | Gap 1 (Critical), Gap 2 (Medium), Gap 3, 4 (Low) |
+| 남은 Gap | **없음** ✅ |
 | 신규 Gap | 없음 |
 | 판정 | ✅ **PASS** (>= 90%) |
 
@@ -81,7 +81,7 @@ Step 7에서 `create_query()` 직접 호출, `create_or_reuse_query()` 미사용
 
 ### 2.3 Gap 3 (LOW) — Terraform WCU 배분 차이
 
-**상태**: Low (유지) — 기능상 동일
+**이전 상태**: Low (유지) — 기능상 동일
 
 설계서는 테이블 단위 합산, 구현은 GSI별 분리:
 
@@ -94,17 +94,39 @@ Step 7에서 `create_query()` 직접 호출, `create_or_reuse_query()` 미사용
 | status-index GSI | - | 4 WCU | - |
 | **합계** | **25** | **25** | **동일** ✅ |
 
-**판정**: 구현이 설계서보다 정밀 (GSI별 분리 프로비저닝). 설계서 업데이트 권장.
+**현재 상태**: **PASS** ✅
+
+**검증 내용**:
+
+| 항목 | 파일:행 | 상태 |
+|------|--------|:----:|
+| 설계서 §9.1 DynamoDB | `phase-2-text-to-sql-rag.design.md:930-932` | ✅ |
+| query_history GSI별 표기 | "테이블 8 + feedback-status-index 3 + channel-index 3 = 14" | ✅ |
+| pending_feedbacks GSI별 표기 | "테이블 7 + status-index 4 = 11" | ✅ |
+| 총 WCU/RCU 확인 | "합계: 25 WCU / 25 RCU" | ✅ |
+
+**판정**: 설계서가 이미 GSI별 분리로 상세히 기록됨. 문서 일관성 확보 완료.
 
 ### 2.4 Gap 4 (LOW) — PipelineContext.sql_hash 미사용
 
-**상태**: Low (유지)
+**이전 상태**: FAIL
 
 - `domain.py:111`에 `sql_hash: Optional[str] = None` 필드 존재
 - 어디서도 값 할당 없음 (dead field)
 - `redash_client.py`에서 내부적으로 계산하여 DynamoDB에 저장
 
-**영향도**: 없음. 디버깅 편의를 위해 `_run_redash_steps()`에서 할당 추가 권장.
+**현재 상태**: **PASS** ✅
+
+**검증 내용**:
+
+| 항목 | 파일:행 | 상태 |
+|------|--------|:----:|
+| `compute_sql_hash` import | `query_pipeline.py:38` | ✅ |
+| Step 7에서 SQL 해시 계산 | `query_pipeline.py:273` | ✅ |
+| `ctx.sql_hash` 할당 | `query_pipeline.py:273` | ✅ |
+| 설계서 FR-17 (중복 쿼리 방지) 구현 완성 | §4.2 | ✅ |
+
+**영향도**: 파이프라인 컨텍스트에서 SQL 해시 추적 가능 → 로깅, 디버깅, 감시 활용 확대
 
 ---
 
@@ -122,10 +144,10 @@ Step 7에서 `create_query()` 직접 호출, `create_or_reuse_query()` 미사용
 ## 4. Recommended Actions
 
 ### 즉시 (Documentation)
-- [ ] 설계서 §9.1 Terraform WCU 배분을 GSI 분리 표기로 업데이트
+- [x] 설계서 §9.1 Terraform WCU 배분을 GSI 분리 표기로 업데이트 (이미 적용됨 — 2026-03-20)
 
 ### 백로그 (Low Priority)
-- [ ] `domain.py`에서 `ctx.sql_hash` 할당 추가 또는 필드 제거
+- [x] Gap 3, 4 모두 해결됨 (2026-03-20)
 
 ---
 

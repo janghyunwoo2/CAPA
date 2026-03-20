@@ -149,3 +149,8 @@ resource "aws_iam_policy" "vanna_dynamodb" {
     ManagedBy   = "Terraform"
   }
 }
+
+resource "aws_iam_role_policy_attachment" "vanna_dynamodb" {
+  role       = "${var.project_name}-vanna-role"
+  policy_arn = aws_iam_policy.vanna_dynamodb.arn
+}
