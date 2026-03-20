@@ -61,23 +61,12 @@
 
 ### 2.2 Gap 2 (MEDIUM) — create_or_reuse_query 미연동
 
-**이전 상태**: FAIL
+**이전 상태**: FAIL → **제거됨** (FR-17 기능 전체 제거 결정)
 
-Step 7에서 `create_query()` 직접 호출, `create_or_reuse_query()` 미사용.
-
-**현재 상태**: **PASS** ✅
-
-**검증 내용**:
-
-| 항목 | 파일:행 | 상태 |
-|------|--------|:----:|
-| `create_or_reuse_query()` 호출 | `query_pipeline.py:273-276` | ✅ |
-| `dynamodb_table` 파라미터 전달 | `query_pipeline.py:272` | ✅ |
-| SQL 해시 계산 | `redash_client.py:257,261` | ✅ |
-| DynamoDB 캐시 조회 | `redash_client.py:264-275` | ✅ |
-| 캐시 히트 시 기존 query_id 반환 | `redash_client.py:269-273` | ✅ |
-| 캐시 미스 시 신규 생성 + 저장 | `redash_client.py:278-293` | ✅ |
-| TTL 90일 설정 | `redash_client.py:284` | ✅ |
+FR-17 (Redash query_id DynamoDB 캐싱) 기능이 실질적 성능 이득 없음으로 판단되어 전체 제거됨.
+- `create_or_reuse_query()` 메서드 제거, `create_query()` 직접 호출로 복귀
+- `PipelineContext.sql_hash` 필드 제거
+- `RedashConfig.dynamodb_table` 필드 제거
 
 ### 2.3 Gap 3 (LOW) — Terraform WCU 배분 차이
 
@@ -109,24 +98,11 @@ Step 7에서 `create_query()` 직접 호출, `create_or_reuse_query()` 미사용
 
 ### 2.4 Gap 4 (LOW) — PipelineContext.sql_hash 미사용
 
-**이전 상태**: FAIL
+**이전 상태**: FAIL → **제거됨** (FR-17 기능 전체 제거 결정)
 
-- `domain.py:111`에 `sql_hash: Optional[str] = None` 필드 존재
-- 어디서도 값 할당 없음 (dead field)
-- `redash_client.py`에서 내부적으로 계산하여 DynamoDB에 저장
-
-**현재 상태**: **PASS** ✅
-
-**검증 내용**:
-
-| 항목 | 파일:행 | 상태 |
-|------|--------|:----:|
-| `compute_sql_hash` import | `query_pipeline.py:38` | ✅ |
-| Step 7에서 SQL 해시 계산 | `query_pipeline.py:273` | ✅ |
-| `ctx.sql_hash` 할당 | `query_pipeline.py:273` | ✅ |
-| 설계서 FR-17 (중복 쿼리 방지) 구현 완성 | §4.2 | ✅ |
-
-**영향도**: 파이프라인 컨텍스트에서 SQL 해시 추적 가능 → 로깅, 디버깅, 감시 활용 확대
+FR-17 (Redash query_id DynamoDB 캐싱) 기능 전체 제거에 따라 `sql_hash` 필드도 함께 제거됨.
+- `domain.py`에서 `sql_hash` 필드 제거
+- `query_pipeline.py`에서 `compute_sql_hash` import 및 할당 코드 제거
 
 ---
 

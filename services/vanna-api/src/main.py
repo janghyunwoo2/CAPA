@@ -89,7 +89,10 @@ def _init_vanna() -> VannaAthena:
     return instance
 
 
-def _init_pipeline(vanna: VannaAthena) -> QueryPipeline:
+def _init_pipeline(
+    vanna: VannaAthena,
+    history_recorder: Optional[HistoryRecorder] = None,
+) -> QueryPipeline:
     athena_client = boto3.client("athena", region_name=AWS_REGION)
     redash_config: Optional[RedashConfig] = None
     if REDASH_ENABLED and REDASH_API_KEY:
@@ -110,6 +113,7 @@ def _init_pipeline(vanna: VannaAthena) -> QueryPipeline:
         workgroup=ATHENA_WORKGROUP,
         s3_staging_dir=S3_STAGING_DIR,
         redash_config=redash_config,
+        history_recorder=history_recorder,
     )
 
 
@@ -118,7 +122,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Vanna API 시작 중...")
     vanna = _init_vanna()
     app.state.vanna = vanna
-    app.state.pipeline = _init_pipeline(vanna)
 
     # Phase 2: DynamoDB 기반 History/Feedback 초기화
     if DYNAMODB_ENABLED:
@@ -144,6 +147,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         feedback_store = None
 
     app.state.recorder = recorder
+    app.state.pipeline = _init_pipeline(vanna, recorder)
     app.state.feedback_manager = FeedbackManager(
         vanna_instance=vanna,
         history_recorder=recorder,

@@ -378,7 +378,7 @@ def handle_negative_feedback(ack, body, client):
 | **RAGRetriever** | 기본 벡터 검색 | 3단계 RAG (벡터 → Reranker → LLM) |
 | **ResultCollector** | 동기 응답 (300초 대기) | BackgroundTasks 비동기 |
 | **HistoryRecorder** | 로컬 JSON Lines | DynamoDB (TTL 기반) |
-| **RedashQueryCreator** | 매번 신규 생성 | SQL 해시 기반 재사용 (FR-17) |
+| **RedashQueryCreator** | 매번 신규 생성 | Phase 2 없음 (FR-17 제거됨) |
 | **Slack Bot** | 단일 턴 | 멀티턴 대화 (FR-20) |
 
 ---
@@ -795,16 +795,6 @@ class RedashJobStatus(BaseModel):
     status: int   # 1=대기, 2=실행중, 3=성공, 4=실패
     error: Optional[str] = None
     query_result_id: Optional[int] = None
-```
-
-#### SQL 해시 중복 방지 (FR-17)
-
-```python
-def compute_sql_hash(sql: str) -> str:
-    normalized = " ".join(sql.strip().split()).lower()
-    return hashlib.sha256(normalized.encode()).hexdigest()
-
-# 동일 SQL 해시 존재 시 기존 redash_query_id 재사용
 ```
 
 ### 4.5 모델 파일 구조

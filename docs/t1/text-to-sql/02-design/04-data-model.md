@@ -1009,26 +1009,6 @@ class RedashConfig(BaseModel):
 - `CAPA:` 접두사로 vanna-api가 생성한 쿼리를 식별
 - `refined_question`으로 검색 가능성 확보
 - `timestamp`로 동일 질문의 시간대별 구분
-- SQL 해시 기반 중복 탐지 (FR-17): 동일 SQL 해시가 존재하면 기존 query_id 재사용
-
-### 4.5.3 SQL 해시 기반 중복 방지 (FR-17)
-
-```python
-import hashlib
-
-def compute_sql_hash(sql: str) -> str:
-    """SQL 정규화 후 SHA-256 해시 생성"""
-    normalized = " ".join(sql.strip().split()).lower()
-    return hashlib.sha256(normalized.encode()).hexdigest()
-```
-
-중복 탐지 흐름:
-```
-1. 생성된 SQL의 해시 계산
-2. History에서 동일 해시 + redash_query_id 존재 여부 확인
-3. 존재하면 → 기존 redash_query_id 재사용 (Redash 신규 생성 건너뜀)
-4. 존재하지 않으면 → Redash 신규 쿼리 생성
-```
 
 ---
 

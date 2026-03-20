@@ -171,6 +171,15 @@ services:
       - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-60}
       - REDASH_QUERY_TIMEOUT_SEC=${REDASH_QUERY_TIMEOUT_SEC:-300}
 
+      # Phase 2 기능 활성화
+      - PHASE2_RAG_ENABLED=true
+      - DYNAMODB_ENABLED=true
+      - ASYNC_QUERY_ENABLED=true
+      - PHASE2_FEEDBACK_ENABLED=true
+      - DYNAMODB_HISTORY_TABLE=capa-dev-query-history
+      - DYNAMODB_FEEDBACK_TABLE=capa-dev-pending-feedbacks
+      - DYNAMODB_ASYNC_TABLE=capa-dev-async-tasks
+
       - PYTHONUNBUFFERED=1
       - DEBUG=true
 
@@ -307,6 +316,17 @@ services:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__WEBSERVER__SECRET_KEY=capa_airflow_secret_key_2026_fixed
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      # Airflow DAG Phase 2 환경변수 (capa_chromadb_refresh DAG용)
+      - DYNAMODB_FEEDBACK_TABLE=capa-dev-pending-feedbacks
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - ATHENA_DATABASE=${ATHENA_DATABASE:-capa_ad_logs}
+      - ATHENA_WORKGROUP=${ATHENA_WORKGROUP:-capa-text2sql-wg}
+      - S3_STAGING_DIR=${ATHENA_OUTPUT_LOCATION:-s3://capa-data-lake-827913617635/athena-results/}
     volumes:
       - ../airflow-dags:/opt/airflow/dags
     depends_on:

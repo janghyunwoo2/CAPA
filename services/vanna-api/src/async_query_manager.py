@@ -6,6 +6,7 @@ AsyncQueryManager — DynamoDB 기반 비동기 쿼리 Task 상태 관리 (Phase
 import logging
 import uuid
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import Any, Optional
 
 from botocore.exceptions import ClientError
@@ -15,6 +16,17 @@ from .models.async_task import AsyncTaskRecord, AsyncTaskStatus
 logger = logging.getLogger(__name__)
 
 _TTL_HOURS = 24
+
+
+def _convert_to_dynamodb_types(obj: Any) -> Any:
+    """Python 객체를 DynamoDB 호환 타입으로 변환 (Float → Decimal)"""
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    elif isinstance(obj, dict):
+        return {k: _convert_to_dynamodb_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_convert_to_dynamodb_types(item) for item in obj]
+    return obj
 
 
 class AsyncQueryManager:
@@ -60,11 +72,11 @@ class AsyncQueryManager:
         if result is not None:
             update_expr += ", #r = :r"
             expr_names["#r"] = "result"
-            expr_values[":r"] = result
+            expr_values[":r"] = _convert_to_dynamodb_types(result)
         if error is not None:
             update_expr += ", #e = :e"
             expr_names["#e"] = "error"
-            expr_values[":e"] = error
+            expr_values[":e"] = _convert_to_dynamodb_types(error)
         try:
             self._table.update_item(
                 Key={"task_id": task_id},

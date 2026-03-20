@@ -2,7 +2,7 @@
 Phase 2 단위 테스트 — SQL 해시 정규화 및 계산
 커버 TC: TC-P2-U01 ~ TC-P2-U08
 대상 파일: services/vanna-api/src/pipeline/sql_hash.py
-요구사항: FR-17 — SQL 해시 중복 쿼리 방지
+용도: 피드백 저장 시 sql_hash 계산 (DynamoDB pending-feedbacks 저장)
 """
 
 import pytest

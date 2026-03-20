@@ -108,9 +108,6 @@ class PipelineContext(BaseModel):
     # Step 6
     validation_result: Optional[ValidationResult] = None
 
-    # Step 7 (Phase 2: sql_hash 중복 쿼리 방지, FR-17)
-    sql_hash: Optional[str] = None
-
     # Step 7~8
     redash_query_id: Optional[int] = None
     redash_job_id: Optional[str] = None

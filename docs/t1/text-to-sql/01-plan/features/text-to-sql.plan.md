@@ -163,7 +163,6 @@ Slack → vanna-api /query
 | FR-14 | **Athena 특화 지식 지속 관리**: Phase 1(FR-14a) 시딩 완료. Phase 2에서 `DELETE /training-data/{id}` 엔드포인트를 통해 구식/오류 SQL 규칙 삭제 가능 (CRUD 완성) | DableTalk               |
 | FR-15 | **정책 데이터 지속 관리**: Phase 1(FR-15a) 시딩 완료. Phase 2에서 `DELETE /training-data/{id}` 엔드포인트를 통해 변경된 정책/계산식 데이터 삭제 관리 가능 (CRUD 완성) | InsightLens             |
 | FR-16 | **피드백 루프 품질 제어**: Phase 1(FR-21)의 즉시 학습 방식을 폐기하고, DynamoDB에 저장된 피드백을 Airflow로 가져와 EXPLAIN 검증 및 중복 제거 후 엄선된 데이터만 학습 | InsightLens + DableTalk |
-| FR-17 | **중복 쿼리 방지**: SQL 해시 기반으로 Redash 기존 쿼리 탐색 후 재사용 (리소스 절약 및 응답 속도 향상) | 운영 안정성             |
 | FR-18 | **Airflow DAG 연동**: 매주 월요일 09:00 실행하여 DynamoDB `pending_feedbacks`의 피드백 검증(EXPLAIN + 해시 중복 제거) 및 ChromaDB 배치 학습 수행 (3 Task: extract → validate → batch_train) | 물어보새 |
 | FR-19 | **비동기 쿼리 처리 (Async)**: FastAPI `BackgroundTasks`를 도입하여 300초 이상 소요 쿼리도 타임아웃 없이 처리 | 성능 개선 |
 
@@ -347,7 +346,6 @@ Slack → vanna-api /query
 | ------------------------------ | --------------- | --------------------------------------------------------- |
 | Athena 쿼리 5분 초과           | Slack 타임아웃  | Phase 1: 300초 폴링. Phase 2: BackgroundTasks 비동기 응답 |
 | Redash 내부 DNS 접근 불가      | API 호출 실패   | `REDASH_ENABLED=false` 플래그로 기존 경로 폴백          |
-| Redash 중복 쿼리 누적          | Redash 오염     | Phase 2: SQL 해시 기반 중복 탐지 (FR-17)                  |
 | ChromaDB 학습 데이터 품질 저하 | SQL 정확도 저하 | 비즈니스 용어 사전 + Athena 특화 지식 먼저 학습 후 서비스 |
 | 3단계 RAG Reranker 추가 지연   | 응답 속도 증가  | Phase 1은 기본 벡터 검색만, Phase 2에서 Reranker 도입     |
 
@@ -391,9 +389,8 @@ Slack → vanna-api /query
 
 1. 3단계 RAG Reranker 추가 (FR-12)
 2. 피드백 루프 자동화 (FR-16)
-3. 중복 쿼리 방지 (FR-17)
-4. Airflow DAG 연동 (FR-18)
-5. BackgroundTasks 비동기 응답
+3. Airflow DAG 연동 (FR-18)
+4. BackgroundTasks 비동기 응답
 
 ---
 
@@ -475,7 +472,6 @@ Slack → vanna-api /query
 | 지표                 | 정의                                               | Phase 1 목표 | Phase 2 목표 | 측정 방법                                  |
 | -------------------- | -------------------------------------------------- | ------------ | ------------ | ------------------------------------------ |
 | 마케터 자가 조회율   | SQL 작성 없이 자연어로 데이터 조회하는 마케터 비율 | >= 30%       | >= 60%       | Slack Bot 활성 사용자 / 전체 마케팅 팀원   |
-| Redash 쿼리 재사용률 | FR-17 중복 방지로 기존 쿼리를 재사용한 비율        | - (미구현)   | >= 20%       | 재사용 쿼리 수 / 전체 쿼리 요청 수         |
 | History 누적량       | 질문-SQL-결과 쌍 누적 건수                         | >= 100건/월  | >= 300건/월  | History 저장소 레코드 수                   |
 | Redash 링크 클릭률   | Slack 응답 내 Redash 링크 실제 접근 비율           | >= 40%       | >= 50%       | Redash 접근 로그 또는 Slack 링크 클릭 추적 |
 
@@ -704,15 +700,13 @@ tests/
 | **FR-12** | 3단계 RAG 고도화 (벡터→Reranker→LLM) | `pipeline/rag_retriever.py`, `reranker.py` | TC-P2-U09~U13, U41~U48 (13건) | TC-P2-02, TC-P2-12 | TC-P2-E2E-01 (단계 2, 10) | PHASE2_RAG_ENABLED=true, 재학습 후 개선 확인 |
 | **FR-13~15** | 학습 데이터 삭제 | `FastAPI DELETE /training-data/{id}` | TC-P2-U36~U38, U57 (4건) | TC-P2-16 | TC-P2-E2E-01 (단계 12) | 인증 검증, ChromaDB 삭제 |
 | **FR-16** | 피드백 루프 자동화 | `stores/dynamodb_feedback.py`, `feedback_manager.py` | TC-P2-U14~U19, U53~U55 (9건) | TC-P2-04, TC-P2-14 | TC-P2-E2E-01 (단계 6), TC-P2-E2E-02 (단계 1~2) | pending → Airflow DAG 처리 |
-| **FR-17** | SQL 해시 — Redash query_id DynamoDB 캐싱 | `pipeline/sql_hash.py`, `redash_client.py` | TC-P2-U01~U08, U20~U24, U39~U40 (15건) | TC-P2-03 | TC-P2-E2E-01 (단계 3, 11), TC-P2-E2E-02 (단계 3) | ①Redash 캐싱 ②DAG 재학습 시 중복 SQL 제거(두 가지 역할) |
-| **FR-18** | Airflow DAG 배치 학습 | `airflow-dags/dags/capa_chromadb_refresh.py` | TC-P2-U30~U35, U56 (7건) | TC-P2-08, TC-P2-09, TC-P2-15 | TC-P2-E2E-01 (단계 7~9), TC-P2-E2E-02 (단계 3~4) | extract→validate(중복제거)→train 순서 |
+| **FR-18** | Airflow DAG 배치 학습 | `airflow-dags/dags/capa_chromadb_refresh.py` | TC-P2-U01~U08, U30~U35, U56 (15건) | TC-P2-08, TC-P2-09, TC-P2-15 | TC-P2-E2E-01 (단계 7~9), TC-P2-E2E-02 (단계 3~4) | extract→validate(중복제거)→train 순서 |
 | **FR-19** | 비동기 쿼리 태스크 관리 | `pipeline/async_query_manager.py`, `/query` API | TC-P2-U49~U52 (4건) | TC-P2-05, TC-P2-10, TC-P2-11, TC-P2-13 | TC-P2-E2E-01 (단계 1, 5) | 202 즉시 응답, 폴링 메커니즘 |
 
 **테스트 커버리지 요약**:
-- **총 테스트 케이스**: 57건 단위 + 16건 통합 + 2건 전체 E2E = **75건**
-- **FR 커버리지**: 7개 FR 전부 단위 + 통합 + E2E 3중 검증됨 ✅
-- **E2E 시나리오**: TC-P2-E2E-01 (전체 12단계 흐름), TC-P2-E2E-02 (중복 피드백 시나리오)
-- **FR-17 중요 구분**: Redash 캐싱(TC-P2-03)과 DAG 중복 SQL 제거(TC-P2-E2E-02)는 다른 기능임
+- **총 테스트 케이스**: 50건 단위 + 14건 통합 + 2건 전체 E2E = **66건**
+- **FR 커버리지**: 6개 FR 전부 단위 + 통합 + E2E 3중 검증됨 ✅
+- **E2E 시나리오**: TC-P2-E2E-01 (전체 11단계 흐름), TC-P2-E2E-02 (중복 피드백 시나리오)
 
 ---
 
@@ -772,7 +766,7 @@ T7 (ChromaDB 시딩) ──→ T3 통합 테스트 전 완료 필요
 | 스프린트    | 기간 | 주요 작업                                 | 관련 FR      |
 | ----------- | ---- | ----------------------------------------- | ------------ |
 | Sprint P2-1 | 1주  | 3단계 RAG Reranker 도입 + 평가            | FR-12        |
-| Sprint P2-2 | 1주  | 피드백 루프 자동화 + 중복 쿼리 방지       | FR-16, FR-17 |
+| Sprint P2-2 | 1주  | 피드백 루프 자동화                         | FR-16        |
 | Sprint P2-3 | 1주  | Airflow DAG 연동 + BackgroundTasks 비동기 | FR-18        |
 | Sprint P2-4 | 1주  | Phase 2 통합 테스트 + 성능 튜닝           | 전체         |
 

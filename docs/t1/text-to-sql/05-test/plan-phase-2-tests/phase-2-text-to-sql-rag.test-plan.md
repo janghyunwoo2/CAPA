@@ -7,7 +7,7 @@
 | **문서 유형** | 테스트 계획서 (Test Plan) |
 | **작성일** | 2026-03-20 |
 | **담당** | t1 |
-| **대상** | Phase 2 RAG 고도화 (FR-12, FR-16, FR-17, FR-18, FR-19) |
+| **대상** | Phase 2 RAG 고도화 (FR-12, FR-16, FR-18, FR-19) |
 | **설계서** | `docs/t1/text-to-sql/02-design/features/phase-2-text-to-sql-rag.design.md` |
 | **Gap 분석** | `docs/t1/text-to-sql/03-analysis/plan-phase-2-tests/phase-2-text-to-sql-rag.analysis.md` (96% Match) |
 | **결과 문서** | `docs/t1/text-to-sql/05-test/plan-phase-2-tests/phase-2-text-to-sql-rag.test-result.md` |
@@ -72,24 +72,6 @@
 | TC-P2-U17 | save_pending | DynamoDB 장애 시 로그만 | DynamoDB `put_item` → `ClientError` | 예외 미전파, feedback_id 반환 | `assert feedback_id is not None` (no exception raised) | DynamoDB 장애 격리 |
 | TC-P2-U18 | update_status | 정상 상태 업데이트 | `feedback_id="f1"`, `status="trained"` | DynamoDB 항목 `status == "trained"`, `processed_at` 설정 | `assert item["status"] == "trained"` , `assert "processed_at" in item` | - |
 | TC-P2-U19 | update_status | DynamoDB 장애 시 False 반환 | `update_item` → `ClientError` | `False` 반환, 예외 미전파 | `assert result is False` | - |
-
----
-
-### 1.4 `redash_client.py` — `create_or_reuse_query()` 캐시 로직
-
-**대상 파일**: `services/vanna-api/src/redash_client.py`
-**검증 메서드**: `RedashClient.create_or_reuse_query()`
-**요구사항 (FR)**: **FR-17** — SQL 해시 → Redash query_id 캐시 (DynamoDB 기반)
-
-> Redash HTTP 호출: `httpx` mock. DynamoDB: moto mock.
-
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-U20 | create_or_reuse_query | 캐시 히트 | DynamoDB에 `sql_hash` 존재, `query_id=42` | `42` 반환, Redash POST 미호출 | `assert result == 42` , `assert redash_post_mock.call_count == 0` | Redash 신규 생성 스킵 확인 |
-| TC-P2-U21 | create_or_reuse_query | 캐시 미스 — 신규 생성 | DynamoDB에 `sql_hash` 없음, Redash POST → `query_id=99` | `99` 반환, DynamoDB에 해시 저장됨 | `assert result == 99` , `assert dynamodb_item["query_id"] == 99` | 신규 생성 + DynamoDB 저장 |
-| TC-P2-U22 | create_or_reuse_query | DynamoDB 장애 — graceful fallback | DynamoDB `get_item` → `ClientError`, Redash POST → `query_id=77` | `77` 반환, 예외 미전파 | `assert result == 77` | DynamoDB 장애 시 Redash 신규 생성 |
-| TC-P2-U23 | create_or_reuse_query | `dynamodb_table=None` | `dynamodb_table=None`, Redash POST → `query_id=55` | `55` 반환 | `assert result == 55` | DynamoDB 생략 경로 |
-| TC-P2-U24 | create_or_reuse_query | TTL 90일 DynamoDB 저장 | 캐시 미스 시 DynamoDB 저장 항목 | `item["ttl"]` ≈ now + 90일 | `assert abs(item["ttl"] - expected_ttl) < 5` | TTL 검증 |
 
 ---
 
@@ -171,19 +153,6 @@ def pending_feedbacks_table():
 | TC-P2-U36 | DELETE /training-data/{id} | 정상 삭제 | 존재하는 벡터 id, 인증 헤더 포함 | HTTP 200, `vanna.delete_training_data()` 1회 호출 | `assert resp.status_code == 200`, `assert mock_delete.call_count == 1` | vanna mock |
 | TC-P2-U37 | DELETE /training-data/{id} | 존재하지 않는 id | `id="nonexistent-id"` | HTTP 404, 에러 메시지 한국어 | `assert resp.status_code == 404` | - |
 | TC-P2-U38 | DELETE /training-data/{id} | 인증 없는 요청 | Authorization 헤더 없음 | HTTP 401 | `assert resp.status_code == 401` | 무단 삭제 방지 |
-
----
-
-### 1.8 `PipelineContext.sql_hash` 직접 검증
-
-**대상**: `query_pipeline.py:273` `ctx.sql_hash = compute_sql_hash(sql)` 할당
-**검증**: 파이프라인 실행 결과 `ctx.sql_hash` 값 확인
-**요구사항 (FR)**: **FR-17** — SQL 해시 파이프라인 컨텍스트 할당 (Gap 4 수정 검증)
-
-| TC | Step | 스텝 역할 | 인풋 | 기대 아웃풋 | assert 단언 | 비고 |
-|----|------|-----------|------|------------|-------------|------|
-| TC-P2-U39 | Step 7 | Redash 경로 sql_hash 할당 | `REDASH_ENABLED=true`, 정상 쿼리 실행 | `ctx.sql_hash == compute_sql_hash(validated_sql)` | `assert ctx.sql_hash is not None`, `assert ctx.sql_hash == expected_hash` | Gap 4 수정 직접 검증 |
-| TC-P2-U40 | Step 9 | Athena fallback 시 sql_hash 미할당 | `REDASH_ENABLED=false` | `ctx.sql_hash is None` | `assert ctx.sql_hash is None` | Redash 경로에서만 설정됨 확인 |
 
 ---
 
@@ -316,7 +285,6 @@ def async_task_table():
 |-------|------|-----------------|---------|
 | TC-IT-P2-01 | Step 4 | 3단계 RAG (CrossEncoderReranker + LLM filter) | FR-12 |
 | TC-IT-P2-02 | Step 11 | DynamoDB 쿼리 이력 저장 | FR-11 |
-| TC-IT-P2-03 | Step 7~8 | Redash query_id DynamoDB 캐시 | FR-17 |
 | TC-IT-P2-04 | Feedback | 피드백 pending 저장 (즉시 학습 제거) | FR-16 |
 | TC-IT-P2-05 | Async | 비동기 쿼리 (202 즉시 응답 + 폴링) | FR-19 |
 | TC-IT-P2-06 | DELETE | DELETE /training-data/{id} | FR-13~15 |
@@ -494,60 +462,6 @@ aws dynamodb get-item `
 | TC-IT-P2-02 | Step 11 | 저장 필드 확인 | DynamoDB Item 내용 | `item["question"]`, `item["sql"]`, `item["ttl"]` 필드 존재 | `assert all(f in item for f in ["question", "sql", "ttl"])` | | TTL 90일 설정 검증 포함 |
 
 **성공 기준**: assert 3건 모두 통과
-
----
-
-#### TC-IT-P2-03: Redash query_id DynamoDB 캐시 (Step 7~8, FR-17)
-
-**목적**: 동일한 SQL 해시에 대해 2회차 요청 시 Redash 신규 쿼리 생성 없이 DynamoDB에 캐시된 query_id를 재사용하는지 확인.
-**사전 조건**: `DYNAMODB_ENABLED=true`, `REDASH_ENABLED=true`.
-
-**Phase 1에서 이미 검증된 스텝**:
-
-| Step | 내용 | Phase 1 결과 |
-|------|------|-------------|
-| Step 7~8 기본 | Redash 신규 쿼리 생성 및 실행 | 완료 — 캐시 없는 경로 |
-
-**테스트 명령**:
-
-```powershell
-$question = "2026-02-01 캠페인별 노출 수 알려줘"
-$body = @{ question = $question; slack_user_id = "test-user" } | ConvertTo-Json
-
-# 1회차 요청
-$resp1 = Invoke-RestMethod `
-    -Uri "$API_BASE/query" -Method POST `
-    -ContentType "application/json" `
-    -Headers @{ Authorization = "Bearer $TOKEN" } `
-    -Body $body
-$sqlHash1 = $resp1.sql_hash
-Write-Host "1회차 sql_hash: $sqlHash1"
-
-# 2회차 요청 (동일 질문 — 동일 SQL 생성 기대)
-$resp2 = Invoke-RestMethod `
-    -Uri "$API_BASE/query" -Method POST `
-    -ContentType "application/json" `
-    -Headers @{ Authorization = "Bearer $TOKEN" } `
-    -Body $body
-
-# DynamoDB 캐시 항목 확인 (sql_hash로 스캔)
-aws dynamodb scan `
-    --table-name capa-dev-query-history `
-    --filter-expression "sql_hash = :h" `
-    --expression-attribute-values "{`":h`": {`"S`": `"$sqlHash1`"}}" `
-    --region ap-northeast-2
-
-# 캐시 히트 로그 확인
-docker compose logs vanna-api | Select-String -Pattern "캐시|cache_hit|sql_hash"
-```
-
-| TC | Step | 스텝 역할 | 인풋 | 아웃풋 (실제값) | assert 단언 | 판정 | 비고 |
-|----|------|-----------|------|----------------|-------------|------|------|
-| TC-IT-P2-03 | Step 7 (1회차) | Redash 신규 생성 + DynamoDB 저장 | 동일 질문 1회차 | `resp1.sql_hash is not None`, DynamoDB 스캔 결과 1건 이상 | `assert resp1.sql_hash is not None` | | 캐시 미스 — 신규 생성 |
-| TC-IT-P2-03 | Step 7 (2회차) | 캐시 히트 — Redash 미호출 | 동일 질문 2회차 | 로그에 "캐시" 또는 "cache_hit" 출력, `resp2.sql_hash == resp1.sql_hash` | `assert resp2.sql_hash == resp1.sql_hash` | | Phase 2 핵심 — Redash 신규 생성 스킵 |
-| TC-IT-P2-03 | DynamoDB 확인 | sql_hash 캐시 항목 존재 | AWS CLI scan 결과 | `Count >= 1` | `assert scan_result["Count"] >= 1` | | 실제 AWS DynamoDB 스캔 |
-
-**성공 기준**: assert 3건 모두 통과 + 캐시 히트 로그 확인
 
 ---
 
@@ -980,14 +894,12 @@ def dynamodb_feedback_table():
 
 | 구분 | TC 수 | 대상 컴포넌트 | 관련 FR |
 |------|:-----:|-------------|---------|
-| 단위 — sql_hash | 8 | `sql_hash.py` | FR-17 |
+| 단위 — sql_hash | 8 | `sql_hash.py` | FR-16/FR-18 (피드백 중복 제거) |
 | 단위 — reranker | 5 | `reranker.py` | FR-12 |
 | 단위 — dynamodb_feedback | 6 | `dynamodb_feedback.py` | FR-16 |
-| 단위 — create_or_reuse_query | 5 | `redash_client.py` | FR-17 |
 | 단위 — dynamodb_history | 5 | `dynamodb_history.py` | FR-11 |
 | 단위 — airflow_dag | 6 | `capa_chromadb_refresh.py` | FR-18 |
 | 단위 — DELETE /training-data | 3 | FastAPI endpoint | FR-13~15 |
-| 단위 — PipelineContext.sql_hash | 2 | `query_pipeline.py` | FR-17 |
 | 단위 — RAGRetriever 메서드 + 에러처리 | 8 | `rag_retriever.py` | FR-12 |
 | 단위 — AsyncQueryManager | 4 | `async_query_manager.py` | FR-19 |
 | 단위 — FeedbackManager | 3 | `feedback_manager.py` | FR-16 |
@@ -995,7 +907,6 @@ def dynamodb_feedback_table():
 | 단위 — DELETE 실패 400 | 1 | FastAPI endpoint | FR-13~15 |
 | 통합 — RAG 분기 | 1 | QueryPipeline | FR-12 |
 | 통합 — 3단계 RAG | 4 | RAGRetriever | FR-12 |
-| 통합 — 중복 쿼리 방지 | 2 | RedashClient + DynamoDB | FR-17 |
 | 통합 — 피드백 루프 | 3 | FeedbackManager | FR-16 |
 | 통합 — 비동기 쿼리 | 4 | AsyncQueryManager + FastAPI | FR-19 |
 | 통합 — EXPLAIN 실패 | 2 | SQLValidator | FR-12 |
@@ -1007,6 +918,6 @@ def dynamodb_feedback_table():
 | 통합 — POST /feedback E2E | 2 | FeedbackManager + DynamoDB | FR-16 |
 | 통합 — DAG 부분 실패 E2E | 1 | capa_chromadb_refresh | FR-18 |
 | 통합 — DELETE 실패 E2E | 1 | FastAPI + Vanna | FR-13~15 |
-| E2E — Phase 2 전체 기능 통합 | 12 | 전체 파이프라인 | FR-11~19 전체 |
+| E2E — Phase 2 전체 기능 통합 | 12 | 전체 파이프라인 | FR-11~19 (FR-17 제외) |
 | E2E — 피드백 루프 중복 제거 | 4 | FeedbackManager + DAG | FR-16~18 |
-| **합계** | **107** | — | — |
+| **합계** | **99** | — | — |
