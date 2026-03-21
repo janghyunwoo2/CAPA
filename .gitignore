@@ -136,6 +136,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
 .envrc
 .venv
 env/
@@ -243,5 +244,15 @@ uv.lock
 pyproject.toml
 **/logs/
 
+# Claude Code 설정 (토큰 포함)
+.claude/mcp.json
+.claude/settings.local.json
+
+# bkit 런타임/스냅샷/로컬 상태 (로컬 임시 파일)
+.bkit/runtime/
+.bkit/snapshots/
+.bkit/snapshots/*
+.bkit/state/memory.json
+.bkit/state/pdca-status.json
 # Serena (AI Workspace)
 .serena/

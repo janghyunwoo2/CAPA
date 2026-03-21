@@ -31,6 +31,12 @@ resource "aws_ecr_repository" "report_generator" {
   lifecycle {
     prevent_destroy = false
   }
+
+  tags = {
+    Project     = "CAPA"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
 }
 
 output "report_generator_repository_url" {
@@ -62,6 +68,12 @@ resource "aws_iam_role" "report_generator" {
       }
     ]
   })
+
+  tags = {
+    Project     = "CAPA"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
 }
 
 # Report Generator IAM Policy (S3, Athena, CloudWatch)
@@ -101,7 +113,8 @@ resource "aws_iam_role_policy" "report_generator" {
           "glue:GetDatabase",
           "glue:GetTable",
           "glue:GetTables",
-          "glue:GetPartitions"
+          "glue:GetPartitions",
+          "glue:GetPartition"
         ]
         Resource = "*"
       },
@@ -231,7 +244,7 @@ resource "kubernetes_deployment" "report_generator" {
           }
           env {
             name  = "ATHENA_DATABASE"
-            value = "capa_db"
+            value = "capa_ad_logs"
           }
           env {
             name  = "REPORT_S3_BUCKET"
@@ -346,6 +359,12 @@ resource "aws_ecr_repository" "vanna_api" {
   lifecycle {
     prevent_destroy = false
   }
+
+  tags = {
+    Project     = "CAPA"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
 }
 
 output "vanna_api_repository_url" {
@@ -377,6 +396,12 @@ resource "aws_iam_role" "vanna" {
       }
     ]
   })
+
+  tags = {
+    Project     = "CAPA"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
 }
 
 # Vanna AI IAM Policy (Athena, S3, Glue)
@@ -416,7 +441,8 @@ resource "aws_iam_role_policy" "vanna" {
           "glue:GetDatabase",
           "glue:GetTable",
           "glue:GetTables",
-          "glue:GetPartitions"
+          "glue:GetPartitions",
+          "glue:GetPartition"
         ]
         Resource = "*"
       },
@@ -448,7 +474,7 @@ resource "kubernetes_service_account" "vanna_sa" {
   }
 }
 
-# Secret (Anthropic API Key)
+# Secret (Anthropic API Key, Redash API Key, Internal API Token)
 resource "kubernetes_secret" "vanna_secrets" {
   metadata {
     name      = "vanna-secrets"
@@ -456,7 +482,9 @@ resource "kubernetes_secret" "vanna_secrets" {
   }
 
   data = {
-    anthropic-api-key = var.anthropic_api_key
+    anthropic-api-key  = var.anthropic_api_key
+    redash-api-key     = var.redash_api_key
+    internal-api-token = var.internal_api_token
   }
 
   type = "Opaque"
@@ -549,11 +577,11 @@ resource "kubernetes_deployment" "vanna_api" {
           }
           env {
             name  = "S3_STAGING_DIR"
-            value = "s3://${aws_s3_bucket.data_lake.bucket}/athena-results/"
+            value = "s3://${aws_s3_bucket.data_lake.bucket}/summary/"
           }
           env {
             name  = "ATHENA_DATABASE"
-            value = "capa_db"
+            value = "capa_ad_logs"
           }
           env {
             name  = "CHROMA_HOST"
@@ -577,15 +605,130 @@ resource "kubernetes_deployment" "vanna_api" {
             value = "INFO"
           }
 
-          # 리소스 제한
+          # Redash 연동 ENV (Text-to-SQL)
+          env {
+            name  = "REDASH_BASE_URL"
+            value = "http://redash.redash.svc.cluster.local:5000"
+          }
+          env {
+            name = "REDASH_API_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.vanna_secrets.metadata[0].name
+                key  = "redash-api-key"
+              }
+            }
+          }
+          env {
+            name  = "REDASH_DATA_SOURCE_ID"
+            value = "5"
+          }
+          env {
+            name  = "REDASH_ENABLED"
+            value = "true"
+          }
+          env {
+            name  = "REDASH_QUERY_TIMEOUT_SEC"
+            value = "300"
+          }
+          env {
+            name  = "REDASH_POLL_INTERVAL_SEC"
+            value = "3"
+          }
+
+          # Athena Workgroup (Text-to-SQL 전용, 1GB 스캔 제한)
+          env {
+            name  = "ATHENA_WORKGROUP"
+            value = aws_athena_workgroup.text2sql.name
+          }
+
+          # Matplotlib headless 모드 (차트 생성용)
+          env {
+            name  = "MPLBACKEND"
+            value = "Agg"
+          }
+
+          # 내부 서비스 인증 토큰 (SEC-17)
+          env {
+            name = "INTERNAL_API_TOKEN"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.vanna_secrets.metadata[0].name
+                key  = "internal-api-token"
+              }
+            }
+          }
+
+          # Redash 외부 접근 URL (차트 링크 생성용, Minor 6)
+          env {
+            name  = "REDASH_PUBLIC_URL"
+            value = var.redash_public_url
+          }
+
+          # ---------------------------------------------------------------
+          # Phase 2: Feature Flags (§8.1 기준, 점진 전환 — 기본값 false)
+          # ---------------------------------------------------------------
+          env {
+            name  = "PHASE2_RAG_ENABLED"
+            value = tostring(var.phase2_rag_enabled)
+          }
+          env {
+            name  = "PHASE2_FEEDBACK_ENABLED"
+            value = tostring(var.phase2_feedback_enabled)
+          }
+          env {
+            name  = "ASYNC_QUERY_ENABLED"
+            value = tostring(var.async_query_enabled)
+          }
+          env {
+            name  = "DYNAMODB_ENABLED"
+            value = tostring(var.dynamodb_enabled)
+          }
+
+          # Phase 2: DynamoDB 테이블명 (§8.1)
+          env {
+            name  = "DYNAMODB_HISTORY_TABLE"
+            value = var.dynamodb_history_table
+          }
+          env {
+            name  = "DYNAMODB_FEEDBACK_TABLE"
+            value = var.dynamodb_feedback_table
+          }
+          env {
+            name  = "DYNAMODB_ASYNC_TABLE"
+            value = var.dynamodb_async_table
+          }
+          env {
+            name  = "DYNAMODB_QUERY_HASH_TABLE"
+            value = var.dynamodb_query_hash_table
+          }
+
+          # Phase 2: Reranker 설정 (§8.1)
+          env {
+            name  = "RERANKER_MODEL_NAME"
+            value = var.reranker_model_name
+          }
+          env {
+            name  = "RERANKER_TOP_K"
+            value = tostring(var.reranker_top_k)
+          }
+
+          # 히스토리 저장 경로 (history_recorder.py)
+          # NFR-07: emptyDir 마운트 — Pod 재시작 시 이력 소실. 운영환경은 EFS PVC로 교체 필요
+          volume_mount {
+            name       = "data"
+            mount_path = "/data"
+          }
+
+          # 리소스 제한 (NFR-07: LLM 추론 메모리 1.5Gi 확보)
           resources {
             requests = {
               cpu    = "200m"
-              memory = "512Mi"
+              memory = "768Mi"
             }
             limits = {
               cpu    = "400m"
-              memory = "768Mi"
+              memory = "1.5Gi"
             }
           }
 
@@ -611,6 +754,12 @@ resource "kubernetes_deployment" "vanna_api" {
             timeout_seconds       = 10
             failure_threshold     = 3
           }
+        }
+
+        # /data emptyDir 볼륨 (NFR-07: 히스토리 저장. 운영환경은 EFS PVC로 교체 필요)
+        volume {
+          name = "data"
+          empty_dir {}
         }
 
         # 노드별 균등 배분 설정
@@ -666,6 +815,12 @@ resource "aws_ecr_repository" "slack_bot" {
   lifecycle {
     prevent_destroy = false
   }
+
+  tags = {
+    Project     = "CAPA"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
 }
 
 output "slack_bot_repository_url" {
@@ -684,8 +839,9 @@ resource "kubernetes_secret" "slack_bot_secrets" {
   }
 
   data = {
-    slack-bot-token = var.slack_bot_token
-    slack-app-token = var.slack_app_token
+    slack-bot-token    = var.slack_bot_token
+    slack-app-token    = var.slack_app_token
+    internal-api-token = var.internal_api_token
   }
 
   type = "Opaque"
@@ -791,6 +947,27 @@ resource "kubernetes_deployment" "slack_bot" {
             name  = "REPORT_API_URL"
             value = "http://report-generator.report.svc.cluster.local:8000"
           }
+          env {
+            name  = "VANNA_API_URL"
+            value = "http://vanna-api.vanna.svc.cluster.local:8000"
+          }
+
+          # Phase 2: 비동기 폴링 모드 전환 플래그 (§6.6)
+          env {
+            name  = "ASYNC_QUERY_ENABLED"
+            value = tostring(var.async_query_enabled)
+          }
+
+          # 내부 서비스 인증 토큰 (SEC-17, vanna-api 호출용)
+          env {
+            name = "INTERNAL_API_TOKEN"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.slack_bot_secrets.metadata[0].name
+                key  = "internal-api-token"
+              }
+            }
+          }
 
           # 리소스 제한
           resources {
@@ -830,6 +1007,34 @@ resource "kubernetes_deployment" "slack_bot" {
   }
 
   depends_on = [kubernetes_service.slack_bot, kubernetes_secret.slack_bot_secrets]
+}
+
+# =====================================================================================================================
+# Athena Workgroup (Text-to-SQL 전용)
+# 1GB 스캔 제한으로 비용 안전장치 확보 (Design §5.3)
+# =====================================================================================================================
+
+resource "aws_athena_workgroup" "text2sql" {
+  name = "capa-text2sql-wg"
+
+  configuration {
+    enforce_workgroup_configuration = true
+    bytes_scanned_cutoff_per_query  = 1073741824 # 1 GB
+
+    result_configuration {
+      output_location = "s3://${aws_s3_bucket.data_lake.bucket}/athena-results/text2sql/"
+
+      encryption_configuration {
+        encryption_option = "SSE_S3"
+      }
+    }
+  }
+
+  tags = {
+    Project     = "CAPA"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+  }
 }
 
 # =====================================================================================================================
