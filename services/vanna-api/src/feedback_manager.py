@@ -6,8 +6,8 @@ Phase 1 (PHASE2_FEEDBACK_ENABLED=false, 기본값):
   긍정 피드백 → vanna.train() 즉시 호출 (하위 호환)
 
 Phase 2 (PHASE2_FEEDBACK_ENABLED=true):
-  긍정 피드백 → DynamoDB pending_feedbacks에만 저장 (즉시 학습 제거)
-  실제 학습은 Airflow DAG(FR-18) 배치 검증 후 수행
+  긍정 피드백 → DynamoDB query-history에 positive 표기만 수행
+  ChromaDB pending_feedbacks 저장 및 Airflow DAG(FR-18) 배치 학습은 중단됨 (2026-03-21)
 """
 
 import logging
@@ -54,23 +54,24 @@ class FeedbackManager:
             return False, "이력 레코드를 찾을 수 없습니다"
 
         if PHASE2_FEEDBACK_ENABLED:
-            # Phase 2: DynamoDB에 pending으로 저장만 (즉시 학습 제거)
-            if record.refined_question and record.generated_sql and self._feedback_store:
-                try:
-                    self._feedback_store.save_pending(
-                        history_id=history_id,
-                        question=record.refined_question,
-                        sql=record.generated_sql,
-                    )
-                except Exception as e:
-                    logger.error(f"피드백 pending 저장 실패 (무시): {e}")
+            # Phase 2: DynamoDB query-history에 positive 표기 (즉시 학습 제거)
+            # ⛔ 중단됨 (2026-03-21): pending_feedbacks 저장 및 Airflow 배치 학습 중단
+            # if record.refined_question and record.generated_sql and self._feedback_store:
+            #     try:
+            #         self._feedback_store.save_pending(
+            #             history_id=history_id,
+            #             question=record.refined_question,
+            #             sql=record.generated_sql,
+            #         )
+            #     except Exception as e:
+            #         logger.error(f"피드백 pending 저장 실패 (무시): {e}")
             self._recorder.update_feedback(
                 history_id=history_id,
                 feedback=FeedbackType.POSITIVE.value,
                 trained=False,
             )
-            logger.info(f"Phase 2 긍정 피드백 pending 저장 완료: {history_id}")
-            return False, "피드백이 기록되었습니다. 주간 학습 배치에서 검증 후 반영됩니다."
+            logger.info(f"Phase 2 긍정 피드백 기록 완료: {history_id}")
+            return False, "피드백이 기록되었습니다."
 
         # Phase 1: 즉시 학습 (하위 호환)
         trained = False

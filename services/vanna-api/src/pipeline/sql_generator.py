@@ -43,9 +43,15 @@ class SQLGenerator:
             last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
             last_month_end = today.replace(day=1) - timedelta(days=1)
             date_context = (
-                f"[날짜 컨텍스트: 오늘={today}, 어제={yesterday}, "
-                f"이번달={today.strftime('%Y-%m')}-01~{today}, "
-                f"지난달={last_month_start}~{last_month_end}] "
+                f"[날짜 컨텍스트] "
+                f"오늘={today}(year='{today.strftime('%Y')}',month='{today.strftime('%m')}',day='{today.strftime('%d')}'), "
+                f"어제={yesterday}(year='{yesterday.strftime('%Y')}',month='{yesterday.strftime('%m')}',day='{yesterday.strftime('%d')}'), "
+                f"이번달={today.strftime('%Y-%m')}(year='{today.strftime('%Y')}',month='{today.strftime('%m')}'), "
+                f"지난달={last_month_start.strftime('%Y-%m')}(year='{last_month_start.strftime('%Y')}',month='{last_month_start.strftime('%m')}') "
+                f"파티션 형식: year/month/day는 STRING 2자리 (예: month='02', day='01') "
+                f"[경고: 예시 SQL의 year/month/day 값을 절대 그대로 복사하지 말 것. "
+                f"사용자가 명시한 날짜는 직접 파티션 형식으로 변환하고, "
+                f"'오늘/어제/이번달/지난달' 등 상대 표현은 위 날짜 컨텍스트 값을 사용할 것] "
             )
             prompt = f"{date_context}{question}"
 

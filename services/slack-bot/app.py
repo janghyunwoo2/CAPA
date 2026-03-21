@@ -37,6 +37,9 @@ VANNA_API_TIMEOUT = int(os.environ.get("VANNA_API_TIMEOUT", "310"))
 
 # Phase 2: 비동기 폴링 모드 (§6.6)
 ASYNC_QUERY_ENABLED = os.environ.get("ASYNC_QUERY_ENABLED", "false").lower() == "true"
+
+# FR-24: Slack 스레드 기반 응답 (Feature Flag)
+SLACK_THREAD_ENABLED = os.environ.get("SLACK_THREAD_ENABLED", "true").lower() == "true"
 _ASYNC_POLL_INTERVAL = 3    # 폴링 간격 (초)
 _ASYNC_POLL_MAX = 100       # 최대 폴링 횟수 (300초)
 
@@ -81,7 +84,11 @@ def _format_results_table(results: list, sql: str) -> str:
     return "\n".join(lines)
 
 
-def _handle_error_response(response: requests.Response, say) -> None:
+def _handle_error_response(
+    response: requests.Response,
+    say,
+    thread_ts: str | None = None,
+) -> None:
     """SEC-07: error_code는 로그에만, 사용자에게는 message만 노출"""
     try:
         error = response.json().get("detail", {})
@@ -95,10 +102,13 @@ def _handle_error_response(response: requests.Response, say) -> None:
         error_code = "PARSE_ERROR"
         message = "응답을 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
     logger.error(f"vanna-api 오류: HTTP {response.status_code}, error_code={error_code}")
-    say(blocks=[{
-        "type": "section",
-        "text": {"type": "mrkdwn", "text": f"❌ *오류가 발생했습니다*\n{message}"},
-    }])
+    say(
+        blocks=[{
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"❌ *오류가 발생했습니다*\n{message}"},
+        }],
+        thread_ts=thread_ts,
+    )
 
 
 def _build_header_blocks(result: dict) -> list:
@@ -134,10 +144,11 @@ def _build_footer_blocks(result: dict) -> list:
 
     # AI 분석
     if answer:
-        footer_text = f"🤖 *AI 분석:*\n{answer}"
-        if elapsed:
-            footer_text += f"\n\n⏱ 처리 시간: {elapsed:.2f}초"
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": footer_text}})
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"🤖 *AI 분석:*\n{answer}"}})
+
+    # 처리 시간 — answer 유무와 독립적으로 표시 (BUG-02)
+    if elapsed:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"⏱ 처리 시간: {elapsed:.2f}초"}})
 
     # Redash 링크
     if redash_url:
@@ -198,7 +209,15 @@ def handle_mention(event, say, client):
         return
 
     # 3. 기본: Vanna AI 자연어 질의
-    say(f"🔍 <@{user}>님의 질문을 분석 중입니다...")
+
+    # [FR-24-01] Feature Flag: 스레드 루트 생성 또는 채널 메시지
+    thread_ts = None
+    if SLACK_THREAD_ENABLED:
+        thread_response = say(text="🔄 처리 중...")
+        # SlackResponse는 dict가 아니므로 isinstance 대신 .get() 직접 사용 (BUG-01)
+        thread_ts = thread_response.get("ts") if thread_response else None
+    else:
+        say(f"🔍 <@{user}>님의 질문을 분석 중입니다...")
 
     try:
         if ASYNC_QUERY_ENABLED:
@@ -210,21 +229,22 @@ def handle_mention(event, say, client):
                     "question": text,
                     "slack_user_id": user,
                     "slack_channel_id": channel_id,
+                    "conversation_id": thread_ts,  # [FR-24-02] thread_ts → FR-20 session_id
                 },
                 headers=_build_internal_headers(),
                 timeout=30,
             )
             if post_resp.status_code not in (200, 202):
-                _handle_error_response(post_resp, say)
+                _handle_error_response(post_resp, say, thread_ts=thread_ts)
                 return
 
             task_id = post_resp.json().get("task_id")
             if not task_id:
-                say("⚠️ AI 서버 응답에서 task_id를 찾을 수 없습니다.")
+                say("⚠️ AI 서버 응답에서 task_id를 찾을 수 없습니다.", thread_ts=thread_ts)
                 return
 
             # ② "처리 중" 메시지 먼저 전송
-            say("⏳ 처리 중입니다... 완료되면 알려드리겠습니다.")
+            say("⏳ 처리 중입니다... 완료되면 알려드리겠습니다.", thread_ts=thread_ts)
 
             # ③ GET /query/{task_id} 폴링 (3초 간격, 최대 100회)
             result = None
@@ -241,11 +261,11 @@ def handle_mention(event, say, client):
                     result = poll_resp.json()
                     break
                 # 오류 응답
-                _handle_error_response(poll_resp, say)
+                _handle_error_response(poll_resp, say, thread_ts=thread_ts)
                 return
 
             if result is None:
-                say("⚠️ 쿼리 처리 시간이 초과되었습니다. 조회 범위를 좁혀 다시 시도해 주세요.")
+                say("⚠️ 쿼리 처리 시간이 초과되었습니다. 조회 범위를 좁혀 다시 시도해 주세요.", thread_ts=thread_ts)
                 return
 
         else:
@@ -256,20 +276,21 @@ def handle_mention(event, say, client):
                     "question": text,
                     "slack_user_id": user,
                     "slack_channel_id": channel_id,
+                    "conversation_id": thread_ts,  # [FR-24-02] thread_ts → FR-20 session_id
                 },
                 headers=_build_internal_headers(),
                 timeout=VANNA_API_TIMEOUT,  # NFR-06
             )
             if response.status_code != 200:
-                _handle_error_response(response, say)
+                _handle_error_response(response, say, thread_ts=thread_ts)
                 return
             result = response.json()
 
-        # ④ 결과 전송 (동기/비동기 공통)
+        # ④ 결과 전송 (동기/비동기 공통) [FR-24-03]
         chart_base64 = result.get("chart_image_base64")
 
         # ① 헤더 + 질문 + SQL + 결과 테이블 먼저 전송
-        say(blocks=_build_header_blocks(result))
+        say(blocks=_build_header_blocks(result), thread_ts=thread_ts)
 
         # ② 차트 업로드 후 채널에 실제 게시될 때까지 대기
         if chart_base64:
@@ -297,15 +318,24 @@ def handle_mention(event, say, client):
                 logger.error(f"차트 업로드 실패: {e}")
 
         # ③ AI 분석 + Redash 링크 + 피드백 버튼 (차트 업로드 완료 후)
-        say(blocks=_build_footer_blocks(result))
+        say(blocks=_build_footer_blocks(result), thread_ts=thread_ts)
+
+        # [FR-24-04] 루트 메시지 업데이트 (처리 완료 표시)
+        if thread_ts:
+            question_summary = text[:30] + "..." if len(text) > 30 else text
+            client.chat_update(
+                channel=channel_id,
+                ts=thread_ts,
+                text=f"✅ 완료: {question_summary}",
+            )
 
     except requests.Timeout:
         logger.error(f"vanna-api 타임아웃 ({VANNA_API_TIMEOUT}초)")
-        say("⚠️ AI 서버 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.")
+        say("⚠️ AI 서버 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.", thread_ts=thread_ts)  # [FR-24-05]
     except Exception as e:
         # SEC-07: 내부 오류 상세는 로그에만 기록
         logger.error(f"vanna-api 연동 오류: {e}")
-        say("⚠️ AI 서버와 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+        say("⚠️ AI 서버와 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", thread_ts=thread_ts)  # [FR-24-05]
 
 
 @app.action("feedback_positive")

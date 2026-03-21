@@ -138,6 +138,13 @@ class RAGRetriever:
                 messages=[{"role": "user", "content": prompt}],
             )
             raw = response.content[0].text.strip()
+            # 마크다운 코드블록 제거 (```json ... ``` 형태 대응)
+            if raw.startswith("```"):
+                lines = raw.splitlines()
+                raw = "\n".join(
+                    line for line in lines
+                    if not line.strip().startswith("```")
+                ).strip()
             parsed = json.loads(raw)
             selected_indices: list[int] = parsed.get("selected_indices", [])
             reason: str = parsed.get("reason", "")

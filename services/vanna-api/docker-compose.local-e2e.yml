@@ -215,6 +215,7 @@ services:
       - VANNA_API_URL=http://vanna-api:8000
       - REPORT_API_URL=http://localhost:9999
       - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN:-test-token}
+      - ASYNC_QUERY_ENABLED=true
       - PYTHONUNBUFFERED=1
     volumes:
       - ../slack-bot/app.py:/app/app.py
