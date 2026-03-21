@@ -1,17 +1,14 @@
-"""PDF 보고서 생성 모듈.
+"""PDF 리포트 생성 모듈.
 
-마크다운 보고서 텍스트와 일별 데이터를 결합하여 PDF 파일을 생성합니다.
+마크다운 보고서 텍스트와 차트 이미지를 결합하여 PDF 파일을 생성합니다.
 ReportLab을 사용하여 PDF를 직접 생성합니다.
 """
 
 import logging
+import re
 import tempfile
 from datetime import datetime
 from pathlib import Path
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:
-    from backports.zoneinfo import ZoneInfo
 
 import matplotlib
 matplotlib.use("Agg")
@@ -29,14 +26,14 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 def create_pdf(
     report_markdown: str,
-    daily_breakdown: list[dict] = None,
-    output_path: str = None,
+    daily_df: pd.DataFrame,
+    output_path: str | None = None,
 ) -> str:
     """마크다운 보고서와 차트를 결합하여 PDF를 생성합니다.
 
     Args:
-        report_markdown: 마크다운 형식의 보고서 텍스트
-        daily_breakdown: 일별 성과 데이터 리스트 (차트 생성용)
+        report_markdown: LLM이 생성한 마크다운 보고서 텍스트
+        daily_df: 일별 성과 DataFrame (차트 생성용)
         output_path: PDF 저장 경로. None이면 자동 생성
 
     Returns:
@@ -44,12 +41,12 @@ def create_pdf(
     """
     if not output_path:
         today: str = datetime.now().strftime("%Y-%m-%d")
-        output_path = f"report_{today}.pdf"
+        output_path = f"ad_report_{today}.pdf"
 
     # 한글 폰트 등록
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-
+    
     try:
         # 우선 리눅스(도커 컨테이너) 환경의 나눔고딕을 시도합니다
         try:
@@ -58,19 +55,9 @@ def create_pdf(
             logger.info("한글 폰트 등록 성공: NanumGothic")
         except:
             # 실패하면 로컬 윈도우 환경의 맑은 고딕을 시도합니다
-            try:
-                # Windows Fonts 디렉토리
-                pdfmetrics.registerFont(TTFont('Malgun', 'C:\\Windows\\Fonts\\malgun.ttf'))
-                korean_font = 'Malgun'
-                logger.info("한글 폰트 등록 성공: MalgunGothic")
-            except:
-                # 맑은 고딕 실패 시 나눔고딕 시도
-                try:
-                    pdfmetrics.registerFont(TTFont('Noto', 'C:\\Windows\\Fonts\\NotoSansCJKkr-Regular.otf'))
-                    korean_font = 'Noto'
-                    logger.info("한글 폰트 등록 성공: Noto Sans CJK")
-                except:
-                    raise Exception("사용 가능한 한글 폰트 없음")
+            pdfmetrics.registerFont(TTFont('Malgun', 'malgun.ttf'))
+            korean_font = 'Malgun'
+            logger.info("한글 폰트 등록 성공: MalgunGothic")
     except Exception as e:
         # 폰트 등록 실패 시 기본 폰트 사용
         logger.warning(f"한글 폰트 등록 실패: {e}. 기본 폰트를 사용합니다.")
@@ -118,21 +105,12 @@ def create_pdf(
         fontName=korean_font,
     )
 
-    normal_style = ParagraphStyle(
-        'CustomNormal',
-        parent=styles['Normal'],
-        fontSize=9,
-        fontName=korean_font,
-    )
-
     # 문서 요소 구성
     story = []
 
     # 헤더
-    story.append(Paragraph("CAPA 광고 성과 보고서", title_style))
-    kst_tz = ZoneInfo('Asia/Seoul')
-    kst_time = datetime.now(kst_tz).strftime('%Y-%m-%d %H:%M')
-    story.append(Paragraph(f"생성 일시: {kst_time}", normal_style))
+    story.append(Paragraph("CAPA Ad Performance Report", title_style))
+    story.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['Normal']))
     story.append(Spacer(1, 0.5*cm))
 
     # 마크다운 파싱 후 요소 추가
@@ -140,12 +118,12 @@ def create_pdf(
 
     # 차트 추가
     chart_path = None
-    if daily_breakdown and len(daily_breakdown) > 0:
+    if not daily_df.empty:
         story.append(PageBreak())
-        story.append(Paragraph("일별 추이 차트", heading_style))
+        story.append(Paragraph("Daily Performance Trend", heading_style))
         story.append(Spacer(1, 0.3*cm))
 
-        chart_path = _create_trend_chart(daily_breakdown)
+        chart_path = _create_trend_chart(daily_df)
         if chart_path:
             try:
                 img = Image(chart_path, width=16*cm, height=6*cm)
@@ -157,12 +135,12 @@ def create_pdf(
 
     # 푸터
     story.append(Spacer(1, 0.5*cm))
-    footer_text = "CAPA 광고 분석 플랫폼 | 자동생성 보고서"
-    story.append(Paragraph(footer_text, normal_style))
+    footer_text = "CAPA - Cloud-native AI Pipeline for Ad-logs | Auto-generated Report"
+    story.append(Paragraph(footer_text, styles['Normal']))
 
     # PDF 생성
     doc.build(story)
-    logger.info(f"PDF 보고서 생성 완료: {output_path}")
+    logger.info(f"PDF 리포트 생성 완료: {output_path}")
 
     # 임시 차트 파일 정리
     if chart_path:
@@ -215,7 +193,7 @@ def _parse_markdown_and_add_to_story(
             if table_lines:
                 table_data = _parse_table(table_lines)
                 if table_data:
-                    table = Table(table_data, colWidths=[None]*len(table_data[0]), hAlign='LEFT')
+                    table = Table(table_data, colWidths=[None]*len(table_data[0]))
                     table.setStyle(TableStyle([
                         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1F4E79')),
                         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
@@ -267,53 +245,41 @@ def _parse_table(table_lines: list[str]) -> list[list[str]]:
     return data
 
 
-def _create_trend_chart(daily_breakdown: list[dict]) -> str | None:
+def _create_trend_chart(daily_df: pd.DataFrame) -> str | None:
     """일별 트렌드 차트를 생성합니다.
 
     Args:
-        daily_breakdown: 일별 성과 데이터 리스트
+        daily_df: 일별 성과 DataFrame
 
     Returns:
         생성된 PNG 이미지 파일 경로
     """
     try:
-        if not daily_breakdown or len(daily_breakdown) == 0:
-            return None
-
-        # DataFrame으로 변환
-        df = pd.DataFrame(daily_breakdown)
-
-        # 필요한 컬럼 확인
-        if 'date' not in df.columns or 'impressions' not in df.columns:
-            logger.warning("필요한 컬럼이 없습니다")
-            return None
-
-        # 숫자로 변환
-        df['impressions'] = pd.to_numeric(df['impressions'], errors='coerce').fillna(0)
-        df['clicks'] = pd.to_numeric(df['clicks'], errors='coerce').fillna(0)
-        df['conversions'] = pd.to_numeric(df['conversions'], errors='coerce').fillna(0)
-
-        # 차트 생성
+        # 차트 한글 폰트 설정 (도커 환경은 나눔고딕, 로컬 윈도우는 맑은 고딕)
         import platform
         if platform.system() == "Linux":
             plt.rcParams["font.family"] = "NanumGothic"
         else:
             plt.rcParams["font.family"] = "Malgun Gothic"
-
+            
         fig, ax = plt.subplots(figsize=(12, 5))
 
-        dates = df['date'].tolist()
+        dates: list[str] = daily_df["date"].tolist()
         x_range = range(len(dates))
 
-        ax.plot(x_range, df['impressions'], marker="o", label="노출", linewidth=2, color="#1F4E79")
-        ax.plot(x_range, df['clicks'], marker="s", label="클릭", linewidth=2, color="#2E75B6")
-        ax.plot(x_range, df['conversions'], marker="^", label="전환", linewidth=2, color="#70AD47")
+        impressions = pd.to_numeric(daily_df["impressions"], errors="coerce").fillna(0)
+        clicks = pd.to_numeric(daily_df["clicks"], errors="coerce").fillna(0)
+        conversions = pd.to_numeric(daily_df["conversions"], errors="coerce").fillna(0)
+
+        ax.plot(x_range, impressions, marker="o", label="Impressions", linewidth=2, color="#1F4E79")
+        ax.plot(x_range, clicks, marker="s", label="Clicks", linewidth=2, color="#2E75B6")
+        ax.plot(x_range, conversions, marker="^", label="Conversions", linewidth=2, color="#70AD47")
 
         ax.set_xticks(list(x_range))
         ax.set_xticklabels(dates, rotation=45, ha="right", fontsize=8)
-        ax.set_title("일별 광고 성과 추이", fontsize=14, fontweight="bold")
-        ax.set_xlabel("날짜")
-        ax.set_ylabel("수량")
+        ax.set_title("Daily Ad Performance Trend", fontsize=14, fontweight="bold")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Count")
         ax.legend()
         ax.grid(True, alpha=0.3)
 

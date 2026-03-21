@@ -21,8 +21,8 @@ import athena_client
 import report_writer as rw
 import pdf_exporter
 
-# 환경 변수 로드
-load_dotenv()
+# 환경 변수 로드 (override=True: 시스템 환경변수보다 .env값을 우선 적용)
+load_dotenv(override=True)
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)

@@ -242,3 +242,6 @@ uv.lock
 # poetry 파일
 pyproject.toml
 **/logs/
+
+# Serena (AI Workspace)
+.serena/

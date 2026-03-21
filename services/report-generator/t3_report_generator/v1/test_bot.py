@@ -4,7 +4,7 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 from dotenv import load_dotenv
 
-# 환경 변수 로드 (.env 파일에서 토큰 가져오기)
+# 환경 변수 로드 (.env 파일에서 토큰 가져오기)  
 load_dotenv()
 
 # 로깅 설정
