@@ -1,0 +1,5 @@
+matplotlib==3.8.4
+weasyprint==68.1
+reportlab==4.0.9
+pandas==2.2.0
+slack-bolt==1.18.0

@@ -254,3 +254,5 @@ pyproject.toml
 .bkit/snapshots/*
 .bkit/state/memory.json
 .bkit/state/pdca-status.json
+# Serena (AI Workspace)
+.serena/

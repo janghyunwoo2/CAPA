@@ -84,6 +84,8 @@ x-airflow-common:
     - ${AIRFLOW_PROJ_DIR:-.}/config:/opt/airflow/config
     - ${AIRFLOW_PROJ_DIR:-.}/plugins:/opt/airflow/plugins
     - ${AIRFLOW_PROJ_DIR:-.}/data:/opt/airflow/data
+    # Mount ETL module to fix import error
+    - ${AIRFLOW_PROJ_DIR:-.}/etl_summary_t2:/opt/airflow/etl_summary_t2
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
