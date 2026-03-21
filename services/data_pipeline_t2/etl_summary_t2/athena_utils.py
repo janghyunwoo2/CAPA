@@ -8,9 +8,10 @@ import logging
 from typing import Dict, List, Optional
 import boto3
 from botocore.exceptions import ClientError
+import json
 
-from config import (
-    AWS_REGION, DATABASE, ATHENA_OUTPUT_LOCATION, 
+from .config import (
+    AWS_REGION, DATABASE, ATHENA_OUTPUT_LOCATION, ATHENA_TEMP_RESULTS_PATH,
     QUERY_TIMEOUT_SECONDS, MAX_RETRIES, RETRY_DELAY_SECONDS
 )
 
@@ -39,11 +40,12 @@ class AthenaQueryExecutor:
         """
         for attempt in range(MAX_RETRIES):
             try:
-                # 쿼리 시작
+                # 쿼리 시작 (메타데이터를 athena-results/ 경로에 축적)
                 response = self.client.start_query_execution(
                     QueryString=query,
                     QueryExecutionContext={'Database': database},
-                    ResultConfiguration={'OutputLocation': ATHENA_OUTPUT_LOCATION}
+                    ResultConfiguration={'OutputLocation': ATHENA_TEMP_RESULTS_PATH},
+                    WorkGroup='primary'  # primary 워크그룹 사용 (테라폼 워크그룹 설정 무시)
                 )
                 
                 query_id = response['QueryExecutionId']
@@ -146,7 +148,53 @@ class AthenaQueryExecutor:
         except ClientError as e:
             logger.error(f"Error getting query results: {str(e)}")
             return []
-
+    
+    def execute_query_to_s3(self, query: str, database: str = DATABASE) -> str:
+        """
+        Athena 쿼리를 실행하고 결과를 임시 경로에 저장
+        
+        ✅ 메타데이터와 데이터 경로를 분리하여 이상한 테이블 생성 방지
+        
+        Args:
+            query: 실행할 SQL 쿼리
+            database: 사용할 데이터베이스
+            
+        Returns:
+            쿼리 실행 ID
+            
+        Raises:
+            Exception: 쿼리 실행 실패 시
+            
+        Note:
+            - ResultConfiguration은 ATHENA_TEMP_RESULTS_PATH로 설정 (메타데이터용)
+            - 실제 데이터는 외부 테이블 정의에서 처리
+            - MSCK REPAIR 시 메타데이터 오염 방지
+        """
+        for attempt in range(MAX_RETRIES):
+            try:
+                # ✅ ResultConfiguration을 임시 경로로 설정 (메타데이터 오염 방지)
+                response = self.client.start_query_execution(
+                    QueryString=query,
+                    QueryExecutionContext={'Database': database},
+                    ResultConfiguration={'OutputLocation': ATHENA_TEMP_RESULTS_PATH}  # ✅ 임시 경로 사용
+                )
+                
+                query_id = response['QueryExecutionId']
+                logger.info(f"Query started with ID: {query_id} - Metadata will be saved to {ATHENA_TEMP_RESULTS_PATH}")
+                
+                # 쿼리 완료 대기
+                if self._wait_for_query_completion(query_id):
+                    logger.info(f"✅ Query completed successfully")
+                    return query_id
+                else:
+                    raise Exception(f"Query {query_id} failed or timed out")
+                    
+            except ClientError as e:
+                logger.error(f"Attempt {attempt + 1} failed: {str(e)}")
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(RETRY_DELAY_SECONDS)
+                else:
+                    raise
 
 def create_external_table(table_name: str, schema: str, location: str, 
                          partition_keys: Optional[List[tuple]] = None) -> str:
