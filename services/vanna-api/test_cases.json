@@ -1,0 +1,122 @@
+[
+  {
+    "id": "T001",
+    "category": "basic_ctr",
+    "question": "2026년 3월 14일 캠페인별 CTR을 내림차순으로 보여줘",
+    "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY campaign_id ORDER BY ctr DESC"
+  },
+  {
+    "id": "T002",
+    "category": "basic_ctr",
+    "question": "어제(2026-03-13) 모바일 기기의 총 impression 수",
+    "ground_truth_sql": "SELECT COUNT(*) AS total_impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='13' AND device_type='mobile'"
+  },
+  {
+    "id": "T003",
+    "category": "conversion",
+    "question": "2026년 3월 14일 전환이 발생한 광고 수",
+    "ground_truth_sql": "SELECT COUNT(DISTINCT ad_id) AS converted_ads FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND is_conversion=true"
+  },
+  {
+    "id": "T004",
+    "category": "conversion",
+    "question": "2026년 3월 14일 캠페인별 CVR(전환율) 상위 5개",
+    "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_conversion=true THEN 1 END) * 1.0 / NULLIF(COUNT(CASE WHEN is_click=true THEN 1 END), 0) AS cvr FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY campaign_id ORDER BY cvr DESC LIMIT 5"
+  },
+  {
+    "id": "T005",
+    "category": "cost",
+    "question": "2026년 3월 14일 광고주별 총 광고비",
+    "ground_truth_sql": "SELECT advertiser_id, SUM(cost_per_impression) AS total_cost FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY advertiser_id ORDER BY total_cost DESC"
+  },
+  {
+    "id": "T006",
+    "category": "cost",
+    "question": "2026년 3월 14일 클릭당 비용(CPC)이 가장 낮은 캠페인 TOP 5",
+    "ground_truth_sql": "SELECT campaign_id, SUM(cost_per_click) / NULLIF(COUNT(CASE WHEN is_click=true THEN 1 END), 0) AS cpc FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY campaign_id ORDER BY cpc ASC LIMIT 5"
+  },
+  {
+    "id": "T007",
+    "category": "region",
+    "question": "2026년 3월 14일 지역별 impression 수",
+    "ground_truth_sql": "SELECT delivery_region, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY delivery_region ORDER BY impressions DESC"
+  },
+  {
+    "id": "T008",
+    "category": "device",
+    "question": "2026년 3월 14일 디바이스 타입별 클릭 수",
+    "ground_truth_sql": "SELECT device_type, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY device_type ORDER BY clicks DESC"
+  },
+  {
+    "id": "T009",
+    "category": "revenue",
+    "question": "2026년 3월 14일 총 전환 매출",
+    "ground_truth_sql": "SELECT SUM(conversion_value) AS total_revenue FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND is_conversion=true"
+  },
+  {
+    "id": "T010",
+    "category": "hourly",
+    "question": "2026년 3월 14일 09시 시간대 impression 수",
+    "ground_truth_sql": "SELECT COUNT(*) AS impressions FROM ad_combined_log WHERE year='2026' AND month='03' AND day='14' AND hour='09'"
+  },
+  {
+    "id": "T011",
+    "category": "platform",
+    "question": "2026년 3월 14일 플랫폼별 CTR",
+    "ground_truth_sql": "SELECT platform, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY platform ORDER BY ctr DESC"
+  },
+  {
+    "id": "T012",
+    "category": "conversion",
+    "question": "2026년 3월 14일 전환 타입별 건수",
+    "ground_truth_sql": "SELECT conversion_type, COUNT(*) AS conversions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND is_conversion=true GROUP BY conversion_type ORDER BY conversions DESC"
+  },
+  {
+    "id": "T013",
+    "category": "ad_format",
+    "question": "2026년 3월 14일 광고 형식별 impression 수",
+    "ground_truth_sql": "SELECT ad_format, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY ad_format ORDER BY impressions DESC"
+  },
+  {
+    "id": "T014",
+    "category": "revenue",
+    "question": "2026년 3월 14일 캠페인별 ROAS(광고비 대비 매출)",
+    "ground_truth_sql": "SELECT campaign_id, SUM(conversion_value) / NULLIF(SUM(cost_per_impression), 0) AS roas FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY campaign_id ORDER BY roas DESC"
+  },
+  {
+    "id": "T015",
+    "category": "basic_ctr",
+    "question": "2026년 3월 한 달 전체 캠페인별 총 impression",
+    "ground_truth_sql": "SELECT campaign_id, COUNT(*) AS total_impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY campaign_id ORDER BY total_impressions DESC"
+  },
+  {
+    "id": "T016",
+    "category": "region",
+    "question": "2026년 3월 14일 서울 지역 클릭 수",
+    "ground_truth_sql": "SELECT COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND delivery_region='서울'"
+  },
+  {
+    "id": "T017",
+    "category": "device",
+    "question": "2026년 3월 14일 iOS 앱 플랫폼 impression 수",
+    "ground_truth_sql": "SELECT COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND platform='app_ios'"
+  },
+  {
+    "id": "T018",
+    "category": "conversion",
+    "question": "2026년 3월 14일 구매(purchase) 전환 총 매출",
+    "ground_truth_sql": "SELECT SUM(conversion_value) AS total_revenue FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND is_conversion=true AND conversion_type='purchase'"
+  },
+  {
+    "id": "T019",
+    "category": "hourly",
+    "question": "2026년 3월 14일 시간대별 클릭 수 추이",
+    "ground_truth_sql": "SELECT hour, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log WHERE year='2026' AND month='03' AND day='14' GROUP BY hour ORDER BY hour"
+  },
+  {
+    "id": "T020",
+    "category": "cost",
+    "question": "2026년 3월 14일 광고주별 CPA(전환당 비용)",
+    "ground_truth_sql": "SELECT advertiser_id, SUM(cost_per_impression) / NULLIF(COUNT(CASE WHEN is_conversion=true THEN 1 END), 0) AS cpa FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY advertiser_id ORDER BY cpa ASC"
+  }
+]
