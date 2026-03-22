@@ -53,6 +53,20 @@ resource "kubernetes_secret" "slack_bot_secrets" {
 }
 */
 
+# T3 Report Generator - Slack Secret (for KubernetesPodOperator DAG)
+resource "kubernetes_secret" "t3_report_slack" {
+  metadata {
+    name      = "t3-report-secret"
+    namespace = kubernetes_namespace.airflow.metadata[0].name
+  }
+
+  data = {
+    SLACK_BOT_TOKEN = var.slack_bot_token
+  }
+
+  type = "Opaque"
+}
+
 # ---------------------------------------------------------------------------------------------------------------------
 # 3. Helm Releases
 # ---------------------------------------------------------------------------------------------------------------------
