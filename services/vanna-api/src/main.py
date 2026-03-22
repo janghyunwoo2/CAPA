@@ -216,6 +216,7 @@ async def _run_pipeline_async(
             question=request.question,
             slack_user_id=request.slack_user_id,
             slack_channel_id=request.slack_channel_id,
+            conversation_id=request.conversation_id or "",
         )
         if ctx.error:
             async_manager.update_status(
@@ -291,6 +292,7 @@ async def query_natural_language(
             question=request.question,
             slack_user_id=request.slack_user_id,
             slack_channel_id=request.slack_channel_id,
+            conversation_id=request.conversation_id or "",
         )
     except Exception as e:
         logger.error(f"파이프라인 예외: {e}", exc_info=True)
@@ -339,6 +341,7 @@ async def query_natural_language(
         redash_query_id=ctx.redash_query_id,
         execution_path=ctx.query_results.execution_path if ctx.query_results else "unknown",
         elapsed_seconds=round(elapsed, 2),
+        session_id=ctx.session_id,
     )
 
 

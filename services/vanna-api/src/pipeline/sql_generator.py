@@ -32,7 +32,7 @@ class SQLGenerator:
         """
         self._vanna = vanna_instance
 
-    def generate(self, question: str, rag_context: Optional[RAGContext] = None) -> str:
+    def generate(self, question: str, rag_context: Optional[RAGContext] = None, conversation_history: Optional[list] = None) -> str:
         """자연어 질문을 SQL로 변환하여 반환.
         실패 시 SQLGenerationError 발생 → 파이프라인 중단.
         LLM_TIMEOUT_SECONDS 환경변수로 타임아웃 제어 (기본 60초).

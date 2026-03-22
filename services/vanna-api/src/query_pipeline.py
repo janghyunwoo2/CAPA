@@ -37,6 +37,7 @@ from .pipeline.sql_generator import SQLGenerator, SQLGenerationError
 from .pipeline.sql_validator import SQLValidator
 from .pipeline.ai_analyzer import AIAnalyzer
 from .pipeline.chart_renderer import ChartRenderer
+from .pipeline.conversation_history_retriever import ConversationHistoryRetriever
 from .redash_client import (
     RedashClient,
     RedashAPIError,
@@ -48,6 +49,7 @@ from .history_recorder import HistoryRecorder
 logger = logging.getLogger(__name__)
 
 PHASE2_RAG_ENABLED = os.getenv("PHASE2_RAG_ENABLED", "false").lower() == "true"
+MULTI_TURN_ENABLED = os.getenv("MULTI_TURN_ENABLED", "false").lower() == "true"
 
 
 class _VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
@@ -132,11 +134,19 @@ class QueryPipeline:
         self._ai_analyzer = AIAnalyzer(api_key=anthropic_api_key, model=llm_model)
         self._chart_renderer = ChartRenderer()
 
+        # Step 0: 멀티턴 대화 이력 조회 (FR-20, MULTI_TURN_ENABLED=true 시)
+        if MULTI_TURN_ENABLED:
+            _dynamodb = boto3.resource("dynamodb", region_name=aws_region)
+            self._conversation_retriever = ConversationHistoryRetriever(_dynamodb)
+        else:
+            self._conversation_retriever = None
+
     async def run(
         self,
         question: str,
         slack_user_id: str = "",
         slack_channel_id: str = "",
+        conversation_id: str = "",
     ) -> PipelineContext:
         """파이프라인을 실행하고 PipelineContext를 반환.
         어느 단계에서 실패해도 ctx.error에 실패 정보를 담아 반환 (FR-09).
@@ -145,7 +155,13 @@ class QueryPipeline:
             original_question=question,
             slack_user_id=slack_user_id,
             slack_channel_id=slack_channel_id,
+            session_id=conversation_id or None,
         )
+
+        # Step 0: 멀티턴 대화 이력 조회 (FR-20)
+        if MULTI_TURN_ENABLED and ctx.session_id and self._conversation_retriever:
+            ctx = self._conversation_retriever.retrieve(ctx)
+            logger.info(f"Step 0 대화 이력: session_id={ctx.session_id}, turn={ctx.turn_number}, history={len(ctx.conversation_history)}건")
 
         # Step 1: 의도 분류
         ctx.intent = self._intent_classifier.classify(question)
@@ -170,7 +186,10 @@ class QueryPipeline:
             return ctx
 
         # Step 2: 질문 정제
-        ctx.refined_question = self._question_refiner.refine(question)
+        ctx.refined_question = self._question_refiner.refine(
+            question,
+            conversation_history=ctx.conversation_history if MULTI_TURN_ENABLED else None,
+        )
         logger.info(f"Step 2 정제된 질문: {ctx.refined_question}")
 
         # Step 3: 키워드 추출
@@ -194,6 +213,7 @@ class QueryPipeline:
             ctx.generated_sql = self._sql_generator.generate(
                 question=ctx.refined_question,
                 rag_context=ctx.rag_context,
+                conversation_history=ctx.conversation_history if MULTI_TURN_ENABLED else None,
             )
         except SQLGenerationError as e:
             logger.error(f"Step 5 SQL 생성 실패: {e}")
