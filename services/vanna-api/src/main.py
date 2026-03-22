@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import time
+from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 
@@ -243,6 +244,7 @@ async def _run_pipeline_async(
                 "redash_url": ctx.redash_url,
                 "redash_query_id": ctx.redash_query_id,
                 "execution_path": ctx.query_results.execution_path if ctx.query_results else "unknown",
+                "elapsed_seconds": round((datetime.utcnow() - ctx.started_at).total_seconds(), 2),
             }
             async_manager.update_status(task_id, AsyncTaskStatus.COMPLETED, result=result)
     except Exception as e:

@@ -184,6 +184,31 @@
 
 ---
 
+### TC-ST-16: 이미지 파일이 스레드에 업로드됨 (BUG-04)
+
+| 항목 | 내용 |
+|------|------|
+| **목적** | `files_upload_v2()` 호출 시 `thread_ts` 파라미터 포함 — 이미지가 메인 채널이 아닌 스레드에 올라가야 함 |
+| **발견 경위** | `files_upload_v2`에 `thread_ts` 누락 → 이미지가 메인 채널에 올라가 스레드에서 안 보임 |
+| **사전 조건** | `chart_image_base64` 있는 vanna-api 응답, `SLACK_THREAD_ENABLED=true` |
+| **테스트 입력** | `result["chart_image_base64"] = base64("fake_image")` |
+| **기대 결과** | `client.files_upload_v2(channel=..., thread_ts="EVENT_TS_111111.222222", ...)` 호출 |
+| **검증 코드** | `assert upload_kwargs.get("thread_ts") == "EVENT_TS_111111.222222"` |
+
+---
+
+### TC-ST-17: elapsed 블록이 피드백 버튼보다 앞에 위치 (BUG-05)
+
+| 항목 | 내용 |
+|------|------|
+| **목적** | `_build_footer_blocks()`에서 elapsed 블록이 actions(피드백 버튼) 블록보다 앞에 위치해야 Slack 간략히보기에서 잘리지 않음 |
+| **발견 경위** | elapsed 블록이 footer 맨 뒤에 위치 → Slack이 메시지를 접을 때 elapsed가 잘림 |
+| **사전 조건** | `elapsed_seconds=2.5`, `query_id="hist-test-001"` 있는 정상 응답 |
+| **기대 결과** | footer blocks 내에서 elapsed section 블록 인덱스 < actions 블록 인덱스 |
+| **검증 코드** | `assert elapsed_idx < actions_idx` |
+
+---
+
 ## 3. 테스트 실행 방법
 
 ```bash
@@ -198,6 +223,6 @@ python -m pytest tests/unit/test_slack_thread.py -v
 
 | 기준 | 목표 |
 |------|------|
-| **전체 Pass율** | 13/13 (100%) |
+| **전체 Pass율** | 16/16 (100%) |
 | **FAIL 허용** | 0건 |
 | **Mock 의존도** | vanna-api 완전 Mock (독립 실행 가능) |

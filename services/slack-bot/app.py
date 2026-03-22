@@ -139,6 +139,11 @@ def _build_footer_blocks(result: dict) -> list:
     redash_url = result.get("redash_url")
     history_id = result.get("query_id", "")
     elapsed = result.get("elapsed_seconds")
+    if elapsed is not None:
+        try:
+            elapsed = float(elapsed)
+        except (ValueError, TypeError):
+            elapsed = None
 
     blocks = []
 
@@ -146,16 +151,16 @@ def _build_footer_blocks(result: dict) -> list:
     if answer:
         blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"🤖 *AI 분석:*\n{answer}"}})
 
-    # 처리 시간 — answer 유무와 독립적으로 표시 (BUG-02)
-    if elapsed:
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"⏱ 처리 시간: {elapsed:.2f}초"}})
-
     # Redash 링크
     if redash_url:
         blocks.append({
             "type": "section",
             "text": {"type": "mrkdwn", "text": f"🔗 <{redash_url}|Redash에서 전체 결과 보기>"},
         })
+
+    # 처리 시간 — Redash 링크와 피드백 버튼 사이에 표시
+    if elapsed:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"⏱ 처리 시간: {elapsed:.2f}초"}})
 
     # 피드백 버튼
     if history_id:
@@ -210,12 +215,11 @@ def handle_mention(event, say, client):
 
     # 3. 기본: Vanna AI 자연어 질의
 
-    # [FR-24-01] Feature Flag: 스레드 루트 생성 또는 채널 메시지
+    # [FR-24-01] Feature Flag: 스레드 답글 또는 채널 메시지
+    # [BUG-03] event["ts"](사용자 원본 메시지 ts)를 thread_ts로 사용 → 사용자 메시지에 스레드 열림
     thread_ts = None
     if SLACK_THREAD_ENABLED:
-        thread_response = say(text="🔄 처리 중...")
-        # SlackResponse는 dict가 아니므로 isinstance 대신 .get() 직접 사용 (BUG-01)
-        thread_ts = thread_response.get("ts") if thread_response else None
+        thread_ts = event.get("ts")
     else:
         say(f"🔍 <@{user}>님의 질문을 분석 중입니다...")
 
@@ -298,6 +302,7 @@ def handle_mention(event, say, client):
                 image_bytes = base64.b64decode(chart_base64)
                 upload_resp = client.files_upload_v2(
                     channel=channel_id,
+                    thread_ts=thread_ts,  # [BUG-04] 스레드에 이미지 업로드
                     content=image_bytes,
                     filename="chart.png",
                     title="분석 차트",
@@ -319,15 +324,6 @@ def handle_mention(event, say, client):
 
         # ③ AI 분석 + Redash 링크 + 피드백 버튼 (차트 업로드 완료 후)
         say(blocks=_build_footer_blocks(result), thread_ts=thread_ts)
-
-        # [FR-24-04] 루트 메시지 업데이트 (처리 완료 표시)
-        if thread_ts:
-            question_summary = text[:30] + "..." if len(text) > 30 else text
-            client.chat_update(
-                channel=channel_id,
-                ts=thread_ts,
-                text=f"✅ 완료: {question_summary}",
-            )
 
     except requests.Timeout:
         logger.error(f"vanna-api 타임아웃 ({VANNA_API_TIMEOUT}초)")

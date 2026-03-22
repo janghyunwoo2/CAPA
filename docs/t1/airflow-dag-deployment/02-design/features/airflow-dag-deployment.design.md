@@ -390,6 +390,7 @@ aws ecr create-repository `
 | 신규/수정 | `services/report-generator/t3_report_generator/requirements.txt` | Python 의존성 |
 | 신규 생성 | `services/airflow-dags/t3_report_generator_v3.py` | DAG (KubernetesPodOperator 버전) |
 | 수동 생성 | K8s Secret `t3-report-secret` in `airflow` namespace | K8s 리소스 |
+| 수정 | `infrastructure/helm-values/airflow.yaml` | Helm Values (extraEnvFrom 추가) |
 
 ---
 

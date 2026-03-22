@@ -66,6 +66,7 @@ def mock_event():
         "text": "지난달 신규 가입자 수 알려줘",
         "user": "U_TEST_USER",
         "channel": "C_TEST_CHANNEL",
+        "ts": "EVENT_TS_111111.222222",  # BUG-03: 사용자 원본 메시지 ts (스레드 기준점)
     }
 
 
