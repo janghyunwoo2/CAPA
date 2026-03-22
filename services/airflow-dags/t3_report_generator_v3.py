@@ -12,9 +12,9 @@ from airflow import DAG
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
 from kubernetes.client import V1EnvFromSource, V1SecretEnvSource
 
-ECR_IMAGE = "827913617635.dkr.ecr.ap-northeast-2.amazonaws.com/capa-t3-report-generator:latest"
+ECR_IMAGE = "827913617635.dkr.ecr.ap-northeast-2.amazonaws.com/capa/airflow-kpo-t3-report:latest"
 NAMESPACE = "airflow"
-SA_NAME = "airflow-sa"
+SA_NAME = "airflow-scheduler"
 
 # K8s Secret에서 환경변수 일괄 주입
 env_from = [
