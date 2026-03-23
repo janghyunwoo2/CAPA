@@ -18,19 +18,30 @@ app = FastAPI(
 
 # 환경 변수 로드
 AWS_REGION = os.getenv("AWS_REGION", "ap-northeast-2")
-ATHENA_DATABASE = os.getenv("ATHENA_DATABASE", "capa_db")
+ATHENA_DATABASE = os.getenv("GLUE_DATABASE") or os.getenv("ATHENA_DATABASE", "capa_db")
+GLUE_TABLE = os.getenv("GLUE_TABLE", "ad_combined_log_summary")
+
+# Athena 결과 저장 경로 (ATHENA_S3_OUTPUT 우선, 없을 경우 REPORT_S3_BUCKET 기반 생성)
+ATHENA_S3_OUTPUT = os.getenv("ATHENA_S3_OUTPUT")
 REPORT_S3_BUCKET = os.getenv("REPORT_S3_BUCKET")
-S3_STAGING_DIR = f"s3://{REPORT_S3_BUCKET}/athena-results/"
+
+if ATHENA_S3_OUTPUT:
+    S3_STAGING_DIR = ATHENA_S3_OUTPUT
+elif REPORT_S3_BUCKET:
+    S3_STAGING_DIR = f"s3://{REPORT_S3_BUCKET}/athena-results/"
+else:
+    S3_STAGING_DIR = None
+
 VANNA_API_URL = os.getenv(
     "VANNA_API_URL", "http://vanna-api.vanna.svc.cluster.local:8000"
 )
 
 # Athena 클라이언트 초기화
 athena = None
-if REPORT_S3_BUCKET:
+if S3_STAGING_DIR:
     athena = AthenaClient(ATHENA_DATABASE, S3_STAGING_DIR, AWS_REGION)
 else:
-    logger.warning("REPORT_S3_BUCKET not set. Athena queries will fail.")
+    logger.warning("Neither ATHENA_S3_OUTPUT nor REPORT_S3_BUCKET is set. Athena queries will fail.")
 
 
 def generate_report_task(report_type: str, target_date: str = None):
@@ -58,10 +69,10 @@ def generate_report_task(report_type: str, target_date: str = None):
 
         query = f"""
         SELECT 
-            COUNT(CASE WHEN event_type = 'impression' THEN 1 END) as impressions,
-            COUNT(CASE WHEN event_type = 'click' THEN 1 END) as clicks,
-            SUM(bid_price) as total_revenue
-        FROM ad_events_raw
+            COUNT(DISTINCT impression_id) as impressions,
+            SUM(CASE WHEN is_click = TRUE THEN 1 ELSE 0 END) as clicks,
+            SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) as total_revenue
+        FROM {ATHENA_DATABASE}.{GLUE_TABLE}
         WHERE year = '{year}' AND month = '{month}' AND day = '{day}'
         """
 

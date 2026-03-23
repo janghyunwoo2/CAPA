@@ -244,6 +244,8 @@ uv.lock
 pyproject.toml
 **/logs/
 
+# Serena (AI Workspace)
+.serena/
 # Claude Code 설정 (토큰 포함)
 .claude/mcp.json
 .claude/settings.local.json

@@ -205,12 +205,32 @@ def send_final_notification(report_types: list[str], date_str: str = None) -> bo
 
 if __name__ == "__main__":
     # 사용법:
-    #   python main.py 2026-03-17 daily
-    #   python main.py 2026-03-17 weekly
-    #   python main.py 2026-03-17 monthly
+    #   python main.py 2026-03-23 daily
+    #   python main.py 2026-03-23 weekly --only-upload
+    #   python main.py 2026-03-23 notify (일간/주간/월간 여부를 날짜 기준으로 자동 판단하여 통합알림)
 
+    import sys
+    
     date_arg = sys.argv[1] if len(sys.argv) > 1 else None
     type_arg = sys.argv[2] if len(sys.argv) > 2 else "daily"
+    # 세 번째 인자에 --only-upload가 있는지 확인
+    only_upload = "--only-upload" in sys.argv
+
+    if type_arg == "notify":
+        # 알림 로직: 날짜를 기준으로 어떤 리포트가 생성되어야 하는지 판단하여 통합 알림 발송
+        date = _parse_date(date_arg)
+        reports = ["daily"]
+        if date.weekday() == 0:  # 월요일
+            reports.append("weekly")
+        if date.day == 3:       # 3일
+            reports.append("monthly")
+        
+        logger.info(f"통합 알림 발송 시도: {reports} (기준일: {date.strftime('%Y-%m-%d')})")
+        if send_final_notification(reports, date_arg):
+            logger.info("통합 알림 전송 성공")
+        else:
+            logger.info("통합 알림 전송 실패")
+        sys.exit(0)
 
     dispatch = {
         "daily": generate_daily_report,
@@ -219,16 +239,18 @@ if __name__ == "__main__":
     }
 
     if type_arg not in dispatch:
-        print(f"[오류] 알 수 없는 타입: {type_arg} (daily/weekly/monthly 중 선택)", file=sys.stderr)
+        print(f"[오류] 알 수 없는 타입: {type_arg} (daily/weekly/monthly/notify 중 선택)", file=sys.stderr)
         sys.exit(1)
 
-    result = dispatch[type_arg](date_arg)
+    result = dispatch[type_arg](date_arg, only_upload=only_upload)
 
     if result["status"] == "success":
         try:
-            print(result["markdown"])
-        except UnicodeEncodeError:
-            print("[보고서 출력 중 인코딩 에러 - 파일로는 정상 저장됨]")
+            # 마크다운 내용 출력 (로그용)
+            # print(result["markdown"]) 
+            pass
+        except:
+            pass
     else:
         print(f"Error: {result['error']}", file=sys.stderr)
         sys.exit(1)

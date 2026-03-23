@@ -54,11 +54,17 @@ def send_report_to_slack(pdf_path: str, report_date: str = None, report_type: st
             title = f"PDF - {label} ({report_date if report_date else ''})"
             comment = None
         elif report_date:
+            dashboard_url = os.getenv("FIXED_DASHBOARD_URL", "")
             title = f"CAPA 광고 성과 보고서 - [{label}] ({report_date})"
             comment = f"{emoji} [{label}] {report_date} 보고서 생성 완료"
+            if dashboard_url:
+                comment += f"\n🔗 *대시보드*: {dashboard_url}"
         else:
+            dashboard_url = os.getenv("FIXED_DASHBOARD_URL", "")
             title = f"CAPA 광고 성과 보고서 - [{label}]"
             comment = f"{emoji} [{label}] 보고서 생성 완료"
+            if dashboard_url:
+                comment += f"\n🔗 *대시보드*: {dashboard_url}"
 
         # PDF 파일 업로드
         slack_app.client.files_upload_v2(
