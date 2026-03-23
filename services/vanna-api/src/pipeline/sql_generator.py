@@ -104,11 +104,33 @@ class SQLGenerator:
                         + "\n</history>\n"
                     )
 
-            # [FR-PE-02, FR-PE-03] CoT + 구조화 날짜 규칙 + history 주입
-            prompt = f"{schema}\n{date_rules}\n{history_block}{cot_template}\n질문: {question}"
+            # [FR-12] Phase 2 RAG 컨텍스트 주입 (rag_context 제공 시)
+            rag_block = ""
+            if rag_context:
+                sections: list[str] = []
+                if rag_context.ddl_context:
+                    sections.append("<ddl>\n" + "\n".join(rag_context.ddl_context) + "\n</ddl>")
+                if rag_context.documentation_context:
+                    sections.append("<documentation>\n" + "\n".join(rag_context.documentation_context) + "\n</documentation>")
+                if rag_context.sql_examples:
+                    sections.append("<sql_examples>\n" + "\n".join(rag_context.sql_examples) + "\n</sql_examples>")
+                if sections:
+                    rag_block = "<rag_context>\n" + "\n".join(sections) + "\n</rag_context>\n"
+                    logger.info(f"RAG 컨텍스트 주입: DDL {len(rag_context.ddl_context)}건, Docs {len(rag_context.documentation_context)}건, SQL {len(rag_context.sql_examples)}건")
+
+            # [FR-PE-02, FR-PE-03] CoT + 구조화 날짜 규칙 + RAG 컨텍스트 + history 주입
+            prompt = f"{schema}\n{date_rules}\n{rag_block}{history_block}{cot_template}\n질문: {question}"
 
             with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(self._vanna.generate_sql, question=prompt)
+                if rag_context:
+                    # Phase 2: rag_context 주입 후 Claude 직접 호출 (Vanna 내부 RAG 중복 우회)
+                    future = executor.submit(
+                        self._vanna.submit_prompt,
+                        [{"role": "user", "content": prompt}],
+                    )
+                else:
+                    # Phase 1 하위 호환: Vanna 내부 RAG + Claude
+                    future = executor.submit(self._vanna.generate_sql, question=prompt)
                 try:
                     sql = future.result(timeout=LLM_TIMEOUT_SECONDS)
                 except FuturesTimeoutError:
