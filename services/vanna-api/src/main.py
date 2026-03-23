@@ -261,7 +261,7 @@ async def _run_pipeline_async(
 async def query_natural_language(
     request: QueryRequest,
     background_tasks: BackgroundTasks,
-) -> dict:
+) -> NewQueryResponse:
     """자연어 질의 → 파이프라인 실행.
 
     ASYNC_QUERY_ENABLED=true: 202 Accepted + task_id 즉시 반환 (BackgroundTasks)
