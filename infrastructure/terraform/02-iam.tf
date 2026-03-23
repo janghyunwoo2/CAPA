@@ -352,6 +352,7 @@ resource "aws_iam_policy" "redash_athena" {
           "glue:GetTable",
           "glue:GetPartitions",
           "glue:GetDatabase",
+          "glue:GetDatabases",
           "s3:GetBucketLocation",
           "s3:GetObject",
           "s3:ListBucket",

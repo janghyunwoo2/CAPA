@@ -1,0 +1,68 @@
+services:
+  # ==============================================================================
+  # ChromaDB - 벡터 데이터베이스 (실제 통합 테스트용)
+  # ==============================================================================
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: capa-chromadb-phase2
+    ports:
+      - "8001:8000"
+    environment:
+      - ANONYMIZED_TELEMETRY=false
+    networks:
+      - capa-network
+
+  # ==============================================================================
+  # vanna-api - 통합 테스트 실행 컨테이너
+  # 프로덕션 Dockerfile 그대로 사용 (EKS와 동일 환경)
+  # ==============================================================================
+  vanna-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: capa-vanna-api-phase2
+    ports:
+      - "8000:8000"
+    environment:
+      # Anthropic API (실제 LLM 호출)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+
+      # 내부 인증
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN:-test-token}
+
+      # ChromaDB 연결 (실제 ChromaDB 컨테이너)
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+
+      # AWS (Athena는 moto mock 사용)
+      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
+      - ATHENA_DATABASE=${ATHENA_DATABASE:-capa_db}
+      - ATHENA_WORKGROUP=${ATHENA_WORKGROUP:-primary}
+      - S3_STAGING_DIR=${ATHENA_OUTPUT_LOCATION:-s3://test-bucket/results/}
+
+      # Redash 비활성화 (통합 테스트에서는 Athena fallback 사용)
+      - REDASH_ENABLED=false
+
+      - PYTHONUNBUFFERED=1
+
+    volumes:
+      - ./src:/app/src       # 최신 src/ 코드 실시간 반영
+      - ./tests:/app/tests   # 테스트 파일 실시간 반영
+      - ./scripts:/app/scripts
+
+    depends_on:
+      - chromadb
+    networks:
+      - capa-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+networks:
+  capa-network:
+    driver: bridge

@@ -1,12 +1,23 @@
 fastapi==0.115.9
 uvicorn[standard]
-vanna==0.7.9
 chromadb==1.0.10
 
-anthropic
+anthropic>=0.40.0
 boto3
-pydantic
+pydantic>=2.0
 pydantic-settings
 # pyarrow는 필요한 경우에만 설치 (Athena)
 pyarrow
+
+# Text-to-SQL 기능 추가
+sqlglot
+sqlparse
+httpx
+respx
+vanna[anthropic]==0.7.9
+matplotlib
+pandas
+
+# Phase 2: Cross-Encoder Reranker (§3.3)
+sentence-transformers>=2.6.1
 

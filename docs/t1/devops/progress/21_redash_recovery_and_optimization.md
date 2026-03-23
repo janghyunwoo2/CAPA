@@ -11,6 +11,7 @@
 | **2단계** | **레거시 인증 정보 클리닝** | ✅ 완료 | 2026-02-23 | `redash-redis` Secret 수동 삭제 (인증 동기화) |
 | **3단계** | **부팅 병목 최적화 (Burst)** | ✅ 완료 | 2026-02-23 | Server CPU Limit 1000m 상향 및 Probe 완화 |
 | **4단계** | **클린 재설치 및 DB 초기화** | ✅ 완료 | 2026-02-23 | `terraform replace`를 통한 스키마 재생성 확인 |
+| **5단계** | **Athena 연결 장애 해결** | ✅ 완료 | 2026-03-04 | 설정값 특수문자 제거, 타임아웃 및 워커 메모리 최적화 |
 | **5단계** | **E2E 서비스 가용성 확인** | ✅ 완료 | 2026-02-23 | Redash 접속 및 `/ping` 헬스체크 200 OK 달성 |
 
 ---
@@ -58,6 +59,29 @@ terraform apply -replace="helm_release.redash" -auto-approve
   [metrics] method=GET path=/ping status=200 duration=0.25ms
   ```
 - **접속 확인**: 외부 로드밸런서를 통한 리대시 메인 로그인 화면 정상 호출 확인.
+
+---
+
+## 🛠️ [4단계] Athena 데이터 소스 연결 장애 해결 (2026-03-04)
+
+서버 정상 부팅 이후, Athena 데이터 소스 연결 시 발생하던 `Unknown error occurred` 장애를 해결하기 위해 다각도로 튜닝을 진행했습니다.
+
+### 1) 데이터 소스 설정값 내 숨겨진 특수문자 제거(근본원인 아님)
+- **현상**: 모든 설정이 올바름에도 연결 테스트 실패.
+- **원인**: AWS Region(`ap-northeast-2`) 및 Work Group(`capa-workgroup`) 필드 끝에 **Zero-Width Space(`\u200b`)**가 포함되어 Athena API 호출 시 잘못된 파라미터로 인식됨.
+- **해결**: 데이터 소스 설정을 직접 수정하여 보이지 않는 특수문자를 제거함.
+
+### 2) Gunicorn 및 RQ Job 타임아웃 확장
+- **현상**: 연결 테스트가 약 30초 후 응답 없이 종료됨.
+- **원인**: Athena 초기 연결 및 메타데이터 조회 시간이 Gunicorn 기본 타임아웃(30s)을 초과함.
+- **해결**: `REDASH_GUNICORN_TIMEOUT` 환경변수를 **120**으로 상향하여 원활한 데이터 조회를 보장함.
+
+### 3) Worker 리소스 최적화 및 OOM 해결
+- **현상**: 연결 테스트 요청 시 Worker(adhoc) 프로세스가 반복적으로 `SIGKILL` 됨.
+- **원인**: 쌓여있는 큐(40+개)를 한꺼번에 처리하는 과정에서 메모리 사용량이 기존 Limit(256Mi)을 초과하여 OOM 발생.
+- **해결**:
+  - **메모리 상향**: Worker(adhoc, scheduled, generic)의 Limit을 **512Mi**로 상향.
+  - **큐 클리닝**: Redis에 적체된 오래된 작업(`queries`, `default`, `schemas` 큐)을 수동으로 삭제하여 워커 부하 경감.
 
 ---
 

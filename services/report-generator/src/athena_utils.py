@@ -20,6 +20,7 @@ class AthenaClient:
             QueryString=sql,
             QueryExecutionContext={"Database": self.database},
             ResultConfiguration={"OutputLocation": self.s3_staging_dir},
+            WorkGroup='primary'  # primary 워크그룹 사용 (테라폼 워크그룹 설정 무시)
         )
         query_execution_id = response["QueryExecutionId"]
 
