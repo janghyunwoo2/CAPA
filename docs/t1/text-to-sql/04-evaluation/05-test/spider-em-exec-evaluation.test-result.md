@@ -406,6 +406,39 @@ REDASH_BASE_URL=http://localhost:5000
 
 ---
 
+---
+
+## 3차 작업: Reranker 모델 교체 (2026-03-23)
+
+### 변경 배경
+
+Spider 평가 E2E 실행 결과 **EM/Exec 모두 0%** 확인. 원인 추적 결과:
+
+| 단계 | 원인 | 조치 |
+|------|------|------|
+| ChromaDB DDL 미저장 | `train(ddl=..., documentation=...)` 동시 호출 시 Vanna 내부 early return 버그 | `train()` 분리 호출로 수정 (seed_chromadb.py) |
+| DDL이 LLM에 미전달 | Step 4-2 Reranker가 DDL을 저평가 → Step 4-3 LLM 필터가 제거 | Reranker 모델 교체 |
+
+### Reranker 모델 교체
+
+| 항목 | 변경 전 | 변경 후 |
+|------|---------|---------|
+| 모델 | `cross-encoder/ms-marco-MiniLM-L-6-v2` | `jinaai/jina-reranker-v2-base-multilingual` |
+| 훈련 데이터 | MS MARCO (Bing 웹 검색) | SQL-aware 다국어 |
+| DDL 평가 | 웹 문서 관련성 기준 → DDL 저평가 | TableSearch recall@3: 93.31% |
+| 라이선스 | Apache 2.0 | CC-BY-NC-4.0 (내부 사용 가능) |
+| trust_remote_code | 불필요 | `True` 필요 |
+
+### 수정 파일
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `services/vanna-api/src/pipeline/reranker.py` | `RERANKER_MODEL` 상수 변경 + `trust_remote_code=True` 추가 |
+| `services/vanna-api/Dockerfile` | Jina 모델 빌드 시 사전 다운로드 RUN 추가 |
+| `docs/.../phase-2-text-to-sql-rag.design.md` | §3.5, §3.1, §11 Decision Log 업데이트 |
+
+---
+
 ## 다음 단계
 
 ✅ **완료**:
