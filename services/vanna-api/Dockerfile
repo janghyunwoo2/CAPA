@@ -23,6 +23,11 @@ RUN pip install --upgrade pip && \
 RUN python -c "from sentence_transformers import SentenceTransformer; \
     SentenceTransformer('jhgan/ko-sroberta-multitask')"
 
+# Reranker 모델 사전 다운로드 (jinaai/jina-reranker-v2-base-multilingual)
+# SQL-aware 다국어 Reranker — TableSearch recall@3: 93.31%
+RUN python -c "from sentence_transformers import CrossEncoder; \
+    CrossEncoder('jinaai/jina-reranker-v2-base-multilingual', trust_remote_code=True)"
+
 
 
 # 애플리케이션 코드 복사 (src/ 를 패키지 구조로 유지 — relative import 정상 동작)

@@ -11,7 +11,7 @@ from ..models.rag import CandidateDocument
 
 logger = logging.getLogger(__name__)
 
-RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+RERANKER_MODEL = "jinaai/jina-reranker-v2-base-multilingual"
 
 
 class CrossEncoderReranker:
@@ -22,7 +22,7 @@ class CrossEncoderReranker:
         self._model_name = model_name
         try:
             from sentence_transformers import CrossEncoder
-            self._model = CrossEncoder(model_name)
+            self._model = CrossEncoder(model_name, trust_remote_code=True)
             logger.info(f"Reranker 모델 로드 완료: {model_name}")
         except Exception as e:
             logger.warning(f"Reranker 모델 로드 실패 (Step 4-2 스킵): {e}")
