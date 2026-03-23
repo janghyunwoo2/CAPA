@@ -118,35 +118,63 @@ class ExecutionValidator:
             }
             또는 None (실패 시)
         """
+        import hashlib
+        import time as _time
         try:
             # 1. 임시 쿼리 생성
+            query_name = f"eval_{hashlib.md5(sql.encode()).hexdigest()[:8]}"
             create_resp = requests.post(
                 f"{self._base_url}/api/queries",
                 headers=self._headers,
-                json={"query": sql, "data_source_id": 1},  # Athena
+                json={"query": sql, "data_source_id": 1, "name": query_name},
                 timeout=timeout_seconds
             )
             if create_resp.status_code != 200:
                 logger.error(f"쿼리 생성 실패: {create_resp.text}")
                 return None
-
             query_id = create_resp.json()["id"]
 
-            # 2. 쿼리 실행
+            # 2. 쿼리 실행 (job 반환)
             refresh_resp = requests.post(
                 f"{self._base_url}/api/queries/{query_id}/refresh",
                 headers=self._headers,
                 timeout=timeout_seconds
             )
             if refresh_resp.status_code != 200:
-                logger.error(f"쿼리 실행 실패: {refresh_resp.text}")
+                logger.error(f"쿼리 실행 요청 실패: {refresh_resp.text}")
+                return None
+            job_id = refresh_resp.json().get("job", {}).get("id")
+            if not job_id:
+                logger.error("job_id 없음")
                 return None
 
-            query_hash = refresh_resp.json().get("query_hash")
+            # 3. Job 폴링 (status: 1=PENDING, 2=STARTED, 3=SUCCESS, 4=FAILURE)
+            query_result_id = None
+            for _ in range(timeout_seconds):
+                _time.sleep(1)
+                job_resp = requests.get(
+                    f"{self._base_url}/api/jobs/{job_id}",
+                    headers=self._headers,
+                    timeout=10
+                )
+                if job_resp.status_code != 200:
+                    continue
+                job = job_resp.json().get("job", {})
+                status = job.get("status")
+                if status == 3:  # SUCCESS
+                    query_result_id = job.get("query_result_id")
+                    break
+                elif status == 4:  # FAILURE
+                    logger.warning(f"Athena 실행 실패: {job.get('error', '')[:100]}")
+                    return None
 
-            # 3. 결과 조회
+            if not query_result_id:
+                logger.error("query_result_id 없음 (타임아웃)")
+                return None
+
+            # 4. 결과 조회
             result_resp = requests.get(
-                f"{self._base_url}/api/query_results/{query_hash}",
+                f"{self._base_url}/api/query_results/{query_result_id}",
                 headers=self._headers,
                 timeout=timeout_seconds
             )
@@ -157,12 +185,7 @@ class ExecutionValidator:
             data = result_resp.json().get("query_result", {}).get("data", {})
             rows = data.get("rows", [])
             columns = [col.get("name") for col in data.get("columns", [])]
-
-            return {
-                "rows": rows,
-                "row_count": len(rows),
-                "columns": columns
-            }
+            return {"rows": rows, "row_count": len(rows), "columns": columns}
 
         except (requests.Timeout, TimeoutError, FuturesTimeoutError) as e:
             logger.error(f"SQL 실행 타임아웃: {e}")

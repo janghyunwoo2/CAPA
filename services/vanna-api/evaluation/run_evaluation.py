@@ -49,14 +49,20 @@ class _SQLGeneratorAdapter:
 
     def generate_sql(self, question: str) -> str:
         """
-        POST /query 로 SQL 생성 요청.
-        execute=false → SQL만 생성, Redash/Athena 실행은 건너뜀.
+        POST /query (Step 1~9 전체 실행) 후 sql 필드 반환.
+        - 200 성공: sql 필드 직접 반환
+        - REDASH_ERROR: 생성된 SQL은 성공했으나 Athena 실행 실패 (컬럼 오류 등)
+          → EM 평가는 가능하도록 detail에서 SQL 추출, Exec는 0점 처리됨
         """
+        import re as _re
+        token = os.getenv("INTERNAL_API_TOKEN", "test-token")
+        headers = {"X-Internal-Token": token}
         try:
             resp = requests.post(
                 self._url,
-                json={"question": question, "execute": False},
-                timeout=60,
+                json={"question": question},
+                headers=headers,
+                timeout=120,
             )
             resp.raise_for_status()
             sql = resp.json().get("sql", "")
@@ -64,10 +70,24 @@ class _SQLGeneratorAdapter:
                 logger.warning(f"SQL 미반환: question={question[:50]}")
             return sql or ""
         except requests.HTTPError as e:
+            # REDASH_ERROR: Athena 실행 실패지만 SQL은 생성됨 → EM용으로 추출
+            if e.response.status_code in (422, 500):
+                try:
+                    detail = e.response.json().get("detail", {})
+                    if isinstance(detail, dict):
+                        sql = detail.get("detail", "")
+                        if sql:
+                            sql = _re.sub(r"^```(?:sql)?\s*\n?", "", sql, flags=_re.IGNORECASE)
+                            sql = _re.sub(r"\n?```\s*$", "", sql).strip()
+                            if sql:
+                                logger.info(f"SQL 추출 ({detail.get('error_code')}): {question[:50]}")
+                                return sql
+                except Exception:
+                    pass
             logger.error(f"API 오류 ({e.response.status_code}): {e.response.text[:200]}")
             raise
         except requests.Timeout:
-            logger.error("API 타임아웃 (60초 초과)")
+            logger.error("API 타임아웃 (120초 초과)")
             raise
 
 

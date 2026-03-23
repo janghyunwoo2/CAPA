@@ -1,0 +1,494 @@
+{
+  "total_cases": 60,
+  "em": {
+    "passed": 0,
+    "accuracy": 0.0
+  },
+  "exec": {
+    "passed": 0,
+    "accuracy": 0.0
+  },
+  "average": 0.0,
+  "details": [
+    {
+      "test_id": "T001",
+      "question": "2026년 3월 14일 캠페인별 CTR을 내림차순으로 보여줘",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T002",
+      "question": "2026년 3월 13일 모바일 기기의 총 impression 수",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T003",
+      "question": "2026년 3월 14일 전환이 발생한 광고 수",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T004",
+      "question": "2026년 3월 14일 캠페인별 CVR(전환율) 상위 5개",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T005",
+      "question": "2026년 3월 14일 광고주별 총 광고비",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T006",
+      "question": "2026년 3월 14일 클릭당 비용(CPC)이 가장 낮은 캠페인 TOP 5",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T007",
+      "question": "2026년 3월 14일 지역별 impression 수",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T008",
+      "question": "2026년 3월 14일 디바이스 타입별 클릭 수",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T009",
+      "question": "2026년 3월 14일 총 전환 매출",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T010",
+      "question": "2026년 3월 14일 09시 시간대 impression 수",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T011",
+      "question": "2026년 3월 14일 플랫폼별 CTR",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T012",
+      "question": "2026년 3월 14일 전환 타입별 건수",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T013",
+      "question": "2026년 3월 14일 광고 형식별 impression 수",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T014",
+      "question": "2026년 3월 14일 캠페인별 ROAS(광고비 대비 매출)",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T015",
+      "question": "2026년 3월 한 달 전체 캠페인별 총 impression",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T016",
+      "question": "2026년 3월 14일 서울 지역 클릭 수",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T017",
+      "question": "2026년 3월 14일 iOS 앱 플랫폼 impression 수",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T018",
+      "question": "2026년 3월 14일 구매(purchase) 전환 총 매출",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T019",
+      "question": "2026년 3월 14일 시간대별 클릭 수 추이",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T020",
+      "question": "2026년 3월 14일 광고주별 CPA(전환당 비용)",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T021",
+      "question": "2026년 3월 14일 전체 광고 노출수, 클릭수, 전환수, CTR을 한 번에 보여줘",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T022",
+      "question": "2026년 3월 14일 캠페인별 노출수, 클릭수, 전환수, CTR, CVR을 모두 보여줘",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T023",
+      "question": "2026년 3월 14일 음식 카테고리별 CTR 상위 10개",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T024",
+      "question": "2026년 3월 14일 광고 위치별 클릭수와 전환수",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T025",
+      "question": "2026년 3월 14일 운영체제별 impression 수와 CTR",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T026",
+      "question": "2026년 3월 14일 클릭은 있지만 전환이 없는 캠페인 목록",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T027",
+      "question": "2026년 3월 14일 광고주별 노출수, 총 광고비, 전환 매출, ROAS를 한 번에 보여줘",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T028",
+      "question": "2026년 3월 14일 기기 타입과 플랫폼 조합별 impression 수",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T029",
+      "question": "2026년 3월 14일 오전(00~11시)과 오후(12~23시) 클릭 수 비교",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T030",
+      "question": "2026년 3월 14일 전환 타입별 총 매출과 평균 전환 가치",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T031",
+      "question": "2026년 3월 14일 검색 키워드별 클릭수 상위 10개",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T032",
+      "question": "2026년 3월 14일 가게별 전환 매출 상위 5개",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T033",
+      "question": "2026년 3월 14일 지역별 노출수, CTR, 전환수를 한 번에 보여줘",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T034",
+      "question": "2026년 3월 14일 광고 형식별 CTR과 CVR을 비교해줘",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T035",
+      "question": "2026년 3월 14일 시간대별 impression 수와 클릭수 추이",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T036",
+      "question": "2026년 3월 8일부터 14일까지 7일간 일별 impression 수 추이",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T037",
+      "question": "2026년 3월 8일부터 14일까지 7일간 일별 클릭수와 CTR 추이",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T038",
+      "question": "2026년 3월 8일부터 14일까지 7일간 캠페인별 총 impression 합계",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T039",
+      "question": "2026년 3월 8일부터 14일까지 7일간 기기 타입별 일별 클릭 수",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T040",
+      "question": "2026년 3월 8일부터 14일까지 7일간 광고주별 총 전환 매출",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T041",
+      "question": "2026년 3월 8일부터 14일까지 7일간 플랫폼별 impression 합계",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T042",
+      "question": "2026년 3월 8일부터 14일까지 7일간 광고 형식별 클릭수 합계",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T043",
+      "question": "2026년 3월 8일부터 14일까지 7일간 전환 타입별 총 매출",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T044",
+      "question": "2026년 3월 8일부터 14일까지 7일간 캠페인별 일별 평균 CTR",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T045",
+      "question": "2026년 3월 8일부터 14일까지 7일간 지역별 전환수 합계",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T046",
+      "question": "2026년 3월 전체 광고 노출수, 클릭수, 전환수, CTR 요약",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T047",
+      "question": "2026년 3월 캠페인별 전환수 순위 TOP 20",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T048",
+      "question": "2026년 3월 기기 타입별 노출수, 클릭수, 전환수 비교",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T049",
+      "question": "2026년 3월 일별 impression 추이 (월 전체)",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T050",
+      "question": "2026년 3월 음식 카테고리별 노출수와 전환수 상위 10개",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T051",
+      "question": "2026년 3월 광고주별 ROAS 순위",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T052",
+      "question": "2026년 3월 플랫폼별 일별 impression 추이",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T053",
+      "question": "2026년 3월 OS별 클릭수와 전환수",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T054",
+      "question": "2026년 3월 광고 위치별 전환율(CVR)",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T055",
+      "question": "2026년 3월 전체 시간대별 총 impression 합계 (hourly 테이블 기준)",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T056",
+      "question": "2026년 3월 14일 전체 평균 CTR보다 높은 캠페인 목록",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T057",
+      "question": "2026년 3월 14일 impression이 가장 많은 피크 시간대",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T058",
+      "question": "2026년 3월 14일 CTR 상위 10개 캠페인의 광고 형식 분포",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T059",
+      "question": "2026년 3월 14일 purchase 전환이 발생한 캠페인의 평균 CPA",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    },
+    {
+      "test_id": "T060",
+      "question": "2026년 3월 8일부터 14일까지 7일간 캠페인별 전환 매출 합계와 총 광고비 합계, ROAS",
+      "em": 0.0,
+      "exec": 0.0,
+      "avg": 0.0,
+      "error": "500 Server Error: Internal Server Error for url: http://localhost:8000/query"
+    }
+  ]
+}
