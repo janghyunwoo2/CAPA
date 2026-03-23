@@ -24,6 +24,7 @@ COPY . .
 
 # 헬스체크 제거 (CLI 방식은 필요 없음)
 
-# 리포트 생성 메인 모듈 실행 (CLI 방식)
-# Airflow(EKS)에서 인자(날짜, 타입)를 전달받을 수 있도록 ENTRYPOINT 설정
+# 리포트 생성 메인 모듈 실행 (기본값: 서버 모드)
+# EKS 배포 시 8000번 포트 헬스체크에 응답하기 위해 server 인자를 기본으로 사용합니다.
 ENTRYPOINT ["python", "main.py"]
+CMD ["server"]
