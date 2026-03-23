@@ -74,89 +74,138 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def format_executive_summary(data: dict[str, Any], prev_data: dict[str, Any] = None, curr_label: str = "", prev_label: str = "", comparison_label: str = "전기 대비") -> str:  # prev_data, prev_label, comparison_label 미사용 (비교 기능 제거됨)
-    """Executive Summary (경영진 요약)를 생성합니다."""
+def format_executive_summary(data: dict[str, Any], daily_item: dict[str, Any] = None, curr_label: str = "", daily_label: str = "어제", period_name: str = "당월 누적") -> str:
+    """Executive Summary (경영진 요약)를 생성합니다. 어제와 누적을 비교합니다."""
     md = "## Executive Summary (경영진 요약)\n\n"
 
     # 핵심 KPI 카드
     md += "### 핵심 KPI 카드\n\n"
-    curr_header = f"실적 ({curr_label})" if curr_label else "실적"
-    md += f"| KPI | {curr_header} |\n"
-    md += "|:---|---|\n"
+    curr_header = f"{period_name} ({curr_label})" if curr_label else f"{period_name} 실적"
+    
+    if daily_item:
+        daily_header = f"{daily_label} 성적"
+        md += f"| KPI | {daily_header} | {curr_header} |\n"
+        md += "|:---|:---:|:---:|\n"
+    else:
+        md += f"| KPI | {curr_header} |\n"
+        md += "|:---|:---:|\n"
 
-    # 필요한 필드 추출
-    revenue = _safe_float(data.get("revenue", 0))
-    cost = _safe_float(data.get("cost", 0))
-    roas = _safe_float(data.get("roas", 0))
-    ctr = _safe_float(data.get("ctr", 0))
-    conversions = _safe_int(data.get("conversions", 0))
+    metrics = [
+        ("광고 기여 매출", "revenue", "currency"),
+        ("총 ROAS", "roas", "percent"),
+        ("총 CTR", "ctr", "percent"),
+        ("총 전환", "conversions", "count"),
+    ]
 
-    md += f"| 광고 기여 매출 | {format_currency(revenue)} |\n"
-    md += f"| 총 ROAS | {format_number(roas, True)} |\n"
-    md += f"| 총 CTR | {format_number(ctr, True)} |\n"
-    md += f"| 총 전환 | {conversions:,}건 |\n"
+    for label, key, fmt in metrics:
+        total_val = data.get(key, 0)
+        
+        if fmt == "currency":
+            total_str = format_currency(total_val)
+        elif fmt == "percent":
+            total_str = format_number(total_val, True)
+        elif fmt == "count":
+            total_str = f"{_safe_int(total_val):,}건"
+        else:
+            total_str = str(total_val)
+            
+        if daily_item:
+            daily_val = daily_item.get(key, 0)
+            if fmt == "currency": daily_str = format_currency(daily_val)
+            elif fmt == "percent": daily_str = format_number(daily_val, True)
+            elif fmt == "count": daily_str = f"{_safe_int(daily_val):,}건"
+            else: daily_str = str(daily_val)
+            md += f"| {label} | {daily_str} | {total_str} |\n"
+        else:
+            md += f"| {label} | {total_str} |\n"
 
     # 보조 KPI
-    curr_label_str = f" ({curr_label})" if curr_label else ""
-    md += f"\n### 보조 KPI{curr_label_str}\n\n"
-    md += f"| 노출 | 클릭 | 광고비 (광고 수수료) | 순이익 |\n"
-    md += "|:---|---|:---|---|\n"
+    if daily_item:
+        md += f"\n### 보조 KPI 비교\n\n"
+        md += f"| 구분 | 노출 | 클릭 | 광고비 (수수료 포함) | 순이익 |\n"
+        md += "|:---|:---:|:---:|:---:|:---:|\n"
+    else:
+        md += f"\n### 보조 KPI\n\n"
+        md += f"| 노출 | 클릭 | 광고비 (광고 수수료) | 순이익 |\n"
+        md += "|:---|:---:|:---:|:---:|\n"
 
-    impressions = _safe_int(data.get("impressions", 0))
-    clicks = _safe_int(data.get("clicks", 0))
-    net_profit = revenue - cost
+    # 데이터 및 어제 데이터 계산 (필요시)
+    total_rev = _safe_float(data.get("revenue", 0))
+    total_cost = _safe_float(data.get("cost", 0))
+    total_profit = total_rev - total_cost
 
-    md += f"| {impressions:,}회 | {clicks:,}회 | {format_currency(cost)} | **{format_currency(net_profit)}** |\n"
+    if daily_item:
+        d_rev = _safe_float(daily_item.get("revenue", 0))
+        d_cost = _safe_float(daily_item.get("cost", 0))
+        d_profit = d_rev - d_cost
+        md += f"| {daily_label} | {_safe_int(daily_item.get('impressions', 0)):,}회 | {_safe_int(daily_item.get('clicks', 0)):,}회 | {format_currency(d_cost)} | {format_currency(d_profit)} |\n"
+        md += f"| 누적 | {_safe_int(data.get('impressions', 0)):,}회 | {_safe_int(data.get('clicks', 0)):,}회 | {format_currency(total_cost)} | {format_currency(total_profit)} |\n"
+    else:
+        md += f"| {_safe_int(data.get('impressions', 0)):,}회 | {_safe_int(data.get('clicks', 0)):,}회 | {format_currency(total_cost)} | {format_currency(total_profit)} |\n"
 
     return md
 
 
-def format_kpi_detail(data: dict[str, Any], prev_data: dict[str, Any] = None, curr_label: str = "", prev_label: str = "") -> str:  # prev_data, prev_label 미사용 (비교 기능 제거됨)
-    """KPI 상세를 생성합니다."""
-    curr_header = f"({curr_label})" if curr_label else ""
+def format_kpi_detail(data: dict[str, Any], daily_item: dict[str, Any] = None, curr_label: str = "", daily_label: str = "어제", period_name: str = "당월 누적") -> str:
+    """KPI 상세를 생성합니다. 어제와 누적을 비교합니다."""
+    daily_header = f"{daily_label} 성적"
+    curr_header = f"{period_name}{(' ('+curr_label+')') if curr_label else ''}"
 
     sections = [
-        ("매출", [
+        ("매출 성과", [
             ("광고 기여 매출", "revenue", "currency"),
             ("광고비 (광고 수수료)", "cost", "currency"),
-            ("**순이익**", None, "net_profit"),
+            ("순이익", None, "net_profit"),
             ("ROAS", "roas", True),
         ]),
-        ("볼륨", [
+        ("광고 볼륨", [
             ("노출", "impressions", False),
             ("클릭", "clicks", False),
             ("전환", "conversions", False),
         ]),
-        ("효율", [
+        ("광고 효율", [
             ("CTR", "ctr", True),
             ("CVR", "cvr", True),
             ("CPC", "cpc", "currency"),
         ]),
     ]
 
-    md = "## KPI 상세\n\n"
+    md = "## KPI 세부 지표\n\n"
 
     for section_name, metrics in sections:
-        md += f"**{section_name}**\n\n"
-        md += f"| 지표 | 수치 {curr_header} |\n"
-        md += "|:---|---|\n"
+        md += f"### {section_name}\n\n"
+        if daily_item:
+            md += f"| 지표 | {daily_header} | {curr_header} |\n"
+            md += "|:---|:---:|:---:|\n"
+        else:
+            md += f"| 지표 | {curr_header} |\n"
+            md += "|:---|:---:|\n"
 
         for label, key, format_type in metrics:
             if key is None:  # net_profit 계산
-                curr_val = _safe_float(data.get("revenue", 0)) - _safe_float(data.get("cost", 0))
+                total_val = _safe_float(data.get("revenue", 0)) - _safe_float(data.get("cost", 0))
+                daily_val = (_safe_float(daily_item.get("revenue", 0)) - _safe_float(daily_item.get("cost", 0))) if daily_item else 0
             else:
-                curr_val = data.get(key, 0)
+                total_val = data.get(key, 0)
+                daily_val = daily_item.get(key, 0) if daily_item else 0
 
             if format_type == "currency":
-                curr_str = format_currency(curr_val)
+                total_str = format_currency(total_val)
+                daily_str = format_currency(daily_val)
             elif format_type == True:  # percentage
-                curr_str = format_number(curr_val, True)
+                total_str = format_number(total_val, True)
+                daily_str = format_number(daily_val, True)
             elif format_type == "net_profit":
-                curr_str = format_currency(curr_val)
+                total_str = format_currency(total_val)
+                daily_str = format_currency(daily_val)
             else:  # number
-                curr_str = format_number(curr_val, False)
+                total_str = format_number(total_val, False)
+                daily_str = format_number(daily_val, False)
 
-            md += f"| {label} | {curr_str} |\n"
+            if daily_item:
+                md += f"| {label} | {daily_str} | {total_str} |\n"
+            else:
+                md += f"| {label} | {total_str} |\n"
 
         md += "\n"
 
@@ -329,10 +378,7 @@ def format_funnel(funnel_data: list[dict[str, Any]]) -> str:
 
 
 def _report_footer() -> str:
-    dashboard_url = os.getenv("FIXED_DASHBOARD_URL", "")
     footer = "\n---\n\n**리포트 생성 완료**\n\n"
-    if dashboard_url:
-        footer += f"🔗 **대시보드 바로가기**: {dashboard_url}\n\n"
     footer += "© 2026 CAPA 광고 분석 플랫폼\n"
     return footer
 
@@ -352,17 +398,29 @@ def build_daily(
     start_date_str: str = "",
     end_date_str: str = "",
 ) -> str:
-    """일간 보고서 마크다운 생성"""
+    """일간 보고서 마크다운 생성 (어제 vs 당월 누적 비교)"""
     md = _report_header("일간")
-    md += "## 일간 (당월 누적 실적)\n\n"
+    md += "## 일간 (어제 vs 당월 누적 실적)\n\n"
+    
+    # 어제 데이터 추출 (브레이크다운의 마지막 항목)
+    yesterday_item = None
+    daily_label = "어제"
+    if daily_data.get("daily_breakdown"):
+        yesterday_item = daily_data["daily_breakdown"][-1]
+        try:
+            y_date = datetime.strptime(yesterday_item["date"], "%Y-%m-%d")
+            daily_label = f"{y_date.month}/{y_date.day}(어제)"
+        except:
+            pass
+
     if start_date_str and end_date_str:
-        md += f"> **[집계 기준]** {start_date_str} ~ {end_date_str}\n\n"
+        md += f"> **[집계 기준]** {daily_label} / 누적: {start_date_str} ~ {end_date_str}\n\n"
 
     curr_label = f"{start_date_str[5:].replace('-', '/')}~{end_date_str[5:].replace('-', '/')}" if start_date_str else ""
 
-    md += format_executive_summary(daily_data["summary"], None, curr_label=curr_label)
+    md += format_executive_summary(daily_data["summary"], yesterday_item, curr_label=curr_label, daily_label=daily_label)
     md += "\n"
-    md += format_kpi_detail(daily_data["summary"], None, curr_label=curr_label)
+    md += format_kpi_detail(daily_data["summary"], yesterday_item, curr_label=curr_label, daily_label=daily_label)
     md += "\n"
     md += format_daily_trend(daily_data["daily_breakdown"])
     md += _report_footer()
@@ -382,9 +440,9 @@ def build_weekly(
     w_end = weekly_data['end_date'][5:].replace('-', '/')
     curr_label = f"{w_start}~{w_end}"
 
-    md += format_executive_summary(weekly_data["summary"], None, curr_label=curr_label)
+    md += format_executive_summary(weekly_data["summary"], None, curr_label=curr_label, period_name="주간 누적")
     md += "\n"
-    md += format_kpi_detail(weekly_data["summary"], None, curr_label=curr_label)
+    md += format_kpi_detail(weekly_data["summary"], None, curr_label=curr_label, period_name="주간 누적")
     md += "\n"
     md += format_daily_trend(weekly_data["daily_breakdown"])
     md += _report_footer()
