@@ -31,6 +31,9 @@ COPY src/ ./src/
 # 유틸리티 스크립트 복사 (seed_chromadb.py 등)
 COPY scripts/ ./scripts/
 
+# 프롬프트 YAML 파일 복사 (FR-PE-04: 외부화된 프롬프트)
+COPY prompts/ ./prompts/
+
 # 헬스체크
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1

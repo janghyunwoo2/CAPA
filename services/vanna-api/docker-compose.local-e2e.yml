@@ -139,6 +139,8 @@ services:
       dockerfile: Dockerfile
     container_name: capa-vanna-api-e2e
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - .env.local-e2e
     ports:
       - "8000:8000"
     environment:
@@ -174,7 +176,7 @@ services:
       # Phase 2 기능 활성화
       - PHASE2_RAG_ENABLED=true
       - DYNAMODB_ENABLED=true
-      - ASYNC_QUERY_ENABLED=true
+      - ASYNC_QUERY_ENABLED=false  # 평가 실행 시 임시 비활성화
       - PHASE2_FEEDBACK_ENABLED=true
       - DYNAMODB_HISTORY_TABLE=capa-dev-query-history
       - DYNAMODB_FEEDBACK_TABLE=capa-dev-pending-feedbacks
@@ -186,6 +188,7 @@ services:
     volumes:
       - ./src:/app/src
       - ./scripts:/app/scripts
+      - ./prompts:/app/prompts
 
     depends_on:
       chromadb:
