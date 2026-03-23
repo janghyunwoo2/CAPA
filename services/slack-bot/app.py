@@ -28,8 +28,12 @@ logger = logging.getLogger(__name__)
 
 SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN")
 SLACK_APP_TOKEN = os.environ.get("SLACK_APP_TOKEN")
-VANNA_API_URL = os.environ.get("VANNA_API_URL", "http://vanna-api.vanna.svc.cluster.local:8000")
-REPORT_API_URL = os.environ.get("REPORT_API_URL", "http://report-generator.report.svc.cluster.local:8000")
+VANNA_API_URL = os.environ.get(
+    "VANNA_API_URL", "http://vanna-api.vanna.svc.cluster.local:8000"
+)
+REPORT_API_URL = os.environ.get(
+    "REPORT_API_URL", "http://report-generator.report.svc.cluster.local:8000"
+)
 INTERNAL_API_TOKEN = os.environ.get("INTERNAL_API_TOKEN", "")
 
 # NFR-06: Slack Bot 측 timeout 310초 이상
@@ -40,8 +44,8 @@ ASYNC_QUERY_ENABLED = os.environ.get("ASYNC_QUERY_ENABLED", "false").lower() == 
 
 # FR-24: Slack 스레드 기반 응답 (Feature Flag)
 SLACK_THREAD_ENABLED = os.environ.get("SLACK_THREAD_ENABLED", "true").lower() == "true"
-_ASYNC_POLL_INTERVAL = 3    # 폴링 간격 (초)
-_ASYNC_POLL_MAX = 100       # 최대 폴링 횟수 (300초)
+_ASYNC_POLL_INTERVAL = 3  # 폴링 간격 (초)
+_ASYNC_POLL_MAX = 100  # 최대 폴링 횟수 (300초)
 
 app = App(token=SLACK_BOT_TOKEN)
 flask_app = Flask(__name__)
@@ -70,17 +74,23 @@ def _format_results_table(results: list, sql: str) -> str:
         return ""
     rows = results[:10]
     cols = list(rows[0].keys())
-    col_widths = [max(len(str(c)), max(len(str(r.get(c, ""))) for r in rows)) for c in cols]
+    col_widths = [
+        max(len(str(c)), max(len(str(r.get(c, ""))) for r in rows)) for c in cols
+    ]
     sep = "┼".join("─" * (w + 2) for w in col_widths)
     header = "│".join(f" {str(c):<{w}} " for c, w in zip(cols, col_widths))
     lines = [f"┌{sep}┐", f"│{header}│", f"├{sep}┤"]
     for i, row in enumerate(rows):
         suffix = " 🥇" if i == 0 else ""
-        line = "│".join(f" {str(row.get(c, '')):<{w}} " for c, w in zip(cols, col_widths))
+        line = "│".join(
+            f" {str(row.get(c, '')):<{w}} " for c, w in zip(cols, col_widths)
+        )
         lines.append(f"│{line}│{suffix}")
     lines.append(f"└{sep}┘")
     # SQL에서 테이블명·WHERE 조건 간략 추출
-    sql_summary = sql.split("FROM")[-1].split("GROUP")[0].strip() if "FROM" in sql else sql
+    sql_summary = (
+        sql.split("FROM")[-1].split("GROUP")[0].strip() if "FROM" in sql else sql
+    )
     return "\n".join(lines)
 
 
@@ -94,19 +104,28 @@ def _handle_error_response(
         error = response.json().get("detail", {})
         if isinstance(error, dict):
             error_code = error.get("error_code", "UNKNOWN_ERROR")
-            message = error.get("message", "알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.")
+            message = error.get(
+                "message", "알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+            )
         else:
             error_code = "UNKNOWN_ERROR"
             message = "알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
     except Exception:
         error_code = "PARSE_ERROR"
         message = "응답을 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
-    logger.error(f"vanna-api 오류: HTTP {response.status_code}, error_code={error_code}")
+    logger.error(
+        f"vanna-api 오류: HTTP {response.status_code}, error_code={error_code}"
+    )
     say(
-        blocks=[{
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": f"❌ *오류가 발생했습니다*\n{message}"},
-        }],
+        blocks=[
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"❌ *오류가 발생했습니다*\n{message}",
+                },
+            }
+        ],
         thread_ts=thread_ts,
     )
 
@@ -118,17 +137,21 @@ def _build_header_blocks(result: dict) -> list:
     results = result.get("results", [])
 
     # 헤더 + 질문 + SQL 요약
-    sql_table = sql.split("FROM")[-1].split("GROUP")[0].strip() if "FROM" in sql else sql
+    sql_table = (
+        sql.split("FROM")[-1].split("GROUP")[0].strip() if "FROM" in sql else sql
+    )
     text = f"*📊 CAPA Text-to-SQL 쿼리 결과*\n\n💬 *질문:* {question}\n🔍 *SQL:* `{sql_table}`"
     blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": text}}]
 
     # 결과 테이블
     if results:
         table_text = _format_results_table(results, sql)
-        blocks.append({
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": f"```{table_text}```"},
-        })
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"```{table_text}```"},
+            }
+        )
 
     return blocks
 
@@ -149,30 +172,55 @@ def _build_footer_blocks(result: dict) -> list:
 
     # AI 분석
     if answer:
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"🤖 *AI 분석:*\n{answer}"}})
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"🤖 *AI 분석:*\n{answer}"},
+            }
+        )
 
     # Redash 링크
     if redash_url:
-        blocks.append({
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": f"🔗 <{redash_url}|Redash에서 전체 결과 보기>"},
-        })
+        blocks.append(
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"🔗 <{redash_url}|Redash에서 전체 결과 보기>",
+                },
+            }
+        )
 
     # 처리 시간 — Redash 링크와 피드백 버튼 사이에 표시
     if elapsed:
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"⏱ 처리 시간: {elapsed:.2f}초"}})
+        blocks.append(
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"⏱ 처리 시간: {elapsed:.2f}초"},
+            }
+        )
 
     # 피드백 버튼
     if history_id:
-        blocks.append({
-            "type": "actions",
-            "elements": [
-                {"type": "button", "text": {"type": "plain_text", "text": "👍 좋아요"},
-                 "action_id": "feedback_positive", "value": history_id},
-                {"type": "button", "text": {"type": "plain_text", "text": "👎 별로예요"},
-                 "action_id": "feedback_negative", "value": history_id},
-            ],
-        })
+        blocks.append(
+            {
+                "type": "actions",
+                "elements": [
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "👍 좋아요"},
+                        "action_id": "feedback_positive",
+                        "value": history_id,
+                    },
+                    {
+                        "type": "button",
+                        "text": {"type": "plain_text", "text": "👎 별로예요"},
+                        "action_id": "feedback_negative",
+                        "value": history_id,
+                    },
+                ],
+            }
+        )
 
     return blocks
 
@@ -188,19 +236,28 @@ def handle_mention(event, say, client):
     # 1. "리포트 생성" 명령어
     if "리포트 생성" in text or "report" in text.lower():
         import re
+
         date_match = re.search(r"(\d{4}-\d{2}-\d{2})", text)
         target_date = date_match.group(1) if date_match else None
         date_str = f" ({target_date})" if target_date else " (오늘)"
-        say(f"📊 <@{user}>님, {date_str} 성과 리포트 생성을 시작합니다. 잠시만 기다려주세요...")
+        say(
+            f"📊 <@{user}>님, {date_str} 성과 리포트 생성을 시작합니다. 잠시만 기다려주세요..."
+        )
         try:
             params = {"report_type": "daily"}
             if target_date:
                 params["date"] = target_date
-            response = requests.post(f"{REPORT_API_URL}/generate", params=params, timeout=5)
+            response = requests.post(
+                f"{REPORT_API_URL}/generate", params=params, timeout=5
+            )
             if response.status_code in (200, 202):
-                say("✅ 리포트 생성 요청이 성공했습니다. 분석이 완료되면 이 채널로 공유해 드릴게요.")
+                say(
+                    "✅ 리포트 생성 요청이 성공했습니다. 분석이 완료되면 이 채널로 공유해 드릴게요."
+                )
             else:
-                say("❌ 리포트 서버에서 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
+                say(
+                    "❌ 리포트 서버에서 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+                )
         except Exception as e:
             logger.error(f"리포트 생성 요청 오류: {e}")
             say("⚠️ 리포트 생성 요청 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.")
@@ -244,7 +301,10 @@ def handle_mention(event, say, client):
 
             task_id = post_resp.json().get("task_id")
             if not task_id:
-                say("⚠️ AI 서버 응답에서 task_id를 찾을 수 없습니다.", thread_ts=thread_ts)
+                say(
+                    "⚠️ AI 서버 응답에서 task_id를 찾을 수 없습니다.",
+                    thread_ts=thread_ts,
+                )
                 return
 
             # ② "처리 중" 메시지 먼저 전송
@@ -269,7 +329,10 @@ def handle_mention(event, say, client):
                 return
 
             if result is None:
-                say("⚠️ 쿼리 처리 시간이 초과되었습니다. 조회 범위를 좁혀 다시 시도해 주세요.", thread_ts=thread_ts)
+                say(
+                    "⚠️ 쿼리 처리 시간이 초과되었습니다. 조회 범위를 좁혀 다시 시도해 주세요.",
+                    thread_ts=thread_ts,
+                )
                 return
 
         else:
@@ -327,11 +390,17 @@ def handle_mention(event, say, client):
 
     except requests.Timeout:
         logger.error(f"vanna-api 타임아웃 ({VANNA_API_TIMEOUT}초)")
-        say("⚠️ AI 서버 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.", thread_ts=thread_ts)  # [FR-24-05]
+        say(
+            "⚠️ AI 서버 응답 시간이 초과되었습니다. 잠시 후 다시 시도해 주세요.",
+            thread_ts=thread_ts,
+        )  # [FR-24-05]
     except Exception as e:
         # SEC-07: 내부 오류 상세는 로그에만 기록
         logger.error(f"vanna-api 연동 오류: {e}")
-        say("⚠️ AI 서버와 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.", thread_ts=thread_ts)  # [FR-24-05]
+        say(
+            "⚠️ AI 서버와 통신 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+            thread_ts=thread_ts,
+        )  # [FR-24-05]
 
 
 @app.action("feedback_positive")
@@ -343,7 +412,11 @@ def handle_positive_feedback(ack, body, client):
     try:
         requests.post(
             f"{VANNA_API_URL}/feedback",
-            json={"history_id": history_id, "feedback": "positive", "slack_user_id": slack_user_id},
+            json={
+                "history_id": history_id,
+                "feedback": "positive",
+                "slack_user_id": slack_user_id,
+            },
             headers=_build_internal_headers(),
             timeout=10,
         )
@@ -361,7 +434,11 @@ def handle_negative_feedback(ack, body, client):
     try:
         requests.post(
             f"{VANNA_API_URL}/feedback",
-            json={"history_id": history_id, "feedback": "negative", "slack_user_id": slack_user_id},
+            json={
+                "history_id": history_id,
+                "feedback": "negative",
+                "slack_user_id": slack_user_id,
+            },
             headers=_build_internal_headers(),
             timeout=10,
         )
