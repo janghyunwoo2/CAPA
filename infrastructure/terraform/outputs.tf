@@ -150,10 +150,10 @@ output "vanna_api_internal_url" {
   value       = "http://vanna-api.vanna.svc.cluster.local:8000"
 }
 
-output "report_generator_internal_url" {
-  description = "Internal URL for Report Generator"
-  value       = "http://report-generator.report.svc.cluster.local:8000"
-}
+# output "report_generator_internal_url" {
+#   description = "Internal URL for Report Generator"
+#   value       = "http://report-generator.report.svc.cluster.local:8000"
+# }
 
 output "slack_bot_internal_url" {
   description = "Internal URL for Slack Bot (Health Check)"
