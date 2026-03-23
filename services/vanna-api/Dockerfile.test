@@ -1,0 +1,46 @@
+# =====================================================
+# Vanna AI API — 단위 테스트 전용 Dockerfile
+# =====================================================
+# 용도: Phase 1 단위 테스트 (pytest) 실행
+# 기반: Dockerfile과 동일한 python:3.11 이미지 사용
+#       → EKS 배포 환경과 동일한 의존성 보장
+# =====================================================
+
+FROM python:3.11
+
+WORKDIR /app
+
+# 시스템 의존성 (Dockerfile과 동일)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# 애플리케이션 의존성 설치
+# requirements.txt에서 vanna[anthropic]==0.7.9 (chromadb extra 제거)
+# chromadb==1.0.10을 명시적으로 관리하여 버전 충돌 해결
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# 테스트 의존성 추가
+RUN pip install --no-cache-dir \
+    pytest \
+    pytest-asyncio \
+    pytest-cov \
+    respx \
+    "moto[athena]"
+
+# 소스 및 테스트 코드 복사
+COPY src/ src/
+COPY tests/ tests/
+
+# 환경변수 기본값 (테스트용 더미)
+ENV PYTHONPATH=/app/src:$PYTHONPATH
+ENV ANTHROPIC_API_KEY=test-key
+ENV INTERNAL_API_TOKEN=test-token
+ENV AWS_DEFAULT_REGION=ap-northeast-2
+ENV AWS_ACCESS_KEY_ID=test
+ENV AWS_SECRET_ACCESS_KEY=test
+
+# 테스트 실행
+CMD ["python", "-m", "pytest", "tests/", "-v", "--cov=src", "--cov-report=term-missing"]
