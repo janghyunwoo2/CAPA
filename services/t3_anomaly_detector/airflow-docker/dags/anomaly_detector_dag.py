@@ -34,6 +34,7 @@ with DAG(
     schedule_interval="*/5 * * * *",  # 매 5분 정각 기준 실행
     start_date=datetime(2026, 3, 22),
     catchup=False,                    # 과거 놓친 실행은 무시
+    max_active_runs=1,                # 동시에 하나의 실행만 허용
     default_args=default_args,
     tags=["anomaly", "cloudwatch", "monitoring"],
 ) as dag:
