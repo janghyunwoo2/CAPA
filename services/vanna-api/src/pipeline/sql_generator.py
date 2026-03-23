@@ -1,20 +1,30 @@
 """
-Step 5: SQLGenerator — Vanna + Claude 기반 SQL 생성
-설계 문서 §2.3.2 기준
+Step 5: SQLGenerator — Vanna + Claude 기반 SQL 생성 (FR-PE-01, 02, 03)
+설계 문서 §2.3.2 + prompt-engineering-enhancement.design.md 기준
 실패 시 파이프라인 중단 + PipelineError 반환
 """
 
 import logging
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from datetime import date, timedelta
 from typing import Any, Optional
+
 from ..models.domain import RAGContext
+from ..prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
+
+# YAML 없을 때 날짜 컨텍스트 fallback
+_FALLBACK_DATE_CONTEXT = (
+    "[날짜 컨텍스트] 파티션 형식: year/month/day는 STRING 2자리. "
+    "DATE() 함수 금지, 문자열 등호(year='YYYY', month='MM', day='DD')만 사용. "
+    "[경고: 예시 SQL의 날짜 값을 그대로 복사하지 말 것]"
+)
 
 
 class SQLGenerationError(Exception):
@@ -22,38 +32,80 @@ class SQLGenerationError(Exception):
     pass
 
 
+def _strip_thinking_block(sql: str) -> str:
+    """<thinking>...</thinking> 블록 제거 후 SQL만 반환 (FR-PE-02)"""
+    cleaned = re.sub(r"<thinking>.*?</thinking>", "", sql, flags=re.DOTALL).strip()
+    return cleaned if cleaned else sql
+
+
 class SQLGenerator:
     """Step 5 — Vanna 기반 SQL 생성"""
 
     def __init__(self, vanna_instance: Any) -> None:
-        """
-        Args:
-            vanna_instance: 초기화된 VannaAthena 인스턴스
-        """
         self._vanna = vanna_instance
 
-    def generate(self, question: str, rag_context: Optional[RAGContext] = None, conversation_history: Optional[list] = None) -> str:
+    def generate(
+        self,
+        question: str,
+        rag_context: Optional[RAGContext] = None,
+        conversation_history: Optional[list] = None,
+    ) -> str:
         """자연어 질문을 SQL로 변환하여 반환.
         실패 시 SQLGenerationError 발생 → 파이프라인 중단.
         LLM_TIMEOUT_SECONDS 환경변수로 타임아웃 제어 (기본 60초).
         """
         try:
+            # 날짜 변수 계산
             today = date.today()
             yesterday = today - timedelta(days=1)
             last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
-            last_month_end = today.replace(day=1) - timedelta(days=1)
-            date_context = (
-                f"[날짜 컨텍스트] "
-                f"오늘={today}(year='{today.strftime('%Y')}',month='{today.strftime('%m')}',day='{today.strftime('%d')}'), "
-                f"어제={yesterday}(year='{yesterday.strftime('%Y')}',month='{yesterday.strftime('%m')}',day='{yesterday.strftime('%d')}'), "
-                f"이번달={today.strftime('%Y-%m')}(year='{today.strftime('%Y')}',month='{today.strftime('%m')}'), "
-                f"지난달={last_month_start.strftime('%Y-%m')}(year='{last_month_start.strftime('%Y')}',month='{last_month_start.strftime('%m')}') "
-                f"파티션 형식: year/month/day는 STRING 2자리 (예: month='02', day='01') "
-                f"[경고: 예시 SQL의 year/month/day 값을 절대 그대로 복사하지 말 것. "
-                f"사용자가 명시한 날짜는 직접 파티션 형식으로 변환하고, "
-                f"'오늘/어제/이번달/지난달' 등 상대 표현은 위 날짜 컨텍스트 값을 사용할 것] "
+            week_end = yesterday
+            week_start = today - timedelta(days=7)
+            week_days = ", ".join(
+                f"'{(week_start + timedelta(days=i)).strftime('%d')}'"
+                for i in range(7)
             )
-            prompt = f"{date_context}{question}"
+
+            # YAML 로드 (핫 리로드 지원, 없으면 빈 딕셔너리)
+            prompts = load_prompt(
+                "sql_generator",
+                today=today,
+                year=today.strftime("%Y"),
+                month=today.strftime("%m"),
+                day=today.strftime("%d"),
+                yesterday=yesterday,
+                y_year=yesterday.strftime("%Y"),
+                y_month=yesterday.strftime("%m"),
+                y_day=yesterday.strftime("%d"),
+                this_month=today.strftime("%Y-%m"),
+                last_month=last_month_start.strftime("%Y-%m"),
+                lm_year=last_month_start.strftime("%Y"),
+                lm_month=last_month_start.strftime("%m"),
+                week_start=week_start.strftime("%Y-%m-%d"),
+                week_end=week_end.strftime("%Y-%m-%d"),
+                week_days=week_days,
+            )
+
+            schema = prompts.get("schema", "")
+            date_rules = prompts.get("date_rules", _FALLBACK_DATE_CONTEXT)
+            cot_template = prompts.get("cot_template", "")
+
+            # [FR-PE-01] conversation_history 주입 (버그 수정)
+            history_block = ""
+            if conversation_history:
+                prev_sqls = [t.generated_sql for t in conversation_history if t.generated_sql]
+                if prev_sqls:
+                    history_block = (
+                        "<history>\n"
+                        + "\n".join(
+                            f"  이전 SQL {i + 1}: {sql}"
+                            for i, sql in enumerate(prev_sqls)
+                        )
+                        + "\n</history>\n"
+                    )
+
+            # [FR-PE-02, FR-PE-03] CoT + 구조화 날짜 규칙 + history 주입
+            prompt = f"{schema}\n{date_rules}\n{history_block}{cot_template}\n질문: {question}"
 
             with ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(self._vanna.generate_sql, question=prompt)
@@ -68,8 +120,11 @@ class SQLGenerator:
             if not sql or not sql.strip():
                 raise SQLGenerationError("빈 SQL이 생성되었습니다")
 
+            # CoT <thinking> 블록 제거
+            sql = _strip_thinking_block(sql.strip())
+
             logger.info(f"SQL 생성 완료: {sql[:100]}...")
-            return sql.strip()
+            return sql
 
         except SQLGenerationError:
             raise

@@ -24,8 +24,15 @@ from typing import Any, Optional
 
 import boto3
 import chromadb
+from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
 from vanna.anthropic import Anthropic_Chat
 from vanna.chromadb import ChromaDB_VectorStore
+from vanna.utils import deterministic_uuid
+
+# 한국어 특화 임베딩 모델 (영어 전용 all-MiniLM-L6-v2 대체)
+_KO_EMBEDDING_FUNCTION = SentenceTransformerEmbeddingFunction(
+    model_name="jhgan/ko-sroberta-multitask"
+)
 
 from .models.domain import IntentType, PipelineContext, PipelineError
 from .models.redash import RedashConfig
@@ -53,11 +60,45 @@ MULTI_TURN_ENABLED = os.getenv("MULTI_TURN_ENABLED", "false").lower() == "true"
 
 
 class _VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
-    """환경변수 기반 자동 초기화용 내부 Vanna 구현체"""
+    """환경변수 기반 자동 초기화용 내부 Vanna 구현체
+
+    ChromaDB 저장 방식 오버라이드:
+    - 기본 Vanna: question+SQL 전체 JSON을 하나의 document로 임베딩 → 검색 불일치
+    - 오버라이드: question만 document로 임베딩, SQL은 metadata로 분리 → 질문 유사도 정확도 향상
+    """
 
     def __init__(self, config=None):
         ChromaDB_VectorStore.__init__(self, config=config)
         Anthropic_Chat.__init__(self, config=config)
+
+    def add_question_sql(self, question: str, sql: str, **kwargs) -> str:
+        """question만 document로 저장, SQL은 metadata로 분리."""
+        id = deterministic_uuid(question + sql) + "-sql"
+        self.sql_collection.add(
+            documents=question,
+            metadatas=[{"sql": sql}],
+            ids=[id],
+        )
+        return id
+
+    def get_similar_question_sql(self, question: str, **kwargs) -> list:
+        """metadata에서 SQL을 꺼내 {question, sql} dict 리스트로 반환."""
+        results = self.sql_collection.query(
+            query_texts=[question],
+            n_results=self.n_results_sql,
+            include=["documents", "metadatas", "distances"],
+        )
+        if not results or "documents" not in results:
+            return []
+
+        docs = results["documents"][0] if results["documents"] else []
+        metas = results.get("metadatas", [[]])[0]
+
+        return [
+            {"question": doc, "sql": meta.get("sql", "")}
+            for doc, meta in zip(docs, metas)
+            if meta.get("sql")
+        ]
 
 
 class QueryPipeline:
@@ -93,6 +134,7 @@ class QueryPipeline:
                 "api_key": anthropic_api_key,
                 "model": llm_model,
                 "client": chroma_client,
+                "embedding_function": _KO_EMBEDDING_FUNCTION,
             })
 
         self._vanna = vanna_instance

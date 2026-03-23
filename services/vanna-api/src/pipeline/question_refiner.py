@@ -6,6 +6,7 @@ Step 2: QuestionRefiner — 인사말/부연설명 제거, 핵심 질문 추출
 
 import logging
 import anthropic
+from ..prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +37,12 @@ class QuestionRefiner:
         LLM 호출 실패 시 원본 질문 그대로 반환 (graceful degradation).
         """
         try:
+            prompts = load_prompt("question_refiner")
+            system = prompts.get("system", _SYSTEM_PROMPT)
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=200,
-                system=_SYSTEM_PROMPT,
+                system=system,
                 messages=[{"role": "user", "content": question}],
             )
             refined = response.content[0].text.strip()
