@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 # [Trace] .env 로드 시도
 # logging.basicConfig()가 이전에 설정되어 있어야 로그가 보입니다.
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 logger = logging.getLogger(__name__)
 logger.debug("환경 변수 파일(.env) 로드 시도 중...")
 
@@ -52,10 +52,13 @@ def _parse_bool(key: str, default: str) -> bool:
 
 
 # ============ Prophet 모델 파라미터 ============
-PROPHET_INTERVAL_WIDTH = _parse_float("PROPHET_INTERVAL_WIDTH", "0.95", min_val=0.0, max_val=1.0)
+PROPHET_INTERVAL_WIDTH = _parse_float("PROPHET_INTERVAL_WIDTH", "0.85", min_val=0.0, max_val=1.0)
+PROPHET_LOWER_BOUND = _parse_int("PROPHET_LOWER_BOUND", "54", min_val=0)  # 2월 최소값
 PROPHET_YEARLY_SEASONALITY = _parse_bool("PROPHET_YEARLY_SEASONALITY", "true")
 PROPHET_WEEKLY_SEASONALITY = _parse_bool("PROPHET_WEEKLY_SEASONALITY", "true")
 PROPHET_DAILY_SEASONALITY = _parse_bool("PROPHET_DAILY_SEASONALITY", "true")
+PROPHET_CHANGEPOINT_PRIOR_SCALE = _parse_float("PROPHET_CHANGEPOINT_PRIOR_SCALE", "0.01", min_val=0.0, max_val=1.0)
+PROPHET_SEASONALITY_MODE = os.getenv("PROPHET_SEASONALITY_MODE", "additive")  # "additive" 또는 "multiplicative"
 
 # ============ Isolation Forest 파라미터 ============
 ISOLATION_FOREST_CONTAMINATION = _parse_float(
@@ -67,13 +70,14 @@ ISOLATION_FOREST_RANDOM_STATE = _parse_int("ISOLATION_FOREST_RANDOM_STATE", "42"
 WINDOW_SIZE_MINUTES = _parse_int("WINDOW_SIZE_MINUTES", "5", min_val=1)
 HISTORY_DAYS = _parse_int("HISTORY_DAYS", "28", min_val=1)
 RETRAIN_INTERVAL = _parse_int("RETRAIN_INTERVAL", "288", min_val=1)  # 24시간 = 288 × 5분
-VISUALIZATION_UPDATE_INTERVAL = _parse_int("VISUALIZATION_UPDATE_INTERVAL", "50", min_val=1)
+ENABLE_RETRAIN = os.getenv("ENABLE_RETRAIN", "false").lower() in ("true", "1", "yes")  # 재훈련 활성화
+VISUALIZATION_UPDATE_INTERVAL = _parse_int("VISUALIZATION_UPDATE_INTERVAL", "1", min_val=1)
 
 # 가속 모드: 1=실시간, 300=5분→1초 (데모 기본값)
 ACCELERATION_FACTOR = _parse_int("ACCELERATION_FACTOR", "300", min_val=1)
 logger.info(f"파이프라인 가속 계수 설정 완료: {ACCELERATION_FACTOR}x")
 
-DATA_SOURCE = os.getenv("DATA_SOURCE", "mock")  # "mock" | "cloudwatch"
+DATA_SOURCE = os.getenv("DATA_SOURCE", "cloudwatch")  # "mock" | "cloudwatch"
 logger.info(f"데이터 소스 확인 중: {DATA_SOURCE}")
 if DATA_SOURCE not in ("mock", "cloudwatch"):
     raise ConfigError(f"DATA_SOURCE={DATA_SOURCE}는 'mock' 또는 'cloudwatch'여야 합니다")
@@ -92,6 +96,10 @@ SAVE_COMPONENTS = _parse_bool("SAVE_COMPONENTS", "true")
 SLACK_ENABLED = _parse_bool("SLACK_ENABLED", "false")
 SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL", "")
 SLACK_ALERT_THRESHOLD = _parse_int("SLACK_ALERT_THRESHOLD", "1", min_val=1)
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+SLACK_CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID")
+ENABLE_SLACK_NOTIF = _parse_bool("ENABLE_SLACK_NOTIF", "false")
+TEST_MODE_FORCE_SLACK = _parse_bool("TEST_MODE_FORCE_SLACK", "false")
 
 # 설정 검증 로그
 logger.info(f"설정 로드 완료: LOG_LEVEL={LOG_LEVEL}, ACCELERATION_FACTOR={ACCELERATION_FACTOR}x")

@@ -1,0 +1,61 @@
+"""
+t3_anomaly_detector Airflow DAG
+- 매 5분(정각 기준) 마다 t3_anomaly_detector 도커 컨테이너를 실행합니다.
+- 컨테이너는 1회 실행 후 자동 종료됩니다.
+- Airflow가 다음 5분에 다시 실행시킵니다.
+"""
+from airflow import DAG
+from airflow.operators.bash import BashOperator
+from datetime import datetime, timedelta
+import os
+
+# 호스트 PC의 t3_anomaly_detector 실제 경로 (Airflow 컨테이너 → 호스트 도커 소켓 사용)
+# 이 경로는 Airflow가 실행되는 호스트 기준의 절대 경로입니다.
+BASE_DIR = os.getenv(
+    "ANOMALY_DETECTOR_BASE_DIR",
+    "C:/Users/Dell3571/Desktop/projects/CAPA/services/t3_anomaly_detector"
+)
+AWS_CREDENTIALS_DIR = os.getenv(
+    "AWS_CREDENTIALS_DIR",
+    "C:/Users/Dell3571/.aws"
+)
+
+default_args = {
+    "owner": "airflow",
+    "depends_on_past": False,
+    "retries": 1,
+    "retry_delay": timedelta(minutes=1),
+    "email_on_failure": False,
+}
+
+with DAG(
+    dag_id="t3_anomaly_detector",
+    description="5분마다 이상 탐지 파이프라인 실행",
+    schedule_interval="*/5 * * * *",  # 매 5분 정각 기준 실행
+    start_date=datetime(2026, 3, 22),
+    catchup=False,                    # 과거 놓친 실행은 무시
+    default_args=default_args,
+    tags=["anomaly", "cloudwatch", "monitoring"],
+) as dag:
+
+    run_anomaly_detector = BashOperator(
+        task_id="run_anomaly_detector",
+        bash_command="""
+            docker run --rm \
+              --name anomaly_detector_airflow_run_{{ ts_nodash }} \
+              --env-file /opt/anomaly_detector/.env \
+              -e AWS_DEFAULT_REGION=ap-northeast-2 \
+              -e TZ=Asia/Seoul \
+              -v C:/Users/Dell3571/Desktop/projects/CAPA/services/t3_anomaly_detector/models:/app/models \
+              -v C:/Users/Dell3571/Desktop/projects/CAPA/services/t3_anomaly_detector/output:/app/output \
+              -v C:/Users/Dell3571/.aws:/root/.aws:ro \
+              t3_anomaly_detector-t3_anomaly_detector
+        """,
+        doc_md="""
+        ### t3_anomaly_detector 실행
+        - CloudWatch에서 최근 24시간 데이터를 가져옵니다.
+        - Prophet + IsolationForest로 이상 탐지를 수행합니다.
+        - 결과를 PNG/HTML/JSONL로 저장합니다.
+        - 실행 완료 후 컨테이너는 자동 종료됩니다.
+        """,
+    )

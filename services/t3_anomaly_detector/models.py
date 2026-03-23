@@ -7,6 +7,7 @@
 import logging
 import pickle
 import os
+import threading
 from datetime import datetime
 
 import numpy as np
@@ -43,6 +44,7 @@ class ProphetDetector:
         self._training_data: list[dict] = []
         self._window_count: int = 0
         self.is_trained: bool = False
+        self._lock = threading.Lock()  # thread safety
 
     def save(self, file_path: str) -> None:
         """모델을 파일로 저장"""
@@ -105,6 +107,8 @@ class ProphetDetector:
                 yearly_seasonality=config.PROPHET_YEARLY_SEASONALITY,
                 weekly_seasonality=config.PROPHET_WEEKLY_SEASONALITY,
                 daily_seasonality=config.PROPHET_DAILY_SEASONALITY,
+                changepoint_prior_scale=config.PROPHET_CHANGEPOINT_PRIOR_SCALE,
+                seasonality_mode=config.PROPHET_SEASONALITY_MODE,
             )
 
             model.fit(df)
@@ -136,44 +140,45 @@ class ProphetDetector:
         Raises:
             ModelError: 모델이 훈련되지 않음
         """
-        if not self.is_trained or self._model is None:
-            raise ModelError("Prophet 모델이 훈련되지 않았습니다. train()을 먼저 호출하세요.")
+        with self._lock:  # thread safety
+            if not self.is_trained or self._model is None:
+                raise ModelError("Prophet 모델이 훈련되지 않았습니다. train()을 먼저 호출하세요.")
 
-        try:
-            future = pd.DataFrame({"ds": [timestamp]})
-            forecast = self._model.predict(future)
+            try:
+                future = pd.DataFrame({"ds": [timestamp]})
+                forecast = self._model.predict(future)
 
-            # 예측 결과 검증
-            if forecast.empty or len(forecast) == 0:
-                raise ModelError(f"Prophet 예측 실패: {timestamp}")
+                # 예측 결과 검증
+                if forecast.empty or len(forecast) == 0:
+                    raise ModelError(f"Prophet 예측 실패: {timestamp}")
 
-            predicted = float(forecast["yhat"].iloc[0])
-            lower = float(forecast["yhat_lower"].iloc[0])
-            upper = float(forecast["yhat_upper"].iloc[0])
+                predicted = float(forecast["yhat"].iloc[0])
+                lower = max(config.PROPHET_LOWER_BOUND, float(forecast["yhat_lower"].iloc[0]))
+                upper = float(forecast["yhat_upper"].iloc[0])
 
-            self._window_count += 1
+                self._window_count += 1
 
-            # 이상치 판별
-            if value < lower:
-                status = "ANOMALY"
-                anomaly_type = "Sudden Drop"
-            elif value > upper:
-                status = "ANOMALY"
-                anomaly_type = "Sudden Spike"
-            else:
-                status = "NORMAL"
-                anomaly_type = None
+                # 이상치 판별
+                if value < lower:
+                    status = "ANOMALY"
+                    anomaly_type = "Sudden Drop"
+                elif value > upper:
+                    status = "ANOMALY"
+                    anomaly_type = "Sudden Spike"
+                else:
+                    status = "NORMAL"
+                    anomaly_type = None
 
-            return {
-                "status": status,
-                "predicted": predicted,
-                "lower": lower,
-                "upper": upper,
-                "anomaly_type": anomaly_type,
-            }
-        except Exception as e:
-            logger.error(f"Prophet 예측 실패: {e}", exc_info=True)
-            raise ModelError(f"Prophet 예측 실패: {e}") from e
+                return {
+                    "status": status,
+                    "predicted": predicted,
+                    "lower": lower,
+                    "upper": upper,
+                    "anomaly_type": anomaly_type,
+                }
+            except Exception as e:
+                logger.error(f"Prophet 예측 실패: {e}", exc_info=True)
+                raise ModelError(f"Prophet 예측 실패: {e}") from e
 
     def get_model(self):
         """모델 객체 반환 (None if not trained)"""
@@ -211,6 +216,7 @@ class IsolationForestDetector:
     def __init__(self):
         self._model: IsolationForest | None = None
         self.is_trained: bool = False
+        self._lock = threading.Lock()  # thread safety
 
     def save(self, file_path: str) -> None:
         """모델을 파일로 저장"""
@@ -280,19 +286,41 @@ class IsolationForestDetector:
         Raises:
             ModelError: 모델이 훈련되지 않음 또는 예측 실패
         """
-        if not self.is_trained or self._model is None:
-            raise ModelError("IsolationForest 모델이 훈련되지 않았습니다. train()을 먼저 호출하세요.")
+        with self._lock:  # thread safety
+            if not self.is_trained or self._model is None:
+                raise ModelError("IsolationForest 모델이 훈련되지 않았습니다. train()을 먼저 호출하세요.")
+
+            try:
+                result = self._model.predict([[value]])
+                # 결과 검증
+                if result is None or len(result) == 0:
+                    raise ModelError(f"IsolationForest 예측 실패: value={value}")
+
+                # IsolationForest: -1 = 이상치, 1 = 정상
+                # numpy bool을 Python bool로 변환 (.item() 사용)
+                is_anomaly = bool(result[0] == -1)
+                return {"is_anomaly": is_anomaly}
+            except Exception as e:
+                logger.error(f"IsolationForest 예측 실패: {e}", exc_info=True)
+                raise ModelError(f"IsolationForest 예측 실패: {e}") from e
+
+    def retrain_if_needed(self, new_records: list[dict]) -> bool:
+        """
+        RETRAIN_INTERVAL에 도달한 경우 누적 데이터로 재훈련
+
+        Args:
+            new_records: 현재까지 누적된 모든 레코드
+
+        Returns:
+            True if retrained, False otherwise
+        """
+        if not new_records:
+            return False
 
         try:
-            result = self._model.predict([[value]])
-            # 결과 검증
-            if result is None or len(result) == 0:
-                raise ModelError(f"IsolationForest 예측 실패: value={value}")
-
-            # IsolationForest: -1 = 이상치, 1 = 정상
-            # numpy bool을 Python bool로 변환 (.item() 사용)
-            is_anomaly = bool(result[0] == -1)
-            return {"is_anomaly": is_anomaly}
-        except Exception as e:
-            logger.error(f"IsolationForest 예측 실패: {e}", exc_info=True)
-            raise ModelError(f"IsolationForest 예측 실패: {e}") from e
+            self.train(new_records)
+            logger.info(f"IsolationForest 재훈련 완료: {len(new_records)}개 포인트")
+            return True
+        except ModelError as e:
+            logger.warning(f"IsolationForest 재훈련 실패, 기존 모델 유지: {e}")
+            return False

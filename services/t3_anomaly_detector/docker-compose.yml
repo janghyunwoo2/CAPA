@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  t3_anomaly_detector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: t3_anomaly_detector
+    env_file:
+      - .env
+    environment:
+      # AWS 자격증명: 호스트의 ~/.aws 디렉토리를 마운트하므로 별도 입력 불필요
+      - AWS_DEFAULT_REGION=ap-northeast-2
+      # 컨테이너 시간대를 KST로 고정
+      - TZ=Asia/Seoul
+    volumes:
+      # 학습된 모델 파일 영속화 (컨테이너 재시작 후에도 유지)
+      - ./models:/app/models
+      # 출력 결과 (PNG, HTML, JSONL, 로그) 영속화
+      - ./output:/app/output
+      # AWS 자격증명 공유 (읽기 전용)
+      - ${USERPROFILE}/.aws:/root/.aws:ro
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

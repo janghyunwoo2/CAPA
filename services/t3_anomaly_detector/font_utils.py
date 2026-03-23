@@ -37,7 +37,7 @@ FONT_CANDIDATES = {
 }
 
 # Google Fonts Noto Sans CJK 다운로드 URL
-NOTO_SANS_URL = "https://github.com/googlei18n/noto-cjk/raw/main/Sans/OTF/Korean/NotoSansCJKkr-Regular.otf"
+NOTO_SANS_URL = "https://github.com/noto-fonts/noto-cjk/raw/main/Sans/OTF/Korean/NotoSansCJKkr-Regular.otf"
 
 # 폰트 캐시 디렉토리
 FONT_CACHE_DIR = Path.home() / ".cache" / "anomaly_detector" / "fonts"

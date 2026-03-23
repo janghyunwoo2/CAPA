@@ -64,7 +64,7 @@ class FiveMinuteAggregator:
         count: int = record["impression_count"]
         window_start = self._get_window_start(ts)
 
-        # 첫 번째 레코드
+        # 첫 번째 레코드 (불완전할 수 있으므로 버림)
         if self._current_window_start is None:
             self._current_window_start = window_start
             self._current_count = count
