@@ -6,9 +6,9 @@
 | **테스트 방법** | TDD — pytest 단위 테스트 (외부 API 연결 없음) |
 | **참고 설계서** | `docs/t1/text-to-sql/00_mvp_develop/02-design/04-data-model.md §4.2`, `05-sample-queries.md` |
 | **대상 파일** | `services/vanna-api/scripts/seed_chromadb.py` |
-| **테스트 파일** | `services/vanna-api/tests/unit/test_seed_chromadb.py` |
+| **테스트 파일** | `services/vanna-api/tests/unit/test_seed_chromadb.py`, `tests/integration/test_chromadb_rag_retrieval.py` |
 | **실행일** | 2026-03-22 |
-| **최종 결과** | ✅ 32 PASS / 1 SKIP / 0 FAIL |
+| **최종 결과** | 단위: ✅ 32 PASS / 1 SKIP / 0 FAIL &nbsp;│&nbsp; 통합: ✅ 18 PASS / 0 FAIL |
 
 ---
 
@@ -135,7 +135,7 @@ tests/unit/test_seed_chromadb.py::TestOverfittingPrevention::test_specific_day_v
 
 | 지표 | 기준값 | 실제값 | 판정 |
 |------|:------:|:------:|:----:|
-| 총 QA 예제 수 | ≥ 21개 | **28개** | ✅ |
+| 총 QA 예제 수 | ≥ 21개 | **36개** (BUG TDD 8개 추가) | ✅ |
 | ad_combined_log (hourly) 예제 | ≥ 3개 | **3개** | ✅ |
 | ad_combined_log_summary 편중도 | ≤ 90% | 측정값 내 기준 충족 | ✅ |
 | campaign_id GROUP BY 비율 | ≤ 40% | 기준 충족 | ✅ |
@@ -150,11 +150,51 @@ tests/unit/test_seed_chromadb.py::TestOverfittingPrevention::test_specific_day_v
 | 광고채널별 컬럼 | ad_format | **ad_format** (platform 아님) | ✅ |
 | 파티션 조건 준수 | 28/28 | **28/28** | ✅ |
 
+---
+
+## 통합 테스트 결과 (ChromaDB RAG 검색 품질)
+
+**실행 방법:** `docker exec capa-vanna-api-e2e python -m pytest tests/integration/test_chromadb_rag_retrieval.py -v`
+**실행 결과:** 18 passed / 0 failed / 13.83s
+
+| TC | 질문 | 기대 패턴 | 판정 |
+|----|------|-----------|:----:|
+| TC-RAG-01 | 시간대별 클릭 분포 / 피크타임 / 기기별 시간대 (3개) | `ad_combined_log` 예제 | ✅ PASS |
+| TC-RAG-02 | 전환율 높은 캠페인 / ROAS 계산 (2개) | `ad_combined_log_summary` 예제 | ✅ PASS |
+| TC-RAG-03 | 광고채널별 CTR / 채널별 전환율이 어떻게 돼? | `ad_format GROUP BY` SQL | ✅ PASS |
+| TC-RAG-04 | 카테고리별 CVR / 이번달 CVR | `NULLIF` 패턴 | ✅ PASS |
+| TC-RAG-05 | ROAS 100% 이상 캠페인 | `NULLIF + conversion_value` | ✅ PASS |
+| TC-RAG-06 | 어제 CTR / 이번달 ROAS (동적 날짜) | `date_add` 함수 | ✅ PASS |
+| TC-RAG-06b | (동일 질문) | 하드코딩 날짜 미포함 | ✅ PASS |
+| TC-RAG-07 | 평균보다 CTR이 낮은 캠페인을 찾아줘 | `WITH avg_ctr AS (CTE)` | ✅ PASS |
+| TC-RAG-08 | 주중과 주말의 클릭 패턴 차이를 분석해줘 | `day_of_week()` 함수 | ✅ PASS |
+| TC-RAG-09 | 어제 전환이 한 건도 없는 캠페인이 어디야? | `HAVING + is_conversion = 0` | ✅ PASS |
+| TC-RAG-10 | 시간대별 질문 | summary 테이블 TOP 결과 아님 | ✅ PASS |
+| TC-RAG-11 | 이번달 고유사용자수를 알려줘 | `COUNT(DISTINCT user_id)` | ✅ PASS |
+| TC-RAG-12 | 광고채널별로 아침/낮/저녁 시간대 클릭 패턴 | `ad_format + hour` 복합 SQL | ✅ PASS |
+| TC-PART-01~05 | 어제 CTR / ROAS / 채널별 성과 / 증감률 / 시간대별 (5개) | `year/month/day` 파티션 조건 | ✅ PASS |
+
+### 최종 해결 내용
+
+1. **Vanna `add_question_sql` 오버라이드** (`query_pipeline.py`)
+   - 기존: question+SQL full JSON 임베딩 → 검색 불일치
+   - 변경: question만 document로 저장, SQL은 metadata로 분리
+
+2. **한국어 임베딩 모델 교체** (`query_pipeline.py`)
+   - 기존: `all-MiniLM-L6-v2` (영어 전용)
+   - 변경: `jhgan/ko-sroberta-multitask` (한국어 특화, 무료 오픈소스)
+
+3. **시드 추가** (`seed_chromadb.py`)
+   - "어제 피크타임이 언제야?" → 시간대별 클릭 hourly SQL
+   - "기기별로 시간대별 클릭 패턴을 분석해줘" → device_type + hour SQL
+
+---
+
 ## seed_chromadb.py 주요 변경 사항 (이번 업그레이드)
 
 | 항목 | 이전 | 현재 |
 |------|------|------|
-| QA 예제 수 | 10개 | **28개** |
+| QA 예제 수 | 10개 | **34개** (28개 업그레이드 + BUG TDD 6개) |
 | DDL 형식 | CREATE TABLE | **CREATE EXTERNAL TABLE + COMMENT** |
 | Documentation 타입 | `str` (4개 대형 문자열) | **`list[str]` 21개 개별 항목 (임베딩 정밀도 향상)** |
 | Documentation 변수명 | `DOCUMENTATION_*` | **`DOCS_*`** |
