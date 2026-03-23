@@ -5,6 +5,7 @@ Step 2: QuestionRefiner — 인사말/부연설명 제거, 핵심 질문 추출
 """
 
 import logging
+from typing import Optional
 import anthropic
 from ..prompt_loader import load_prompt
 
@@ -32,9 +33,10 @@ class QuestionRefiner:
         self._client = anthropic.Anthropic(api_key=api_key)
         self._model = model
 
-    def refine(self, question: str) -> str:
+    def refine(self, question: str, conversation_history: Optional[list] = None) -> str:
         """질문을 정제하여 반환.
         LLM 호출 실패 시 원본 질문 그대로 반환 (graceful degradation).
+        conversation_history: 멀티턴 대화 이력 (현재 미사용, 시그니처 호환 용도).
         """
         try:
             prompts = load_prompt("question_refiner")
