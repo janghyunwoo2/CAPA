@@ -14,7 +14,7 @@ from typing import Optional, Dict
 
 # ============ 실제 구현 import ============
 
-from src.pipeline.spider_evaluation import (
+from spider_evaluation import (
     SpiderEvalResult,
     SQLNormalizer,
     ExecutionValidator,
