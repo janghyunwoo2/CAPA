@@ -9,7 +9,7 @@ Spider EM/Exec 평가 실행 스크립트
   python run_evaluation.py [--test-cases FILE] [--output FILE] [--limit N]
 
 필수 환경변수:
-  VANNA_API_URL   vanna-api 컨테이너 URL (기본: http://localhost:8080)
+  VANNA_API_URL   vanna-api 컨테이너 URL (기본: http://localhost:8000)
   REDASH_API_KEY  Redash API 키 (Exec 평가 사용)
   REDASH_BASE_URL Redash URL (기본: http://localhost:5000)
 """
@@ -43,7 +43,7 @@ class _SQLGeneratorAdapter:
     spider_evaluation.py 내부에서 vanna_client.generate_sql(question=...) 로 호출한다.
     """
 
-    def __init__(self, api_url: str = "http://localhost:8080") -> None:
+    def __init__(self, api_url: str = "http://localhost:8000") -> None:
         self._url = f"{api_url}/query"
         logger.info(f"✅ HTTP 어댑터 초기화 완료 (endpoint: {self._url})")
 
@@ -57,6 +57,9 @@ class _SQLGeneratorAdapter:
         import re as _re
         token = os.getenv("INTERNAL_API_TOKEN", "test-token")
         headers = {"X-Internal-Token": token}
+
+        print(f"\n  [INPUT ] 질문: {question}")
+
         try:
             resp = requests.post(
                 self._url,
@@ -65,9 +68,11 @@ class _SQLGeneratorAdapter:
                 timeout=120,
             )
             resp.raise_for_status()
-            sql = resp.json().get("sql", "")
+            body = resp.json()
+            sql = body.get("sql", "")
             if not sql:
                 logger.warning(f"SQL 미반환: question={question[:50]}")
+            print(f"  [OUTPUT] 생성 SQL:\n{sql or '(없음)'}")
             return sql or ""
         except requests.HTTPError as e:
             # REDASH_ERROR: Athena 실행 실패지만 SQL은 생성됨 → EM용으로 추출
@@ -75,18 +80,21 @@ class _SQLGeneratorAdapter:
                 try:
                     detail = e.response.json().get("detail", {})
                     if isinstance(detail, dict):
+                        error_code = detail.get("error_code", "")
                         sql = detail.get("detail", "")
                         if sql:
                             sql = _re.sub(r"^```(?:sql)?\s*\n?", "", sql, flags=_re.IGNORECASE)
                             sql = _re.sub(r"\n?```\s*$", "", sql).strip()
                             if sql:
-                                logger.info(f"SQL 추출 ({detail.get('error_code')}): {question[:50]}")
+                                print(f"  [OUTPUT] SQL 추출 ({error_code}) — Athena 실행 실패, EM만 평가:\n{sql}")
                                 return sql
                 except Exception:
                     pass
+            print(f"  [ERROR ] HTTP {e.response.status_code}: {e.response.text[:300]}")
             logger.error(f"API 오류 ({e.response.status_code}): {e.response.text[:200]}")
             raise
         except requests.Timeout:
+            print(f"  [ERROR ] 타임아웃 (120초 초과)")
             logger.error("API 타임아웃 (120초 초과)")
             raise
 
@@ -100,7 +108,7 @@ class EvaluationRunner:
         redash_api_key: Optional[str] = None,
         redash_base_url: Optional[str] = None,
     ):
-        vanna_api_url  = vanna_api_url  or os.getenv("VANNA_API_URL",  "http://localhost:8080")
+        vanna_api_url  = vanna_api_url  or os.getenv("VANNA_API_URL",  "http://localhost:8000")
         redash_api_key = redash_api_key or os.getenv("REDASH_API_KEY", "")
         redash_base_url = redash_base_url or os.getenv("REDASH_BASE_URL", "http://localhost:5000")
 
@@ -133,7 +141,28 @@ class EvaluationRunner:
         logger.info("=" * 60)
 
         cases = self.load_test_cases(test_cases_file, limit)
-        results = self.evaluator.evaluate_batch(cases, self.sql_generator)
+
+        # 케이스별 상세 출력을 위해 직접 루프
+        results = []
+        for i, case in enumerate(cases, 1):
+            tc_id = case.get("id", f"TC{i:03d}")
+            question = case.get("question", "")
+            ground_truth = case.get("ground_truth_sql", "")
+
+            print(f"\n{'='*60}")
+            print(f"[{i}/{len(cases)}] {tc_id}")
+            print(f"{'='*60}")
+            print(f"  [정답SQL]\n{ground_truth.strip()}")
+
+            result = self.evaluator.evaluate_single(case, self.sql_generator)
+            results.append(result)
+
+            em_mark  = "✅ PASS" if result.em_score   == 1.0 else "❌ FAIL"
+            exec_mark = "✅ PASS" if result.exec_score == 1.0 else "❌ FAIL"
+            print(f"\n  EM   : {em_mark}  |  Exec: {exec_mark}  |  Avg: {result.avg_score*100:.0f}%")
+            if result.exec_error:
+                print(f"  [EXEC ERROR] {result.exec_error[:120]}")
+
         report = self.evaluator.generate_report(results)
 
         logger.info("=" * 60)
@@ -170,7 +199,7 @@ def main():
     parser = argparse.ArgumentParser(description="Spider EM/Exec 평가 (Step 5: SQL 생성 정확도)")
     parser.add_argument("--test-cases", default="test_cases.json")
     parser.add_argument("--output",     default="evaluation_report.json")
-    parser.add_argument("--limit",      type=int)
+    parser.add_argument("--limit",      type=int, default=3)  # TODO: 검증 후 제거
     parser.add_argument("--redash-url", default=None)
     args = parser.parse_args()
 
