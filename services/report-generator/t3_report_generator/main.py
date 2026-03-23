@@ -6,8 +6,15 @@ Airflow DAG 또는 직접 실행으로 호출됩니다.
 
 import logging
 import sys
+import os
 from datetime import datetime, timedelta
 from typing import Any
+from dotenv import load_dotenv
+
+# [추가] .env 파일에서 환경 변수 로드
+if os.path.exists(".env"):
+    load_dotenv(".env")
+    logging.info(".env 파일에서 환경 변수를 로드했습니다.")
 
 import logging
 import sys

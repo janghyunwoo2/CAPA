@@ -5,7 +5,6 @@ ReportLab을 사용하여 PDF를 직접 생성합니다.
 """
 
 import logging
-import tempfile
 from datetime import datetime
 from pathlib import Path
 try:
@@ -13,10 +12,6 @@ try:
 except ImportError:
     from backports.zoneinfo import ZoneInfo
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import pandas as pd
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
@@ -138,39 +133,14 @@ def create_pdf(
     # 마크다운 파싱 후 요소 추가
     _parse_markdown_and_add_to_story(report_markdown, story, heading_style, body_style, korean_font)
 
-    # 차트 추가
-    chart_path = None
-    if daily_breakdown and len(daily_breakdown) > 0:
-        story.append(PageBreak())
-        story.append(Paragraph("일별 추이 차트", heading_style))
-        story.append(Spacer(1, 0.3*cm))
-
-        chart_path = _create_trend_chart(daily_breakdown)
-        if chart_path:
-            try:
-                img = Image(chart_path, width=16*cm, height=6*cm)
-                story.append(img)
-                story.append(Spacer(1, 0.3*cm))
-            except Exception as e:
-                logger.warning(f"차트 추가 실패: {e}")
-                chart_path = None
-
     # 푸터
+    story.append(Spacer(1, 0.5*cm))
     story.append(Spacer(1, 0.5*cm))
     footer_text = "CAPA 광고 분석 플랫폼 | 자동생성 보고서"
     story.append(Paragraph(footer_text, normal_style))
 
     # PDF 생성
     doc.build(story)
-    logger.info(f"PDF 보고서 생성 완료: {output_path}")
-
-    # 임시 차트 파일 정리
-    if chart_path:
-        try:
-            Path(chart_path).unlink()
-        except Exception as e:
-            logger.warning(f"임시 파일 삭제 실패: {e}")
-
     return output_path
 
 
@@ -265,69 +235,3 @@ def _parse_table(table_lines: list[str]) -> list[list[str]]:
             data.append(row)
 
     return data
-
-
-def _create_trend_chart(daily_breakdown: list[dict]) -> str | None:
-    """일별 트렌드 차트를 생성합니다.
-
-    Args:
-        daily_breakdown: 일별 성과 데이터 리스트
-
-    Returns:
-        생성된 PNG 이미지 파일 경로
-    """
-    try:
-        if not daily_breakdown or len(daily_breakdown) == 0:
-            return None
-
-        # DataFrame으로 변환
-        df = pd.DataFrame(daily_breakdown)
-
-        # 필요한 컬럼 확인
-        if 'date' not in df.columns or 'impressions' not in df.columns:
-            logger.warning("필요한 컬럼이 없습니다")
-            return None
-
-        # 숫자로 변환
-        df['impressions'] = pd.to_numeric(df['impressions'], errors='coerce').fillna(0)
-        df['clicks'] = pd.to_numeric(df['clicks'], errors='coerce').fillna(0)
-        df['conversions'] = pd.to_numeric(df['conversions'], errors='coerce').fillna(0)
-
-        # 차트 생성
-        import platform
-        if platform.system() == "Linux":
-            plt.rcParams["font.family"] = "NanumGothic"
-        else:
-            plt.rcParams["font.family"] = "Malgun Gothic"
-
-        fig, ax = plt.subplots(figsize=(12, 5))
-
-        dates = df['date'].tolist()
-        x_range = range(len(dates))
-
-        ax.plot(x_range, df['impressions'], marker="o", label="노출", linewidth=2, color="#1F4E79")
-        ax.plot(x_range, df['clicks'], marker="s", label="클릭", linewidth=2, color="#2E75B6")
-        ax.plot(x_range, df['conversions'], marker="^", label="전환", linewidth=2, color="#70AD47")
-
-        ax.set_xticks(list(x_range))
-        ax.set_xticklabels(dates, rotation=45, ha="right", fontsize=8)
-        ax.set_title("일별 광고 성과 추이", fontsize=14, fontweight="bold")
-        ax.set_xlabel("날짜")
-        ax.set_ylabel("수량")
-        ax.legend()
-        ax.grid(True, alpha=0.3)
-
-        plt.tight_layout()
-
-        # 임시 파일에 저장
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            tmp_path: str = tmp.name
-            plt.savefig(tmp_path, dpi=150, bbox_inches="tight")
-
-        plt.close(fig)
-        logger.info(f"차트 생성 완료: {tmp_path}")
-        return tmp_path
-
-    except Exception as e:
-        logger.error(f"차트 생성 오류: {e}")
-        return None
