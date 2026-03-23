@@ -21,3 +21,7 @@ pandas
 # Phase 2: Cross-Encoder Reranker (§3.3)
 sentence-transformers>=2.6.1
 
+# FR-PE: 프롬프트 YAML 외부화
+pyyaml>=6.0
+jinja2>=3.1
+

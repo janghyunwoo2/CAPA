@@ -330,6 +330,23 @@ ORDER BY day
 """
     },
     {
+        "question": "기기별로 시간대별 클릭 패턴을 분석해줘",
+        "sql": """
+SELECT
+    device_type,
+    hour,
+    COUNT(*) AS impressions,
+    SUM(CAST(is_click AS INT)) AS clicks,
+    ROUND(SUM(CAST(is_click AS INT)) * 100.0 / COUNT(*), 2) AS ctr_percent
+FROM ad_combined_log
+WHERE year  = date_format(date_add('day', -1, current_date), '%Y')
+  AND month = date_format(date_add('day', -1, current_date), '%m')
+  AND day   = date_format(date_add('day', -1, current_date), '%d')
+GROUP BY device_type, hour
+ORDER BY device_type, hour
+"""
+    },
+    {
         "question": "기기별(device_type) 클릭수와 클릭률(CTR)을 비교해줘",
         "sql": """
 SELECT
@@ -432,6 +449,21 @@ ORDER BY cpc ASC
 
     # ── GROUP 4: ad_combined_log 시간대별 분석 ───────────────────────────
 
+    {
+        "question": "어제 피크타임이 언제야?",
+        "sql": """
+SELECT
+    hour,
+    SUM(CAST(is_click AS INT)) AS clicks
+FROM ad_combined_log
+WHERE year  = date_format(date_add('day', -1, current_date), '%Y')
+  AND month = date_format(date_add('day', -1, current_date), '%m')
+  AND day   = date_format(date_add('day', -1, current_date), '%d')
+GROUP BY hour
+ORDER BY clicks DESC
+LIMIT 1
+"""
+    },
     {
         "question": "어제 시간대별 클릭률(CTR)을 분석해줘",
         "sql": """

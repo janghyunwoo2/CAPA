@@ -61,7 +61,8 @@ resource "kubernetes_secret" "t3_report_slack" {
   }
 
   data = {
-    SLACK_BOT_TOKEN = var.slack_bot_token
+    SLACK_BOT_TOKEN  = var.slack_bot_token
+    SLACK_CHANNEL_ID = var.slack_channel_id
   }
 
   type = "Opaque"

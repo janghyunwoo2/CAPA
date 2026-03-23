@@ -19,6 +19,10 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# 한국어 임베딩 모델 사전 다운로드 (빌드 시 캐시 — 런타임 다운로드 방지)
+RUN python -c "from sentence_transformers import SentenceTransformer; \
+    SentenceTransformer('jhgan/ko-sroberta-multitask')"
+
 
 
 # 애플리케이션 코드 복사 (src/ 를 패키지 구조로 유지 — relative import 정상 동작)
