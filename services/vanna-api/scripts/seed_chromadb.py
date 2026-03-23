@@ -995,17 +995,17 @@ def train_ddl(vanna_instance) -> None:
     logger.info("DDL 학습 시작...")
 
     try:
-        vanna_instance.train(
-            ddl=DDL_AD_COMBINED_LOG,
-            documentation="테이블: ad_combined_log - 광고 노출 및 클릭 이벤트 (시간 단위, hour 파티션)"
-        )
+        # Vanna train()은 ddl과 documentation을 동시에 전달하면 documentation만 저장됨 (early return 버그)
+        # → 반드시 분리 호출
+        vanna_instance.train(ddl=DDL_AD_COMBINED_LOG)
         logger.info("✓ ad_combined_log DDL 학습 완료")
+        vanna_instance.train(documentation="테이블: ad_combined_log - 광고 노출 및 클릭 이벤트 (시간 단위, hour 파티션)")
+        logger.info("✓ ad_combined_log documentation 학습 완료")
 
-        vanna_instance.train(
-            ddl=DDL_AD_COMBINED_LOG_SUMMARY,
-            documentation="테이블: ad_combined_log_summary - 광고 성과 일일 요약 (전환 데이터 포함)"
-        )
+        vanna_instance.train(ddl=DDL_AD_COMBINED_LOG_SUMMARY)
         logger.info("✓ ad_combined_log_summary DDL 학습 완료")
+        vanna_instance.train(documentation="테이블: ad_combined_log_summary - 광고 성과 일일 요약 (전환 데이터 포함)")
+        logger.info("✓ ad_combined_log_summary documentation 학습 완료")
 
     except Exception as e:
         logger.error(f"DDL 학습 실패: {e}")
