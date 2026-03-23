@@ -101,7 +101,7 @@ def main():
                     sender.send(conv)
             
             # 기본 대기 (1초에 하나씩)
-            time.sleep(1.0)
+            time.sleep(0.3)
     
     except KeyboardInterrupt:
         print("\n\n" + "=" * 60, flush=True)
