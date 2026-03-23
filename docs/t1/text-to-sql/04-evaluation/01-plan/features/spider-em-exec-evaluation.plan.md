@@ -287,7 +287,60 @@ Vanna API에서 생성한 SQL이 **정답 쿼리와 동일한 결과를 반환**
 
 ---
 
-## 8. 평가 실행 방법
+## 8. 테스트 케이스 정답 SQL 검증 방식 (Option C)
+
+### 배경
+
+단순 명시적 날짜 + 단순 집계 20개만으로는 실전 취약점을 발견하기 어렵다.
+`05-sample-queries.md` 기반의 복잡한 질문(상대 날짜, 다중 지표, 기간 집계 등)을 포함하여 **어디서 정확도가 낮은지** 식별하는 것이 목표다.
+
+### 정답 SQL 채택 기준 (Option C)
+
+> **제가 SQL을 직접 작성 → Redash(Athena)에서 실제 실행 → 결과가 반환되는 것만 정답으로 채택**
+
+```
+[작성] Claude가 스키마 기반으로 ground_truth_sql 작성
+    ↓
+[검증] Redash POST /api/queries → 실행 → 결과 반환 확인
+    ↓
+[채택] 실행 성공한 SQL만 test_cases.json에 포함
+    ↓
+[평가] run_evaluation.py 실행 → LLM 생성 SQL과 Exec 비교
+```
+
+### 테스트 케이스 구성 (목표: 60개)
+
+| 난이도 | 설명 | 케이스 수 |
+|--------|------|----------|
+| Easy (L1) | 단일 날짜 + 단일 지표 집계 | 20개 (기존) |
+| Medium (L2) | 단일 날짜 + 복합 조건/다중 지표 | 15개 |
+| Hard (L3) | 7일 범위 집계 | 10개 |
+| Hard (L4) | 월 단위 집계 | 10개 |
+| Expert (L5) | 서브쿼리 / 평균 대비 비교 / 피크 분석 | 5개 |
+
+### 상대 날짜 처리 방식
+
+test_cases.json의 `question`은 명시적 날짜로 고정하여 재현 가능성을 보장한다.
+
+```json
+{
+  "question": "2026년 3월 14일 기준 직전 7일(3/8~3/14) 일별 impression 추이",
+  "ground_truth_sql": "SELECT day, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY day ORDER BY day"
+}
+```
+
+### Exec 기반 정답 판단 우선
+
+EM은 alias 이름 차이만으로도 FAIL이 발생하므로, **취약점 분석은 Exec 기준**으로 한다.
+
+| 지표 | 역할 |
+|------|------|
+| EM | SQL 구조 정확도 (엄격) |
+| Exec | 실제 데이터 일치 여부 (현실적) — 취약점 분석 기준 |
+
+---
+
+## 9. 평가 실행 방법
 
 ### Quick Start (로컬 실행)
 
@@ -359,7 +412,7 @@ python run_evaluation.py --output results/eval-2026-03-22.json
 
 ---
 
-## 9. 다음 단계
+## 10. 다음 단계
 
 ### Phase 2 → Phase 3 (Design 단계)
 1. ✅ 본 Plan 승인

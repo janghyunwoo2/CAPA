@@ -341,6 +341,71 @@ REDASH_BASE_URL=http://localhost:5000
 
 ---
 
+---
+
+## 2차 작업: 테스트 케이스 확대 및 Option C 정답 검증 체계 도입 (2026-03-23)
+
+### 변경 사항 요약
+
+| 항목 | 변경 전 | 변경 후 |
+|------|---------|---------|
+| 테스트 케이스 수 | 20개 | **60개** |
+| 정답 SQL 검증 방식 | 없음 (수동 작성만) | **Option C: Redash Exec 검증 후 채택** |
+| 평가 파일 위치 | `src/pipeline/`, 루트 | **`evaluation/` 독립 폴더** |
+| 난이도 분류 | 없음 | easy/medium/hard/expert |
+
+### 테스트 케이스 구성 (60개)
+
+| 난이도 | 케이스 수 | 설명 |
+|--------|----------|------|
+| easy (L1) | 20개 | 단일 날짜 + 단일 지표 (기존 유지) |
+| medium (L2) | 15개 | 단일 날짜 + 복합 조건 / 다중 지표 |
+| hard (L3) | 10개 | 7일 범위 집계 (IN 절 파티션) |
+| hard (L4) | 10개 | 월 단위 집계 |
+| expert (L5) | 5개 | 서브쿼리 / 평균 대비 비교 / 피크 분석 |
+
+### Option C 정답 SQL 검증 절차
+
+```
+[작성] Claude가 스키마 기반으로 ground_truth_sql 직접 작성 ✅ (완료)
+    ↓
+[검증] 컨테이너 기동 후 Redash POST /api/queries → 실행 → 결과 반환 확인
+    ↓    (⏳ 대기 중 — 로컬 컨테이너 + Redash 연결 필요)
+[채택] 실행 성공한 SQL만 최종 ground_truth로 확정
+    ↓
+[평가] run_evaluation.py 실행 → LLM 생성 SQL과 Exec 비교
+```
+
+### 신규 카테고리 (medium~expert)
+
+| 카테고리 | TC | 대표 질문 |
+|----------|-----|---------|
+| multi_metric | T021~022 | 노출수+클릭수+전환수+CTR 동시 조회 |
+| food_category | T023 | 음식 카테고리별 CTR 상위 10 |
+| ad_position | T024 | 광고 위치별 클릭/전환 |
+| os | T025 | OS별 impression + CTR |
+| conversion (HAVING) | T026 | 클릭 있지만 전환 없는 캠페인 |
+| device_platform | T028 | 기기+플랫폼 조합별 |
+| hourly (CASE) | T029 | 오전/오후 비교 |
+| keyword | T031 | 검색 키워드별 클릭 TOP 10 |
+| store | T032 | 가게별 전환 매출 |
+| weekly (IN) | T036~045 | 7일 범위 집계 |
+| monthly | T046~055 | 월 전체 집계 |
+| complex (subquery) | T056~060 | 서브쿼리, 피크, ROAS 종합 |
+
+### Exec 검증 대기 상태
+
+| 구분 | 상태 |
+|------|------|
+| ground_truth_sql 작성 | ✅ 60개 완료 |
+| Redash Exec 검증 | ⏳ 컨테이너 기동 후 진행 예정 |
+| 최종 ground_truth 확정 | ⏳ Exec 검증 완료 후 |
+
+> **실행 방법**: 포트포워딩(`kubectl port-forward -n vanna svc/vanna-api 8080:8000`) 후
+> `cd services/vanna-api/evaluation && python run_evaluation.py --test-cases test_cases.json`
+
+---
+
 ## 다음 단계
 
 ✅ **완료**:
