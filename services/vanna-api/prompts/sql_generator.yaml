@@ -34,10 +34,15 @@ cot_template: |
           - DDL에 없는 컬럼은 절대 추측하거나 생성하지 않는다.
           - 존재하지 않는 컬럼 예시: campaign_name, ad_name, advertiser_name
             (실제로는 campaign_id, ad_id, advertiser_id만 존재)
-  Step 2. 질문 유형에 맞는 테이블을 선택한다.
-          - 시간대별(hour) 분석 → ad_combined_log (hour 파티션 보유)
-          - 일별 집계 / 전환(conversion) 데이터 → ad_combined_log_summary
-          - 두 테이블 모두 필요한 경우에만 JOIN 사용
+  Step 2. 질문에 필요한 컬럼이 어느 테이블에 있는지 확인하여 테이블을 결정한다.
+          - is_conversion / conversion_id / conversion_type / conversion_value /
+            product_id / quantity / attribution_window 중 하나라도 필요하면
+            → ad_combined_log_summary 필수 (해당 컬럼은 ad_combined_log에 없음)
+          - 시간대별(hour) 분석이 필요하면
+            → ad_combined_log 필수 (ad_combined_log_summary에 hour 파티션 없음)
+          - 위 조건 없으면 (CTR, CPC, 노출수, 클릭수 등 일반 집계)
+            → 기본값: ad_combined_log_summary 사용
+          - 두 조건 모두 해당하면 JOIN 사용
   Step 3. 날짜/기간 표현을 파티션 조건으로 변환한다.
           - 반드시 year='YYYY' AND month='MM' AND day='DD' 형식 사용
           - month, day는 반드시 2자리 zero-padded 문자열 (예: '03', '09')
@@ -69,14 +74,30 @@ negative_rules: |
 
 table_selection_rules: |
   <table_rules>
-    테이블 선택 기준:
-    - ad_combined_log: 시간대별(hour) 분석, 개별 이벤트 레벨 조회
-      → 보유 파티션: year, month, day, hour
-    - ad_combined_log_summary: 일별 집계, 전환(conversion) 데이터, 비용 분석
-      → 보유 파티션: year, month, day
-      → 전용 컬럼: conversion_id, conversion_type, conversion_value,
-                   product_id, quantity, attribution_window, is_conversion
-    - 두 테이블 공통 컬럼: impression_id, user_id, ad_id, campaign_id,
-      advertiser_id, platform, device_type, os, delivery_region,
-      is_click, cost_per_impression, cost_per_click
+    ⚠️ 테이블 선택 — 필요한 컬럼이 없는 테이블은 반드시 제외
+
+    규칙 1. 전환 컬럼이 필요하면 → ad_combined_log_summary 필수
+      해당 컬럼: is_conversion, conversion_id, conversion_type, conversion_value,
+                 product_id, quantity, attribution_window
+      → 이 컬럼들은 ad_combined_log에 존재하지 않으므로 ad_combined_log 선택 불가
+
+    규칙 2. 시간대(hour) 분석이 필요하면 → ad_combined_log 필수
+      → ad_combined_log_summary에는 hour 파티션이 없으므로 선택 불가
+
+    규칙 3. 위 조건 없으면 → 기본값: ad_combined_log_summary
+      CTR, CPC, 노출수, 클릭수 등 공통 컬럼만 사용하는 일반 집계는
+      ad_combined_log_summary를 기본으로 사용
+      (두 테이블 모두 가능하지만 summary가 일별 집계에 최적화됨)
+
+    규칙 4. 두 조건 동시 충족 시에만 JOIN 허용
+      → ad_combined_log.impression_id = ad_combined_log_summary.impression_id
+
+    [전용 컬럼 요약]
+    ad_combined_log 전용:     hour (파티션)
+    ad_combined_log_summary 전용: is_conversion, conversion_id, conversion_type,
+                                   conversion_value, product_id, quantity,
+                                   attribution_window
+    공통: impression_id, user_id, ad_id, campaign_id, advertiser_id,
+          platform, device_type, os, delivery_region,
+          is_click, cost_per_impression, cost_per_click, year, month, day
   </table_rules>
