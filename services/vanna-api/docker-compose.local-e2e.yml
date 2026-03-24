@@ -189,6 +189,7 @@ services:
       - ./src:/app/src
       - ./scripts:/app/scripts
       - ./prompts:/app/prompts
+      - ./evaluation:/app/evaluation  # ⚠️ 로컬 평가 전용 — 배포 시 제거 필요
 
     depends_on:
       chromadb:

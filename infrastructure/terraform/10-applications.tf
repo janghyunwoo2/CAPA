@@ -68,6 +68,22 @@ resource "kubernetes_secret" "t3_report_slack" {
   type = "Opaque"
 }
 
+# T2 ETL Runner - AWS Credentials Secret (for KubernetesPodOperator DAG)
+resource "kubernetes_secret" "t2_etl_secret" {
+  metadata {
+    name      = "t2-etl-secret"
+    namespace = kubernetes_namespace.airflow.metadata[0].name
+  }
+
+  data = {
+    AWS_ACCESS_KEY_ID     = var.aws_access_key
+    AWS_SECRET_ACCESS_KEY = var.aws_secret_key
+    AWS_DEFAULT_REGION    = "ap-northeast-2" # 기본 Region 지정
+  }
+
+  type = "Opaque"
+}
+
 # ---------------------------------------------------------------------------------------------------------------------
 # 3. Helm Releases
 # ---------------------------------------------------------------------------------------------------------------------

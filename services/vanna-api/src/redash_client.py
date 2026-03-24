@@ -6,7 +6,9 @@ REDASH_ENABLED=false 시 Athena 직접 실행 폴백
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+_KST = timezone(timedelta(hours=9))
 from typing import Optional, Any
 
 import httpx
@@ -64,7 +66,7 @@ class RedashClient:
         Raises:
             RedashAPIError: API 호출 실패 시
         """
-        query_name = name or f"CAPA: Query [{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}]"
+        query_name = name or f"CAPA: Query [{datetime.now(_KST).strftime('%Y-%m-%d %H:%M:%S')}]"
         payload = {
             "name": query_name,
             "query": sql,

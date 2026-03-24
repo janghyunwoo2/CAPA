@@ -18,7 +18,9 @@ Step 11. HistoryRecorder     → 질문-SQL-결과 이력 저장
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+_KST = timezone(timedelta(hours=9))
 from typing import Any, Optional
 
 import boto3
@@ -432,7 +434,7 @@ class QueryPipeline:
 
         # Step 7: Redash 쿼리 생성
         try:
-            query_name = f"CAPA: {ctx.refined_question or ctx.original_question} [{datetime.utcnow().strftime('%Y-%m-%d %H:%M')}]"
+            query_name = f"CAPA: {ctx.refined_question or ctx.original_question} [{datetime.now(_KST).strftime('%Y-%m-%d %H:%M')}]"
             ctx.redash_query_id = await redash.create_query(
                 sql=sql,
                 name=query_name,
