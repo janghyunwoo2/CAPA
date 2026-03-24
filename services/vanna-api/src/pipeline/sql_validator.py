@@ -161,7 +161,9 @@ class SQLValidator:
             normalized_sql = validate_sql(sql)
         except SQLValidationError as e:
             logger.warning(f"SQL 정적 검증 실패: {e.message}")
-            return ValidationResult(is_valid=False, error_message=e.message)
+            return ValidationResult(
+                is_valid=False, error_message=e.message, error_code=e.error_code
+            )
 
         # Athena EXPLAIN 검증
         explain_result, explain_error = self._athena_explain(normalized_sql)

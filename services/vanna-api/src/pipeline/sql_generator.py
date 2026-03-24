@@ -41,14 +41,22 @@ def _strip_thinking_block(sql: str) -> str:
 class SQLGenerator:
     """Step 5 — Vanna 기반 SQL 생성"""
 
-    def __init__(self, vanna_instance: Any) -> None:
+    def __init__(
+        self,
+        vanna_instance: Any,
+        anthropic_client: Optional[Any] = None,
+        model: str = "claude-haiku-4-5-20251001",
+    ) -> None:
         self._vanna = vanna_instance
+        self._anthropic = anthropic_client
+        self._model = model
 
     def generate(
         self,
         question: str,
         rag_context: Optional[RAGContext] = None,
         conversation_history: Optional[list] = None,
+        error_feedback: Optional[str] = None,
     ) -> str:
         """자연어 질문을 SQL로 변환하여 반환.
         실패 시 SQLGenerationError 발생 → 파이프라인 중단.
@@ -119,25 +127,51 @@ class SQLGenerator:
                     logger.info(f"RAG 컨텍스트 주입: DDL {len(rag_context.ddl_context)}건, Docs {len(rag_context.documentation_context)}건, SQL {len(rag_context.sql_examples)}건")
 
             # [FR-PE-02, FR-PE-03] CoT + 구조화 날짜 규칙 + RAG 컨텍스트 + history 주입
-            prompt = f"{schema}\n{date_rules}\n{rag_block}{history_block}{cot_template}\n질문: {question}"
+            negative_rules = prompts.get("negative_rules", "")
+            table_selection_rules = prompts.get("table_selection_rules", "")
 
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                if rag_context:
-                    # Phase 2: rag_context 주입 후 Claude 직접 호출 (Vanna 내부 RAG 중복 우회)
-                    future = executor.submit(
-                        self._vanna.submit_prompt,
-                        [{"role": "user", "content": prompt}],
-                    )
-                else:
-                    # Phase 1 하위 호환: Vanna 내부 RAG + Claude
-                    future = executor.submit(self._vanna.generate_sql, question=prompt)
-                try:
-                    sql = future.result(timeout=LLM_TIMEOUT_SECONDS)
-                except FuturesTimeoutError:
-                    logger.error(f"LLM 응답 타임아웃 ({LLM_TIMEOUT_SECONDS}초 초과)")
-                    raise SQLGenerationError(
-                        f"LLM 응답 타임아웃 ({LLM_TIMEOUT_SECONDS}초 초과)"
-                    )
+            # error_feedback 블록 (Self-Correction용)
+            error_block = error_feedback or ""
+
+            if self._anthropic:
+                # [A-2] anthropic_client 주입 시: temperature=0 + system/user 분리
+                system_content = "\n".join(filter(None, [
+                    schema, date_rules, negative_rules, table_selection_rules
+                ]))
+                user_content = (
+                    f"{rag_block}{history_block}{error_block}"
+                    f"{cot_template}\n질문: {question}"
+                )
+                response = self._anthropic.messages.create(
+                    model=self._model,
+                    max_tokens=1024,
+                    temperature=0,
+                    system=system_content,
+                    messages=[{"role": "user", "content": user_content}],
+                )
+                sql = response.content[0].text
+            else:
+                # [하위 호환] anthropic_client 없는 경우 기존 Vanna 경로
+                prompt = (
+                    f"{schema}\n{date_rules}\n"
+                    f"{rag_block}{history_block}{error_block}"
+                    f"{cot_template}\n질문: {question}"
+                )
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    if rag_context:
+                        future = executor.submit(
+                            self._vanna.submit_prompt,
+                            [{"role": "user", "content": prompt}],
+                        )
+                    else:
+                        future = executor.submit(self._vanna.generate_sql, question=prompt)
+                    try:
+                        sql = future.result(timeout=LLM_TIMEOUT_SECONDS)
+                    except FuturesTimeoutError:
+                        logger.error(f"LLM 응답 타임아웃 ({LLM_TIMEOUT_SECONDS}초 초과)")
+                        raise SQLGenerationError(
+                            f"LLM 응답 타임아웃 ({LLM_TIMEOUT_SECONDS}초 초과)"
+                        )
 
             if not sql or not sql.strip():
                 raise SQLGenerationError("빈 SQL이 생성되었습니다")
@@ -153,3 +187,38 @@ class SQLGenerator:
         except Exception as e:
             logger.error(f"SQL 생성 실패: {e}")
             raise SQLGenerationError(f"SQL 생성 중 오류가 발생했습니다: {str(e)}")
+
+    def generate_with_error_feedback(
+        self,
+        question: str,
+        failed_sql: str,
+        error_message: str,
+        rag_context: Optional[RAGContext] = None,
+        conversation_history: Optional[list] = None,
+    ) -> str:
+        """Self-Correction용: 실패한 SQL과 에러 메시지를 LLM에 재주입하여 재생성.
+
+        Args:
+            question: 원래 사용자 질문
+            failed_sql: 검증 실패한 SQL
+            error_message: 검증 에러 메시지
+            rag_context: RAG 컨텍스트 (1차와 동일)
+            conversation_history: 대화 이력
+
+        Returns:
+            재생성된 SQL 문자열
+        """
+        error_block = (
+            "<error_feedback>\n"
+            f"이전에 생성된 SQL: {failed_sql}\n"
+            f"오류 내용: {error_message}\n"
+            "위 오류를 반드시 수정하여 올바른 SQL을 다시 작성하세요.\n"
+            "</error_feedback>\n"
+        )
+        logger.info(f"Self-Correction 재생성: error={error_message[:80]}")
+        return self.generate(
+            question=question,
+            rag_context=rag_context,
+            conversation_history=conversation_history,
+            error_feedback=error_block,
+        )

@@ -29,12 +29,54 @@ date_rules: |
 
 cot_template: |
   <thinking>
-  Step 1. 어떤 테이블/컬럼이 필요한가?
-  Step 2. 날짜/기간 표현을 파티션 조건으로 변환하면?
-  Step 3. 집계·필터·정렬 로직은?
-  Step 4. 위 분석을 바탕으로 SQL 작성
+  Step 1. DDL에서 실제 존재하는 테이블과 컬럼을 먼저 확인한다.
+          - 반드시 제공된 DDL에 명시된 컬럼만 사용할 것.
+          - DDL에 없는 컬럼은 절대 추측하거나 생성하지 않는다.
+          - 존재하지 않는 컬럼 예시: campaign_name, ad_name, advertiser_name
+            (실제로는 campaign_id, ad_id, advertiser_id만 존재)
+  Step 2. 질문 유형에 맞는 테이블을 선택한다.
+          - 시간대별(hour) 분석 → ad_combined_log (hour 파티션 보유)
+          - 일별 집계 / 전환(conversion) 데이터 → ad_combined_log_summary
+          - 두 테이블 모두 필요한 경우에만 JOIN 사용
+  Step 3. 날짜/기간 표현을 파티션 조건으로 변환한다.
+          - 반드시 year='YYYY' AND month='MM' AND day='DD' 형식 사용
+          - month, day는 반드시 2자리 zero-padded 문자열 (예: '03', '09')
+  Step 4. 집계·필터·정렬 로직을 설계한다.
+          - CTR = COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0)
+          - CVR = COUNT(CASE WHEN is_conversion = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0)
+          - 0 나눗셈 방지: NULLIF(분모, 0) 항상 사용
+  Step 5. 위 분석을 바탕으로 SQL을 작성한다.
+  Step 6. 최종 검증: 사용한 모든 컬럼이 DDL에 존재하는지 재확인한다.
   </thinking>
 
   ⚠️ 출력 규칙:
   - SQL 쿼리만 출력할 것 (마크다운 코드블록 금지: ```sql 사용 금지)
   - 설명·주석·제목 없이 SELECT 문부터 바로 시작할 것
+
+negative_rules: |
+  <constraints>
+    ❌ 절대 금지 사항:
+    1. DDL에 정의되지 않은 컬럼 사용 금지
+       (campaign_name, ad_name, advertiser_name, channel 등은 존재하지 않음)
+    2. DATE(), TO_DATE(), CAST(... AS DATE), BETWEEN, date_format(), DATE_TRUNC() 사용 금지
+    3. 파티션 컬럼(year, month, day, hour)에 함수 적용 금지
+    4. SELECT * 금지 — 필요한 컬럼만 명시적으로 선택
+    5. 불필요한 서브쿼리 중첩 금지 — 단일 쿼리로 해결 가능하면 단일 쿼리 사용
+    6. 존재하지 않는 테이블 참조 금지 — ad_combined_log, ad_combined_log_summary 두 개만 존재
+    7. 비율 계산 시 NULLIF 없이 나눗셈 금지 (ZeroDivisionError 방지)
+    8. CAST(hour AS INT) 없이 hour 컬럼 숫자 비교 금지 (hour는 STRING 타입)
+  </constraints>
+
+table_selection_rules: |
+  <table_rules>
+    테이블 선택 기준:
+    - ad_combined_log: 시간대별(hour) 분석, 개별 이벤트 레벨 조회
+      → 보유 파티션: year, month, day, hour
+    - ad_combined_log_summary: 일별 집계, 전환(conversion) 데이터, 비용 분석
+      → 보유 파티션: year, month, day
+      → 전용 컬럼: conversion_id, conversion_type, conversion_value,
+                   product_id, quantity, attribution_window, is_conversion
+    - 두 테이블 공통 컬럼: impression_id, user_id, ad_id, campaign_id,
+      advertiser_id, platform, device_type, os, delivery_region,
+      is_click, cost_per_impression, cost_per_click
+  </table_rules>
