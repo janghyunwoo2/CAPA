@@ -56,6 +56,15 @@ logger = logging.getLogger(__name__)
 
 PHASE2_RAG_ENABLED = os.getenv("PHASE2_RAG_ENABLED", "false").lower() == "true"
 MULTI_TURN_ENABLED = os.getenv("MULTI_TURN_ENABLED", "false").lower() == "true"
+SELF_CORRECTION_ENABLED = os.getenv("SELF_CORRECTION_ENABLED", "false").lower() == "true"
+MAX_CORRECTION_ATTEMPTS = int(os.getenv("MAX_CORRECTION_ATTEMPTS", "3"))
+
+# Self-Correction 재시도 가능 에러 코드 (보안 차단은 제외)
+_RETRYABLE_CORRECTION_ERRORS = frozenset({
+    "SQL_PARSE_ERROR",
+    "SQL_DISALLOWED_TABLE",
+    "SQL_NO_TABLE",
+})
 
 
 class _VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
@@ -191,7 +200,11 @@ class QueryPipeline:
             reranker=_reranker,
             anthropic_client=_anthropic_client,
         )
-        self._sql_generator = SQLGenerator(vanna_instance=vanna_instance)
+        self._sql_generator = SQLGenerator(
+            vanna_instance=vanna_instance,
+            anthropic_client=_anthropic_client,
+            model=llm_model,
+        )
         self._sql_validator = SQLValidator(
             athena_client=athena_client,
             database=database,
@@ -207,6 +220,61 @@ class QueryPipeline:
             self._conversation_retriever = ConversationHistoryRetriever(_dynamodb)
         else:
             self._conversation_retriever = None
+
+    async def _generate_and_validate_with_correction(
+        self,
+        ctx: "PipelineContext",
+    ) -> tuple[str, "ValidationResult"]:
+        """Step 5 + 6 + 6.5: SQL 생성 → 검증 → Self-Correction Loop.
+
+        SELF_CORRECTION_ENABLED=true 이고 검증 실패 에러가 재시도 가능한 경우에만
+        generate_with_error_feedback()를 통해 최대 MAX_CORRECTION_ATTEMPTS회 재시도.
+        보안 차단 에러(SQL_BLOCKED_KEYWORD 등)는 재시도하지 않음.
+        """
+        question = ctx.refined_question or ctx.original_question
+        rag_context = getattr(ctx, "rag_context", None)
+        conv_history = ctx.conversation_history if MULTI_TURN_ENABLED else None
+
+        sql = self._sql_generator.generate(
+            question=question,
+            rag_context=rag_context,
+            conversation_history=conv_history,
+        )
+        validation = self._sql_validator.validate(sql)
+
+        if not SELF_CORRECTION_ENABLED or validation.is_valid:
+            return sql, validation
+
+        for attempt in range(1, MAX_CORRECTION_ATTEMPTS + 1):
+            error_code = getattr(validation, "error_code", "")
+            if error_code not in _RETRYABLE_CORRECTION_ERRORS:
+                logger.info(
+                    f"Self-Correction 불가 (error_code={error_code}) — 원래 SQL 반환"
+                )
+                break
+
+            logger.info(
+                f"Self-Correction 시도 {attempt}/{MAX_CORRECTION_ATTEMPTS}: "
+                f"{validation.error_message}"
+            )
+            try:
+                sql = self._sql_generator.generate_with_error_feedback(
+                    question=question,
+                    failed_sql=sql,
+                    error_message=validation.error_message or "",
+                    rag_context=rag_context,
+                    conversation_history=conv_history,
+                )
+            except SQLGenerationError as e:
+                logger.warning(f"Self-Correction {attempt}회 생성 실패: {e}")
+                break
+
+            validation = self._sql_validator.validate(sql)
+            if validation.is_valid:
+                logger.info(f"Self-Correction {attempt}회 만에 성공")
+                break
+
+        return sql, validation
 
     async def run(
         self,

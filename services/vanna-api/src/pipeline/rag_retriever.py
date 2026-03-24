@@ -7,12 +7,18 @@ Phase 1 retrieve() 하위 호환 유지, PHASE2_RAG_ENABLED=true 시 retrieve_v2
 
 import json
 import logging
+import os
 from typing import Any, Optional
 
 from ..models.domain import RAGContext
 from ..models.rag import CandidateDocument
 
 logger = logging.getLogger(__name__)
+
+# GAP-D-01: Config 튜닝 실험용 환경변수 (설계서 §5.1.3)
+# n_results_sql은 query_pipeline.py의 VannaAthena 인스턴스에서 제어 (ChromaDB 쿼리)
+# RERANKER_TOP_K: Reranker가 rerank() 호출 시 상위 K개만 반환 (기본값 7)
+RERANKER_TOP_K: int = int(os.getenv("RERANKER_TOP_K", "7"))
 
 
 class RAGRetriever:
@@ -75,14 +81,14 @@ class RAGRetriever:
                 logger.info("RAG 3단계: 후보 문서 없음, 빈 컨텍스트 반환")
                 return RAGContext()
 
-            # Step 4-2: Reranker 재평가 (top_k=7)
+            # Step 4-2: Reranker 재평가 (top_k = RERANKER_TOP_K 환경변수, 기본 7)
             if self._reranker is not None:
                 reranked = self._reranker.rerank(
-                    query=search_query, candidates=candidates, top_k=7
+                    query=search_query, candidates=candidates, top_k=RERANKER_TOP_K
                 )
             else:
                 logger.warning("Reranker 미설정 — Step 4-2 스킵")
-                reranked = candidates[:7]
+                reranked = candidates[:RERANKER_TOP_K]
 
             # Step 4-3: LLM 최종 선별
             return self._llm_filter(question=search_query, candidates=reranked)
