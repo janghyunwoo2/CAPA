@@ -65,6 +65,21 @@ class SQLNormalizer:
         return sql_str.strip()
 
     @staticmethod
+    def strip_limit(sql: str) -> str:
+        """EM 비교용: LIMIT 절 제거.
+
+        sql_validator.py가 LIMIT 없는 SQL에 자동으로 LIMIT 1000을 추가하므로,
+        EM 비교 전 양쪽 SQL에서 LIMIT 절을 제거하여 비교 공정성 확보.
+
+        Args:
+            sql: SQL 문자열
+
+        Returns:
+            LIMIT 절이 제거된 SQL 문자열
+        """
+        return re.sub(r'\s+LIMIT\s+\d+\s*;?\s*$', '', sql.strip(), flags=re.IGNORECASE).strip()
+
+    @staticmethod
     def exact_match(sql1: str, sql2: str) -> bool:
         """
         두 SQL이 정확히 일치하는가?

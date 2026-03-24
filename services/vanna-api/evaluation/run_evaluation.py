@@ -1,9 +1,13 @@
 """
 Spider EM/Exec 평가 실행 스크립트
 
-평가 대상: Step 5 (SQL 생성) 단독
-  - SQL 생성: vanna-api 컨테이너에 POST /query (execute=false) 요청
-  - Exec 비교: ExecutionValidator가 Redash에 직접 요청
+평가 지표:
+  - EM  : Step 5에서 생성된 SQL 텍스트 vs ground truth SQL 텍스트 (정규화 후 비교)
+  - Exec: 생성 SQL을 Athena에 실행한 쿼리 결과 vs ground truth SQL 실행 결과 비교
+
+실행 방식:
+  - POST /query (execute=true, Step 1~9 전체 파이프라인 실행)
+  - Exec 평가: 생성 SQL + 정답 SQL 각각 Redash → Athena 실행 후 row set 비교
 
 사용법:
   python run_evaluation.py [--test-cases FILE] [--output FILE] [--limit N]
@@ -20,14 +24,42 @@ import sys
 import logging
 import argparse
 import requests
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
+
+from jinja2 import Environment
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)8s] %(name)s — %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+def _render_ground_truth(sql: str) -> str:
+    """ground_truth_sql의 Jinja2 날짜 변수를 실행 시점 날짜로 렌더링.
+
+    지원 변수:
+        {{ year }}, {{ month }}, {{ day }}         — 오늘
+        {{ y_year }}, {{ y_month }}, {{ y_day }}   — 어제
+        {{ lm_year }}, {{ lm_month }}              — 지난달
+    """
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    last_month_start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+    env = Environment()
+    template = env.from_string(sql)
+    return template.render(
+        year=today.strftime("%Y"),
+        month=today.strftime("%m"),
+        day=today.strftime("%d"),
+        y_year=yesterday.strftime("%Y"),
+        y_month=yesterday.strftime("%m"),
+        y_day=yesterday.strftime("%d"),
+        lm_year=last_month_start.strftime("%Y"),
+        lm_month=last_month_start.strftime("%m"),
+    )
+
 
 try:
     from spider_evaluation import SpiderEvaluator
@@ -147,7 +179,9 @@ class EvaluationRunner:
         for i, case in enumerate(cases, 1):
             tc_id = case.get("id", f"TC{i:03d}")
             question = case.get("question", "")
-            ground_truth = case.get("ground_truth_sql", "")
+            raw_truth = case.get("ground_truth_sql", "")
+            ground_truth = _render_ground_truth(raw_truth)
+            case = {**case, "ground_truth_sql": ground_truth}
 
             print(f"\n{'='*60}")
             print(f"[{i}/{len(cases)}] {tc_id}")
@@ -199,7 +233,7 @@ def main():
     parser = argparse.ArgumentParser(description="Spider EM/Exec 평가 (Step 5: SQL 생성 정확도)")
     parser.add_argument("--test-cases", default="test_cases.json")
     parser.add_argument("--output",     default="evaluation_report.json")
-    parser.add_argument("--limit",      type=int, default=3)  # TODO: 검증 후 제거
+    parser.add_argument("--limit",      type=int, default=None)
     parser.add_argument("--redash-url", default=None)
     args = parser.parse_args()
 
