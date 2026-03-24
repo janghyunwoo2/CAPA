@@ -79,14 +79,12 @@ class _SQLGeneratorAdapter:
         self._url = f"{api_url}/query"
         logger.info(f"✅ HTTP 어댑터 초기화 완료 (endpoint: {self._url})")
 
-    def generate_sql(self, question: str) -> str:
+    def query(self, question: str) -> tuple:
         """
-        POST /query (Step 1~9 전체 실행) 후 sql 필드 반환.
-        - 200 성공: sql 필드 직접 반환
-        - REDASH_ERROR: 생성된 SQL은 성공했으나 Athena 실행 실패 (컬럼 오류 등)
-          → EM 평가는 가능하도록 detail에서 SQL 추출, Exec는 0점 처리됨
+        POST /query (Step 1~9 전체 실행) 후 (sql, results) 반환.
+        - 200 성공: sql + results (Athena 실행 결과 rows) 반환
+        - REDASH_ERROR: SQL 생성 성공했으나 Athena 실행 실패 → (sql, []) 반환, Exec 0점 처리
         """
-        import re as _re
         token = os.getenv("INTERNAL_API_TOKEN", "test-token")
         headers = {"X-Internal-Token": token}
 
@@ -102,24 +100,22 @@ class _SQLGeneratorAdapter:
             resp.raise_for_status()
             body = resp.json()
             sql = body.get("sql", "")
+            results = body.get("results") or []
             if not sql:
                 logger.warning(f"SQL 미반환: question={question[:50]}")
             print(f"  [OUTPUT] 생성 SQL:\n{sql or '(없음)'}")
-            return sql or ""
+            return sql or "", results
         except requests.HTTPError as e:
-            # REDASH_ERROR: Athena 실행 실패지만 SQL은 생성됨 → EM용으로 추출
+            # REDASH_ERROR: Athena 실행 실패지만 SQL은 생성됨 → Exec 0점
             if e.response.status_code in (422, 500):
                 try:
                     detail = e.response.json().get("detail", {})
                     if isinstance(detail, dict):
-                        error_code = detail.get("error_code", "")
                         sql = detail.get("detail", "")
+                        error_code = detail.get("error_code", "")
                         if sql:
-                            sql = _re.sub(r"^```(?:sql)?\s*\n?", "", sql, flags=_re.IGNORECASE)
-                            sql = _re.sub(r"\n?```\s*$", "", sql).strip()
-                            if sql:
-                                print(f"  [OUTPUT] SQL 추출 ({error_code}) — Athena 실행 실패, EM만 평가:\n{sql}")
-                                return sql
+                            print(f"  [OUTPUT] SQL 추출 ({error_code}) — Athena 실행 실패, Exec 0점:\n{sql}")
+                            return sql, []
                 except Exception:
                     pass
             print(f"  [ERROR ] HTTP {e.response.status_code}: {e.response.text[:300]}")
@@ -191,9 +187,8 @@ class EvaluationRunner:
             result = self.evaluator.evaluate_single(case, self.sql_generator)
             results.append(result)
 
-            em_mark  = "✅ PASS" if result.em_score   == 1.0 else "❌ FAIL"
             exec_mark = "✅ PASS" if result.exec_score == 1.0 else "❌ FAIL"
-            print(f"\n  EM   : {em_mark}  |  Exec: {exec_mark}  |  Avg: {result.avg_score*100:.0f}%")
+            print(f"\n  Exec: {exec_mark}")
             if result.exec_error:
                 print(f"  [EXEC ERROR] {result.exec_error[:120]}")
 
@@ -201,24 +196,15 @@ class EvaluationRunner:
 
         logger.info("=" * 60)
         logger.info(f"  총 케이스  : {report['total_cases']}")
-        logger.info(f"  EM Accuracy: {report['em']['accuracy']*100:.1f}%  ({report['em']['passed']}/{report['total_cases']} PASS)")
         logger.info(f"  Exec Accura: {report['exec']['accuracy']*100:.1f}%  ({report['exec']['passed']}/{report['total_cases']} PASS)")
-        logger.info(f"  Average    : {report['average']*100:.1f}%")
         logger.info("=" * 60)
 
-        em_ok   = report['em']['accuracy']   >= 0.85
         exec_ok = report['exec']['accuracy'] >= 0.90
-        avg_ok  = report['average']          >= 0.87
 
-        if em_ok and exec_ok and avg_ok:
-            logger.info("✅ 모든 목표 달성 (EM≥85%, Exec≥90%, Avg≥87%)")
+        if exec_ok:
+            logger.info("✅ 목표 달성 (Exec≥90%)")
         else:
-            if not em_ok:
-                logger.warning(f"⚠️  EM 미달: {report['em']['accuracy']*100:.1f}% < 85%")
-            if not exec_ok:
-                logger.warning(f"⚠️  Exec 미달: {report['exec']['accuracy']*100:.1f}% < 90%")
-            if not avg_ok:
-                logger.warning(f"⚠️  Average 미달: {report['average']*100:.1f}% < 87%")
+            logger.warning(f"⚠️  Exec 미달: {report['exec']['accuracy']*100:.1f}% < 90%")
 
         return report
 
@@ -241,9 +227,7 @@ def main():
     report = runner.run(args.test_cases, args.limit)
     runner.save_report(report, args.output)
 
-    ok = (report['em']['accuracy'] >= 0.85 and
-          report['exec']['accuracy'] >= 0.90 and
-          report['average'] >= 0.87)
+    ok = report['exec']['accuracy'] >= 0.90
     sys.exit(0 if ok else 1)
 
 

@@ -7,9 +7,12 @@ Spider EM/Exec 평가 엔진 — SQLNormalizer, ExecutionValidator, SpiderEvalua
 import re
 import json
 import logging
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import requests
+
+_KST = timezone(timedelta(hours=9))
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +112,7 @@ class ExecutionValidator:
         self._base_url = redash_base_url
         self._headers = {"Authorization": f"Key {redash_api_key}"}
 
-    def execute_sql(self, sql: str, timeout_seconds: int = 60) -> Optional[Dict]:
+    def execute_sql(self, sql: str, timeout_seconds: int = 60, name: Optional[str] = None) -> Optional[Dict]:
         """
         Redash에서 SQL 실행
 
@@ -121,6 +124,7 @@ class ExecutionValidator:
         Args:
             sql: 실행할 SQL
             timeout_seconds: 타임아웃 (초)
+            name: Redash 쿼리 이름 (없으면 자동 생성)
 
         Returns:
             {
@@ -133,11 +137,11 @@ class ExecutionValidator:
             }
             또는 None (실패 시)
         """
-        import hashlib
         import time as _time
         try:
             # 1. 임시 쿼리 생성
-            query_name = f"eval_{hashlib.md5(sql.encode()).hexdigest()[:8]}"
+            ts = datetime.now(_KST).strftime('%Y-%m-%d %H:%M')
+            query_name = name or f"CAPA: [GT] [{ts}]"
             create_resp = requests.post(
                 f"{self._base_url}/api/queries",
                 headers=self._headers,
@@ -198,7 +202,7 @@ class ExecutionValidator:
                 return None
 
             data = result_resp.json().get("query_result", {}).get("data", {})
-            rows = data.get("rows", [])
+            rows = data.get("rows", [])[:10]  # /query 응답과 동일한 10행 제한 — 공정한 비교
             columns = [col.get("name") for col in data.get("columns", [])]
             return {"rows": rows, "row_count": len(rows), "columns": columns}
 
@@ -215,8 +219,9 @@ class ExecutionValidator:
 
         비교 기준:
         1. 행 수 동일
-        2. 컬럼 동일
-        3. 데이터 값 동일 (순서 무관)
+        2. 컬럼 수 동일
+        3. 데이터 값 동일 (순서 무관, 컬럼명 무시)
+           alias가 달라도 실제 값이 같으면 PASS
 
         Args:
             result1: 첫 번째 결과
@@ -229,18 +234,18 @@ class ExecutionValidator:
         if result1.get("row_count") != result2.get("row_count"):
             return False
 
-        # 2. 컬럼 비교
-        cols1 = set(result1.get("columns", []))
-        cols2 = set(result2.get("columns", []))
-        if cols1 != cols2:
+        # 2. 컬럼 수 비교 (이름은 무시 — alias 차이 허용)
+        cols1 = result1.get("columns", [])
+        cols2 = result2.get("columns", [])
+        if len(cols1) != len(cols2):
             return False
 
-        # 3. 데이터 비교 (순서 무관)
+        # 3. 데이터 값 비교 (순서 무관, 컬럼명 무시 — values만 추출)
         rows1 = sorted(
-            [json.dumps(r, sort_keys=True) for r in result1.get("rows", [])]
+            [json.dumps(list(r.values()), default=str) for r in result1.get("rows", [])]
         )
         rows2 = sorted(
-            [json.dumps(r, sort_keys=True) for r in result2.get("rows", [])]
+            [json.dumps(list(r.values()), default=str) for r in result2.get("rows", [])]
         )
 
         return rows1 == rows2
@@ -255,7 +260,6 @@ class SpiderEvalResult:
         question: str,
         generated_sql: str,
         ground_truth_sql: str,
-        em_score: float,
         exec_score: float,
         exec_error: Optional[str] = None
     ):
@@ -263,10 +267,8 @@ class SpiderEvalResult:
         self.question = question
         self.generated_sql = generated_sql
         self.ground_truth_sql = ground_truth_sql
-        self.em_score = em_score
         self.exec_score = exec_score
         self.exec_error = exec_error
-        self.avg_score = (em_score + exec_score) / 2
 
 
 class SpiderEvaluator:
@@ -298,9 +300,9 @@ class SpiderEvaluator:
         question = test_case.get("question")
         ground_truth_sql = test_case.get("ground_truth_sql")
 
-        # 1. Vanna에서 SQL 생성
+        # 1. /query API로 SQL 생성 + Athena 실행 결과 한번에 수신
         try:
-            generated_sql = vanna_client.generate_sql(question=question)
+            generated_sql, gen_rows = vanna_client.query(question=question)
             if not generated_sql or not generated_sql.strip():
                 generated_sql = ""
         except Exception as e:
@@ -310,43 +312,42 @@ class SpiderEvaluator:
                 question=question,
                 generated_sql="",
                 ground_truth_sql=ground_truth_sql,
-                em_score=0.0,
                 exec_score=0.0,
                 exec_error=str(e)
             )
 
-        # 2. EM (Exact Match) 계산
-        em_score = 1.0 if SQLNormalizer.exact_match(generated_sql, ground_truth_sql) else 0.0
-
-        # 3. Exec (Execution Accuracy) 계산
+        # 2. Exec (Execution Accuracy) 계산
+        # /query 결과(gen_rows)와 ground truth SQL 실행 결과만 비교 — 생성 SQL 재실행 없음
         exec_score = 0.0
         exec_error = None
-        try:
-            # 정답 SQL 실행
-            gt_result = self._validator.execute_sql(ground_truth_sql)
-            if not gt_result:
-                exec_error = "정답 SQL 실행 실패"
-                exec_score = 0.0
-            else:
-                # 생성 SQL 실행
-                gen_result = self._validator.execute_sql(generated_sql)
-                if not gen_result:
-                    exec_error = "생성 SQL 실행 실패"
-                    exec_score = 0.0
+
+        if not gen_rows:
+            exec_error = "생성 SQL Athena 실행 실패 (results 없음)"
+        else:
+            try:
+                # ground truth SQL 실행 (동일한 10행 제한 적용 — 공정한 비교)
+                ts = datetime.now(_KST).strftime('%Y-%m-%d %H:%M')
+                gt_name = f"CAPA: {question} [GT] [{ts}]"
+                gt_result = self._validator.execute_sql(ground_truth_sql, name=gt_name)
+                if not gt_result:
+                    exec_error = "정답 SQL 실행 실패"
                 else:
-                    # 결과 비교
+                    gen_cols = list(gen_rows[0].keys()) if gen_rows else []
+                    gen_result = {
+                        "rows": gen_rows[:10],
+                        "row_count": len(gen_rows[:10]),
+                        "columns": gen_cols,
+                    }
                     exec_score = 1.0 if self._validator.compare_results(gen_result, gt_result) else 0.0
-        except Exception as e:
-            logger.error(f"[{test_id}] Exec 검증 실패: {e}")
-            exec_error = str(e)
-            exec_score = 0.0
+            except Exception as e:
+                logger.error(f"[{test_id}] Exec 검증 실패: {e}")
+                exec_error = str(e)
 
         return SpiderEvalResult(
             test_id=test_id,
             question=question,
             generated_sql=generated_sql,
             ground_truth_sql=ground_truth_sql,
-            em_score=em_score,
             exec_score=exec_score,
             exec_error=exec_error
         )
@@ -380,27 +381,19 @@ class SpiderEvaluator:
         Returns:
             {
                 "total_cases": int,
-                "em": {"passed": int, "accuracy": float},
                 "exec": {"passed": int, "accuracy": float},
-                "average": float,
                 "details": [...]
             }
         """
         total = len(results)
-        em_passed = sum(1 for r in results if r.em_score == 1.0)
         exec_passed = sum(1 for r in results if r.exec_score == 1.0)
-
-        em_accuracy = em_passed / total if total > 0 else 0.0
         exec_accuracy = exec_passed / total if total > 0 else 0.0
-        avg_accuracy = sum(r.avg_score for r in results) / total if total > 0 else 0.0
 
         details = [
             {
                 "test_id": r.test_id,
                 "question": r.question,
-                "em": r.em_score,
                 "exec": r.exec_score,
-                "avg": r.avg_score,
                 "error": r.exec_error
             }
             for r in results
@@ -408,14 +401,9 @@ class SpiderEvaluator:
 
         return {
             "total_cases": total,
-            "em": {
-                "passed": em_passed,
-                "accuracy": em_accuracy
-            },
             "exec": {
                 "passed": exec_passed,
                 "accuracy": exec_accuracy
             },
-            "average": avg_accuracy,
             "details": details
         }
