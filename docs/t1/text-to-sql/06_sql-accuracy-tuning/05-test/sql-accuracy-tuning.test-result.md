@@ -72,6 +72,20 @@
 | TC-SEED-02 | B | 통합 범주값 Doc | `DOCS_*` 전체 스캔 | `"app_ios"`와 `"purchase"` 동시 포함 항목 존재 | `assert any("app_ios" in doc and "purchase" in doc ...)` | ✅ PASS | `DOCS_CATEGORICAL_VALUES` 추가 — 모든 컬럼 범주값 단일 항목으로 통합 |
 | TC-SEED-03 | B | Jinja2 패턴 QA | `QA_EXAMPLES` 전체 스캔 | `"{{ y_year }}"` 포함 SQL 존재 | `assert any("{{ y_year }}" in qa["sql"] ...)` | ✅ PASS | 어제 날짜 기반 QA 3개 포함 (`{{ y_year }}/{{ y_month }}/{{ y_day }}` 패턴) |
 
+---
+
+## 버그 수정 이력 (2026-03-24 — 실제 Exec 평가 실행 중 발견)
+
+| # | 파일 | 버그 | 수정 내용 |
+|---|------|------|----------|
+| BUG-01 | `evaluation/spider_evaluation.py` | generated SQL을 Athena에서 재실행 (중복) — `/query`가 이미 실행했음에도 `ExecutionValidator`가 동일 SQL을 다시 실행해 Redash에 `eval_*` 쿼리 중복 생성 | `execute_sql(generated_sql)` 제거 → `/query` 응답의 `results` 직접 사용 |
+| BUG-02 | `evaluation/spider_evaluation.py` | ground truth 결과 행 수 제한 없음 — `/query`는 최대 10행 반환하는데 ground truth는 전체 반환하여 비교 불공정 | `execute_sql()` 반환 rows에 `[:10]` 제한 추가 |
+| BUG-03 | `evaluation/run_evaluation.py` | `generate_sql()` 메서드가 SQL만 반환 — Exec 평가에 results가 필요함에도 SQL만 반환 | `generate_sql()` → `query()` 변경, `(sql, results)` tuple 반환 |
+| BUG-04 | `src/query_pipeline.py`, `src/redash_client.py` | Redash 쿼리 이름에 UTC 시간 사용 — `datetime.utcnow()`로 기록되어 Redash UI에서 KST와 9시간 차이 | `datetime.now(_KST)` 로 변경 (KST = UTC+9) |
+| BUG-05 | `prompts/sql_generator.yaml` | `table_selection_rules` 기준 모호 — "일별 집계면 summary" 설명이 불명확해 LLM이 `ad_combined_log` 오선택 | 컬럼 존재 여부 기반 결정 규칙으로 교체 (전환 컬럼 필요 시 summary 필수, hour 분석 시 log 필수, 기본값 summary) |
+
+---
+
 ## pytest 실행 로그 (요약)
 
 ```
