@@ -7,7 +7,7 @@ EKS Airflow 배포용. 매일 하루치 광고 성과 로그를 요약(DailyETL)
 """
 
 import pendulum
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from airflow import DAG
 from airflow.providers.cncf.kubernetes.operators.pod import KubernetesPodOperator
@@ -56,7 +56,7 @@ with DAG(
         env_from=env_from,
         service_account_name=SA_NAME,
         get_logs=True,
-        is_delete_operator_pod=False,
+        is_delete_operator_pod=True,  # 운영용: Pod 자동 삭제
         log_events_on_failure=True,
         startup_timeout_seconds=180,
     )

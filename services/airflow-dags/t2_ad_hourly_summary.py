@@ -56,7 +56,7 @@ with DAG(
         env_from=env_from,
         service_account_name=SA_NAME,
         get_logs=True,
-        is_delete_operator_pod=False,
+        is_delete_operator_pod=True,  # 운영용: 실행 후 Pod 삭제
         log_events_on_failure=True,
         startup_timeout_seconds=180,
     )
