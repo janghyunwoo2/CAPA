@@ -7,6 +7,7 @@ import time
 import json
 import random
 import os
+from datetime import datetime
 from dotenv import load_dotenv
 
 from generator import AdLogGenerator
@@ -34,9 +35,62 @@ class Config:
     AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
     AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
     
-    # 로그 생성 설정
-    CTR_RATE = 0.10  # 10% CTR (main.py 기준)
-    CVR_RATE = 0.20  # 20% CVR (main.py 기준)
+    # 로그 생성 설정 (ad_log_generator.py와 동일하게 적용)
+    CTR_RATES = {
+        "display": (0.01, 0.03),
+        "native": (0.02, 0.04),
+        "video": (0.03, 0.05),
+        "discount_coupon": (0.025, 0.045)
+    }
+    
+    CVR_RATES = {
+        "view_content": (0.05, 0.10),
+        "add_to_cart": (0.03, 0.07),
+        "signup": (0.02, 0.05),
+        "download": (0.02, 0.05),
+        "purchase": (0.01, 0.03)
+    }
+    
+    # 기본 sleep 시간 (초)
+    BASE_SLEEP = 0.1  # 기본 0.1초 (시간당 36,000개)
+
+
+# =============================================================================
+# 트래픽 패턴 (ad_log_generator.py와 동일)
+# =============================================================================
+
+def get_traffic_multiplier(timestamp: datetime) -> float:
+    """시간대별, 요일별 트래픽 멀티플라이어를 반환합니다."""
+    hour = timestamp.hour
+    weekday = timestamp.weekday()  # 0=월요일, 6=일요일
+    
+    # 시간대별 패턴
+    if 0 <= hour < 7:
+        hour_mult = random.uniform(0.1, 0.2)  # 새벽
+    elif 7 <= hour < 9:
+        hour_mult = random.uniform(0.4, 0.6)  # 아침
+    elif 9 <= hour < 11:
+        hour_mult = random.uniform(0.3, 0.5)  # 오전
+    elif 11 <= hour < 14:
+        hour_mult = random.uniform(1.5, 2.0)  # 점심
+    elif 14 <= hour < 17:
+        hour_mult = random.uniform(0.6, 0.8)  # 오후
+    elif 17 <= hour < 21:
+        hour_mult = random.uniform(2.0, 3.0)  # 저녁/피크
+    else:
+        hour_mult = random.uniform(1.0, 1.5)  # 밤
+        
+    # 요일별 패턴
+    if weekday < 4:  # 월-목
+        day_mult = random.uniform(0.8, 1.0)
+    elif weekday == 4:  # 금
+        day_mult = random.uniform(1.2, 1.5)
+    elif weekday == 5:  # 토
+        day_mult = random.uniform(1.5, 2.0)
+    else:  # 일
+        day_mult = random.uniform(1.3, 1.7)
+        
+    return hour_mult * day_mult
 
 
 # =============================================================================
@@ -72,9 +126,17 @@ def main():
     print(f"Starting Ad Log Generator (Target: {target})...", flush=True)
     print("=" * 60, flush=True)
     
-    # 메인 루프 (main.py 로직 따라감)
+    # 메인 루프 (개선된 트래픽 패턴 적용)
+    loop_count = 0
+    start_time = time.time()
+    impression_count = 0
+    
     try:
         while True:
+            # 현재 시간 기준 트래픽 멀티플라이어 계산
+            current_time = datetime.now()
+            traffic_mult = get_traffic_multiplier(current_time)
+            
             # 1. 노출 발생
             impr = generator.generate_impression()
             
@@ -83,16 +145,18 @@ def main():
             
             # 내부 데이터 저장 (클릭/전환에서 사용)
             internal_data = impr.get('_internal', {})
+            ad_format = internal_data.get('ad_format', 'display')
+            delivery_region = internal_data.get('delivery_region', '')
             
-            # 2. 클릭 확률 (CTR: 10% 가정)
-            if generator.should_click(internal_data.get('ad_format', 'display')):
+            # 2. 클릭 확률 (개선된 CTR 적용)
+            if generator.should_click(ad_format, delivery_region):
                 time.sleep(random.uniform(0.5, 2.0))  # 클릭 딜레이
                 
                 click = generator.generate_click(impr)
                 
                 sender.send(click)
                 
-                # 3. 전환 확률 (CVR: 20% 가정)
+                # 3. 전환 확률 (개선된 CVR 적용)
                 if generator.should_convert():
                     time.sleep(random.uniform(1.0, 5.0))  # 전환 딜레이
                     
@@ -100,8 +164,9 @@ def main():
                     
                     sender.send(conv)
             
-            # 기본 대기 (1초에 하나씩)
-            time.sleep(0.3)
+            # 동적 대기 시간 (트래픽 패턴에 따라 조정)
+            sleep_time = Config.BASE_SLEEP / traffic_mult
+            time.sleep(sleep_time)
     
     except KeyboardInterrupt:
         print("\n\n" + "=" * 60, flush=True)

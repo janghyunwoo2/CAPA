@@ -1,8 +1,3 @@
 persistence:
   enabled: true
-  size: 5Gi
-  # storageClass: "gp2" # 05-storage-class.tf에 정의된 gp2 사용
-
-service:
-  type: ClusterIP
-  port: 8000
+  size: 10Gi

@@ -1,0 +1,113 @@
+# CAPA Airflow Helm 기본 설정
+
+airflow:
+  # 이미지
+  image:
+    repository: apache/airflow
+    tag: "2.7.3"
+    pullPolicy: IfNotPresent
+
+  # Airflow 설정
+  config:
+    AIRFLOW__CORE__EXECUTOR: KubernetesExecutor
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    AIRFLOW__CORE__BASE_LOG_FOLDER: /opt/airflow/logs
+    AIRFLOW__LOGGING__REMOTE_LOGGING: "True"
+    AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID: aws_s3
+    AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER: "s3://capa-airflow-logs"
+    AIRFLOW__CORE__PLUGINS_FOLDER: /opt/airflow/plugins
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql://airflow:airflow@postgres:5432/airflow
+
+  # Webserver 설정
+  webserver:
+    enabled: true
+    replicas: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+    service:
+      type: LoadBalancer
+      port: 8080
+
+  # Scheduler 설정
+  scheduler:
+    enabled: true
+    replicas: 1
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+  # Triggerer 설정 (선택)
+  triggerer:
+    enabled: false
+
+  # DAG 동기화 (Git)
+  dags:
+    gitSync:
+      enabled: true
+      repo: "https://github.com/YOUR_ORG/CAPA.git" # 변경 필요
+      branch: main
+      rev: HEAD
+      depth: 1
+      maxFailures: 5
+      subPath: "src/airflow/dags"
+      wait: 5
+      containerName: git-sync
+
+  # PostgreSQL
+  postgresql:
+    enabled: true
+    auth:
+      username: airflow
+      password: airflow
+      database: airflow
+    primary:
+      persistence:
+        enabled: true
+        size: 10Gi
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+
+  # Redis (Celery 사용 시)
+  redis:
+    enabled: false # KubernetesExecutor 사용 시 불필요
+
+  # Kubernetes Pod Operator 설정
+  kubernetesExecutor:
+    namespace: airflow
+    clusterName: capa-eks
+    workloadsSubPath: airflow/pod_templates
+
+  # RBAC
+  rbac:
+    create: true
+
+  # 기본 변수
+  variables: {}
+
+  # 기본 연결
+  connections: {}
+
+  # Secrets 백엔드 (선택: AWS Secrets Manager 등)
+  secretsBackend: null
+
+# Ingress (선택사항)
+ingress:
+  enabled: false
+
+# PersistentVolume 설정
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClassName: gp2

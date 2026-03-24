@@ -1,0 +1,13 @@
+apiVersion: v2
+name: airflow
+description: CAPA 프로젝트용 Airflow Helm 차트
+type: application
+version: 1.0.0
+appVersion: "2.7.3"
+
+# 의존성 (Apache Airflow 공식 차트)
+dependencies:
+  - name: airflow
+    version: "1.13.0"
+    repository: "https://airflow.apache.org"
+    condition: airflow.enabled

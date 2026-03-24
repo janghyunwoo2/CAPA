@@ -1,9 +1,5 @@
 # 작업 08: Athena 데이터 검증
 
-> [!IMPORTANT]
-> **2026-02-17 업데이트**: 이제 파티션 및 스키마 업데이트를 위해 `MSCK REPAIR` 대신 **Glue Crawler**를 사용합니다. 
-> Crawler 이름: `capa-log-crawler`
-
 > **Phase**: 2 (E2E 연결 테스트)  
 > **담당**: Data Engineer  
 > **예상 소요**: 10분  
@@ -39,14 +35,14 @@ aws s3 ls s3://capa-data-lake-<ACCOUNT_ID>/raw/ --recursive
 # 2026-02-11 21:36:00  2048 raw/year=2026/month=02/day=11/file2.parquet
 ```
 
-### 3.2 Glue Crawler 실행 (자동 인식)
+### 3.2 Glue Partition 추가 (필요 시)
 
 ```powershell
-# MSCK REPAIR 대신 Crawler를 실행하여 파티션/스키마를 자동 업데이트합니다.
-aws glue start-crawler --name capa-log-crawler
-
-# 상태 확인 (READY가 될 때까지 약 1~2분 소요)
-aws glue get-crawler --name capa-log-crawler --query "Crawler.State" --output text
+# partition이 자동 생성되지 않았다면 수동 추가
+aws athena start-query-execution `
+    --query-string "MSCK REPAIR TABLE ad_events_raw" `
+    --query-execution-context Database=capa_db `
+    --result-configuration OutputLocation=s3://capa-data-lake-<ACCOUNT_ID>/athena-results/
 ```
 
 ### 3.3 Athena 쿼리 실행 (AWS Console 또는 CLI)

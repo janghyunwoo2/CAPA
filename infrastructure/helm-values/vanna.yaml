@@ -1,0 +1,11 @@
+serviceAccount:
+  create: true
+  name: vanna-sa
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/capa-vanna-role
+
+env:
+  - name: CHROMADB_HOST
+    value: "chromadb"
+  - name: CHROMADB_PORT
+    value: "8000"

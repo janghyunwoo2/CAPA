@@ -165,22 +165,40 @@ class AdLogGenerator:
         
         return conversion
     
-    def should_click(self, ad_format: str) -> bool:
-        """CTR 확률 계산 (main.py의 10% 기준)"""
-        # 기본 CTR 10%
-        base_ctr = 0.10
-        
-        # ad_format별 가중치 적용
-        format_weights = {
-            "display": 0.6,
-            "native": 0.8,
-            "video": 1.2,
-            "discount_coupon": 1.0
+    def should_click(self, ad_format: str, delivery_region: str = "") -> bool:
+        """CTR 확률 계산 (ad_log_generator.py와 동일한 패턴 적용)"""
+        # ad_format별 CTR 범위
+        ctr_ranges = {
+            "display": (0.01, 0.03),
+            "native": (0.02, 0.04),
+            "video": (0.03, 0.05),
+            "discount_coupon": (0.025, 0.045)
         }
         
-        ctr = base_ctr * format_weights.get(ad_format, 1.0)
+        # 기본 CTR 계산
+        min_ctr, max_ctr = ctr_ranges.get(ad_format, (0.02, 0.04))
+        ctr = random.uniform(min_ctr, max_ctr)
+        
+        # 강남/서초 지역 가중치 (1.2배)
+        if delivery_region in ["강남구", "서초구"]:
+            ctr = ctr * 1.2
+        
         return random.random() < ctr
     
     def should_convert(self) -> bool:
-        """CVR 확률 계산 (main.py의 20% 기준)"""
-        return random.random() < 0.20
+        """CVR 확률 계산 (ad_log_generator.py와 동일한 패턴 적용)"""
+        # conversion_type별 CVR 범위
+        cvr_ranges = {
+            "view_content": (0.05, 0.10),
+            "add_to_cart": (0.03, 0.07),
+            "signup": (0.02, 0.05),
+            "download": (0.02, 0.05),
+            "purchase": (0.01, 0.03)
+        }
+        
+        # 랜덤하게 conversion_type 선택
+        conversion_type = random.choice(list(cvr_ranges.keys()))
+        min_cvr, max_cvr = cvr_ranges[conversion_type]
+        cvr = random.uniform(min_cvr, max_cvr)
+        
+        return random.random() < cvr

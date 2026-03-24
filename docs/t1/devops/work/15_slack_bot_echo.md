@@ -105,24 +105,69 @@ docker push $REPO:latest
 Write-Host "✅ 이미지 푸시 완료: $REPO:latest"
 ```
 
-### 3.4 Terraform 배포
+### 3.4 Kubernetes Deployment 생성
 
-Kubernetes Deployment YAML을 직접 적용하는 대신, Terraform의 `helm_release`를 사용하여 배포합니다.
+`infrastructure/helm-values/slack-bot-deployment.yaml`:
 
-**Terraform 파일**: `infrastructure/terraform/environments/dev/base/10-applications.tf`
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: slack-bot
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: slack-bot
+  template:
+    metadata:
+      labels:
+        app: slack-bot
+    spec:
+      serviceAccountName: slack-bot-sa
+      containers:
+      - name: slack-bot
+        image: <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/capa-slack-bot:latest
+        env:
+        - name: SLACK_BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: slack-bot-secret
+              key: bot-token
+        - name: SLACK_APP_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: slack-bot-secret
+              key: app-token
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: slack-bot-sa
+  namespace: default
+```
+
+### 3.5 배포
 
 ```powershell
-cd infrastructure\terraform\environments\dev\base
-
-# Slack Bot 배포
-terraform apply -target=helm_release.slack_bot
-```
+# Deployment 적용
+kubectl apply -f infrastructure\helm-values\slack-bot-deployment.yaml
 
 # 확인
 kubectl get pods -l app=slack-bot
-```
 
-**참고**: `10-applications.tf` 파일은 로컬 Helm Chart (`../../charts/generic-service`) 또는 원격 차트를 참조하도록 구성되어야 합니다. MVP에서는 `generic-service` 차트를 활용하거나, Raw Manifest를 `helm_release`로 감싸서 배포합니다.
+# 예상 출력:
+# NAME                         READY   STATUS
+# slack-bot-xxxxx              1/1     Running
+```
 
 ---
 

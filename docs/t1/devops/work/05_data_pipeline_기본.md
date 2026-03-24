@@ -1,9 +1,5 @@
 # 작업 05: Kinesis + S3 + Glue 데이터 파이프라인 기본
 
-> [!IMPORTANT]
-> **2026-02-17 업데이트**: 스키마 관리 방식이 **Glue Crawler(`capa-log-crawler`)**를 통한 자동 인식 방식으로 전환되었습니다. 
-> `infrastructure/terraform/05-glue.tf`의 정적 테이블 정의는 주석 처리되었으며, 대안으로 Crawler가 제공됩니다.
-
 > **Phase**: 1 (Terraform Base Layer)  
 > **담당**: Infra Architect  
 > **예상 소요**: 10분  

@@ -38,85 +38,70 @@
 
 ```mermaid
 flowchart TB
-    subgraph DataGen["📱 Data Generation"]
-        LG[Log Generator]
-    end
-    
-    subgraph Streaming["⚡ Real-time Pipeline"]
-        KDS[Kinesis Data Stream]
-        KDF[Kinesis Firehose]
-    end
-    
-    subgraph Storage["💾 Data Lake"]
-        S3[(S3 Parquet)]
-    end
-    
-    subgraph Processing["⚙️ Processing"]
-        GLU[Glue Catalog]
-        ATH[Athena]
-    end
-    
-    subgraph EKS["🐳 EKS Cluster"]
-        subgraph Batch["📅 Batch Processing"]
-            AIR[Airflow]
-        end
-        
-        subgraph AI["🤖 AI Layer"]
-            VAN[Vanna AI]
-            CHR[(ChromaDB)]
-        end
-        
-        subgraph Dashboard["📊 Dashboard"]
-            RDS[Redash]
-        end
-        
-        subgraph Report["📝 Report"]
-            RPT[Report Generator]
-        end
-        
-        subgraph Interface["👥 Interface"]
-            SLK[Slack Bot]
-        end
-    end
-    
-    subgraph Alert["🔔 Alert"]
-        CW[CloudWatch Alarms]
-        SNS[SNS Topic]
-        PRO[Prophet/ML]
-    end
-    
-    subgraph External["🌐 External"]
-        LLM[Claude/GPT API]
+    subgraph DataGen["Data Generation"]
+        LogGen[Log Generator]
     end
 
-    %% 데이터 흐름
-    LG --> KDS --> KDF --> S3
-    S3 --> GLU --> ATH
+    subgraph AWS["AWS Cloud"]
+        subgraph Ingestion["Data Ingestion"]
+            KDS[Kinesis Data Stream]
+            KDF[Kinesis Firehose]
+        end
+
+        subgraph Storage["Data Storage"]
+            S3_Raw[(S3 Raw Data)]
+            S3_Processed[(S3 Parquet)]
+            Glue[AWS Glue Catalog]
+        end
+
+        subgraph Analysis["Data Analysis"]
+            Athena[Amazon Athena]
+        end
+
+        subgraph AI_App["AI Application Layer"]
+            EKS[Amazon EKS]
+            subgraph Pods["K8s Pods"]
+                Vanna[Vanna AI Service]
+                Chroma[ChromaDB]
+                Airflow[Apache Airflow]
+                Redash[Redash Dashboard]
+                SlackBot[Slack Bot App]
+            end
+        end
+        
+        subgraph Monitoring["Monitoring"]
+            CW[CloudWatch]
+            SNS[SNS Topic]
+            Prophet["Prophet (Future)"]
+        end
+    end
+
+    subgraph Client["Client"]
+        SlackUI[Slack Service]
+        User[User]
+    end
+
+    LogGen -->|"JSON Stream"| KDS
+    KDS -->|"Buffering"| KDF
+    KDF -->|"Parquet Conversion"| S3_Processed
+    Glue -.->|"Schema Metadata"| Athena
+    Athena -->|"Query (S3 Scan)"| S3_Processed
     
-    %% 배치 처리
-    AIR -->|스케줄링| ATH
-    AIR -->|리포트 트리거| RPT
+    User -->|"Message"| SlackUI
+    SlackUI <-->|"Socket Mode"| SlackBot
+    SlackBot <-->|"API Call"| Vanna
+    Vanna <-->|"Vector Search"| Chroma
+    Vanna -->|"SQL Query"| Athena
+    Athena -->|"Result Set"| Vanna
     
-    %% AI Layer
-    ATH --> VAN
-    CHR -->|RAG| VAN
-    LLM -->|SQL 생성| VAN
-    VAN --> SLK
+    Airflow -->|"ETL Job"| Athena
     
-    %% Dashboard
-    ATH --> RDS
+    KDS -->|"Metric"| CW
+    CW -->|"Alarm"| SNS
+    SNS -->|"Webhook"| SlackUI
     
-    %% Alert
-    KDS -->|Metrics| CW
-    ATH -->|집계 데이터| PRO
-    CW --> SNS
-    PRO --> SNS
-    SNS -->|알림| SLK
-    
-    %% Report
-    ATH --> RPT
-    RPT <-->|인사이트 요청/응답| VAN
-    RPT -->|PDF/Markdown| SLK
+    Athena -->|"KPI Visualization"| Redash
+    User -->|"View Dashboard"| Redash
 ```
 
 ---
@@ -174,12 +159,6 @@ flowchart LR
     VAN -->|"SQL Query"| ATH
     ATH -->|"Query Results"| VAN
     VAN -->|"Formatted Response"| BOT
-
-    %% Report Flow 추가
-    AIR[Airflow] -->|"API Call"| RPT[Report Gen]
-    RPT -->|"Query Results"| ATH
-    RPT <-->|"Query Insights"| VAN
-    RPT -->|"Final Report"| BOT
 ```
 
 ### 2.1 데이터 형식 상세
@@ -459,16 +438,21 @@ LIMIT 5;
 
 **주요 작업:**
 
-#### 1. Terraform 계층 통합 설계
+#### 1. Terraform 계층 분리 설계
 ```
 infrastructure/terraform/environments/dev/
-└── base/              # [Unified] 통합 인프라 및 앱 배포
-    ├── main.tf        # AWS Provider 설정
-    ├── 05-eks.tf      # EKS Cluster
-    └── 10-applications.tf # 모든 Helm Release (Airflow, Vanna, SlackBot 등)
+├── base/              # [Layer 1] AWS 리소스 (VPC, EKS, Kinesis, S3, Glue)
+│   ├── main.tf        # AWS Provider만 사용
+│   ├── outputs.tf     # cluster_endpoint, cluster_name 등 출력
+│   └── providers.tf   # AWS Provider 설정
+│
+└── apps/              # [Layer 2] K8s 애플리케이션 (Airflow, Vanna)
+    ├── main.tf        # Helm Release 정의
+    ├── data.tf        # base의 EKS 정보 참조
+    └── providers.tf   # Helm/K8s Provider 설정
 ```
 
-**통합 이유**: 관리 복잡성을 줄이고, `terraform apply` 단일 명령어로 전체 스택을 배포하기 위함 (기존 Layer 분리 제거).
+**분리 이유**: EKS 클러스터가 생성되기 전에는 Helm Provider가 클러스터 정보를 가져올 수 없음. 따라서 클러스터 생성(base)과 애플리케이션 배포(apps)를 분리하여 순차 실행.
 
 #### 2. IRSA (IAM Roles for Service Accounts) 구성
 - Airflow, Slack Bot, Firehose 등 서비스별 IAM Role 분리
@@ -486,9 +470,9 @@ infrastructure/terraform/environments/dev/
 ```
 
 #### 4. EKS 클러스터 및 Helm 배포
-- EKS 1.30, Node Group (AL2023, t3.medium × 2~4)
+- EKS 1.29, Node Group (t3.medium × 2~4)
 - EBS CSI Driver Addon 설치 (PVC 지원)
-- **Local Helm Chart (`generic-service`)** 를 통한 커스텀 앱 배포 표준화
+- Helm으로 Airflow, Vanna 자동 배포
 
 #### 5. 모니터링
 - CloudWatch Logs 수집
@@ -496,8 +480,9 @@ infrastructure/terraform/environments/dev/
 - SNS → Slack Webhook 연동
 
 **배포 순서:**
-1. `base` 배포 (~25분): EKS 생성 후 Helm App 자동 배포 완료
-2. 검증: `kubectl get pods -A`
+1. `base` 배포 (~20분): EKS, Kinesis, S3, Glue 생성
+2. `apps` 배포 (~5분): Helm Chart를 통한 K8s 앱 배포
+3. 검증: `kubectl get pods -A`
 
 **참고 문서:**
 - [DevOps Implementation Guide](./devops/devops_implementation_guide.md)

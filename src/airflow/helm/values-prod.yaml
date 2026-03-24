@@ -1,0 +1,75 @@
+# CAPA Airflow - 프로덕션 환경 Helm Values
+
+airflow:
+  image:
+    tag: "2.7.3"
+    pullPolicy: IfNotPresent
+
+  config:
+    AIRFLOW__CORE__EXECUTOR: KubernetesExecutor
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    AIRFLOW__CORE__MAX_ACTIVE_TASKS_PER_DAG: 16
+    AIRFLOW__LOGGING__REMOTE_LOGGING: "True"
+    AIRFLOW__LOGGING__REMOTE_LOG_CONN_ID: aws_s3_prod
+    AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER: "s3://capa-airflow-logs-prod"
+    AIRFLOW__CORE__PARALLELISM: 32
+    AIRFLOW__CORE__DAG_PARALLELISM: 16
+
+  webserver:
+    replicas: 2 # HA
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: component
+                    operator: In
+                    values:
+                      - webserver
+              topologyKey: kubernetes.io/hostname
+
+  scheduler:
+    replicas: 2 # HA
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+  dags:
+    gitSync:
+      enabled: true
+      repo: "https://github.com/YOUR_ORG/CAPA.git"
+      branch: main # 프로덕션 브랜치
+      wait: 5
+      containerName: git-sync
+
+  postgresql:
+    primary:
+      persistence:
+        enabled: true
+        size: 20Gi
+        storageClassName: gp2
+
+# 네임스페이스
+namespace: airflow-prod
+
+# 프로덕션 환경 플래그
+environment: prod
+enableLogging: true
+enableMonitoring: true
+
+# 모니터링
+prometheus:
+  enabled: true

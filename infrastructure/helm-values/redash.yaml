@@ -1,111 +1,12 @@
 serviceAccount:
   create: true
   name: redash-sa
-  annotations: {} # Managed by Terraform
+  annotations:
+    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/capa-redash-role
 
 postgresql:
   enabled: true
-  image:
-    registry: 827913617635.dkr.ecr.ap-northeast-2.amazonaws.com
-    repository: capa/postgres
-    tag: "11"
-  postgresqlUsername: "redash"
-  postgresqlDatabase: "redash"
-  postgresqlPassword: "" # Managed by Terraform (set_sensitive)
-  persistence:
-    enabled: true
-    storageClass: "gp2"
-    size: 2Gi
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 200m
-      memory: 512Mi
-  primary:
-    nodeSelector:
-      node-type: core
 
-redis:
-  enabled: true
-  image:
-    registry: 827913617635.dkr.ecr.ap-northeast-2.amazonaws.com
-    repository: capa/redis
-    tag: "6.0.9"
-  auth:
-    enabled: false
-    password: "" # 빈 문자열로 명시하여 Redash가 비밀번호 없이 연결하도록 강제
-  master:
-    resources:
-      requests:
-        cpu: 50m
-        memory: 64Mi
-      limits:
-        cpu: 100m
-        memory: 128Mi
-    nodeSelector:
-      node-type: core
-
-server:
-  env:
-    REDASH_GUNICORN_TIMEOUT: "120" # Athena Connection Test 대기시간 확보 (기본값 30s로는 타임아웃)
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 700m
-      memory: 768Mi
-  readinessProbe:
-    initialDelaySeconds: 60
-    timeoutSeconds: 15
-    periodSeconds: 15
-  livenessProbe:
-    initialDelaySeconds: 120
-    timeoutSeconds: 15
-    periodSeconds: 20
-  nodeSelector:
-    node-type: core
-
-scheduler:
-  resources:
-    requests:
-      cpu: 50m
-      memory: 128Mi
-    limits:
-      cpu: 200m
-      memory: 256Mi
-  nodeSelector:
-    node-type: core
-
-adhocWorker:
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi # OOMKill 방지: 큐 작업 처리 시 메모리 급증 대응
-
-scheduledWorker:
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi # OOMKill 방지
-
-genericWorker:
-  resources:
-    requests:
-      cpu: 100m
-      memory: 256Mi
-    limits:
-      cpu: 500m
-      memory: 512Mi # OOMKill 방지
-
-service:
-  type: ClusterIP
-  port: 5000
+env:
+  REDASH_COOKIE_SECRET: "random-secret"
+  REDASH_SECRET_KEY: "random-secret"

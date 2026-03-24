@@ -44,41 +44,26 @@ docker tag capa-report-generator:latest <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amaz
 docker push <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/capa-report-generator:latest
 ```
 
-### 2.2 Terraform으로 리소스 생성
+### 2.2 Helm 배포
 
-모든 구성 요소는 `10-applications.tf` 안에 있습니다. 이미지가 ECR에 올라간 후, Terraform apply를 통해 동일한 네임스페이스, 서비스 어카운트, IAM 역할, 배포를 생성합니다.
-
-```powershell
-# 작업 디렉토리를 dev/base로 이동
-cd infrastructure\terraform\environments\dev\base
-
-# 변경 사항만 적용 (선택)
-terraform plan -out=tfplan
-# 리소스를 모두 배포
-terraform apply tfplan
-```
-
-필요한 리소스는 다음과 같습니다:
-
-* `aws_ecr_repository.report_generator` – ECR 저장소
-* `aws_iam_role.report_generator` – IRSA용 역할
-* `kubernetes_namespace.report` – 네임스페이스
-* `kubernetes_service_account.report_sa` – 서비스 어카운트
-* `kubernetes_deployment.report_generator` – 파드
-* `kubernetes_service.report_generator` – 클러스터IP 서비스
-
-환경 변수는 Terraform에서 하드코딩/참조되므로 별도 values 파일은 없습니다.
-
-terraform 구성에서 이미지 경로는 아래와 같이 정의되어 있습니다:
+**Terraform 파일**: `infrastructure/terraform/environments/dev/apps/helm-report-generator.tf` (신규 작성 필요)
 
 ```hcl
-image             = "${aws_ecr_repository.report_generator.repository_url}:latest"
-```
+resource "helm_release" "report_generator" {
+  name             = "report-generator"
+  chart            = "../../charts/generic-service"
+  namespace        = "report"
+  create_namespace = true
 
-```powershell
-# 변경이 있다면 다시 plan -> apply
-terraform plan
-terraform apply
+  set {
+    name  = "image.repository"
+    value = "<ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/capa-report-generator"
+  }
+  set {
+    name  = "image.tag"
+    value = "latest"
+  }
+}
 ```
 
 ## 3. 검증

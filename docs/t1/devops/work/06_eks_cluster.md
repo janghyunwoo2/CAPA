@@ -134,23 +134,17 @@ output "eks_cluster_name" {
 }
 ```
 
-### 3.1 Terraform 실행
-
-**디렉토리**: `infrastructure/terraform/environments/dev/base`
-**(통합 배포: AWS 인프라 + Helm Apps)**
+### 3.2 Terraform 실행
 
 ```powershell
 cd infrastructure\terraform\environments\dev\base
 
-# 초기화
-terraform init
-
-# 계획 확인
+# Plan 확인 (예상 리소스 확인)
 terraform plan
 
-# 적용 (약 20~25분 소요)
+# 적용 (12~15분 소요)
 terraform apply
-```
+
 # 예상 출력:
 # aws_eks_cluster.main: Creating... (약 8분)
 # aws_eks_cluster.main: Still creating... [8m0s elapsed]
