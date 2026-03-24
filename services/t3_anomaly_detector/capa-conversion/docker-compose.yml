@@ -1,26 +1,24 @@
 version: "3.9"
 
 services:
-  t3_anomaly_detector:
+  capa-conversion:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: t3_anomaly_detector
+    container_name: capa-conversion
     env_file:
       - .env
     environment:
-      # AWS 자격증명: 호스트의 ~/.aws 디렉토리를 마운트하므로 별도 입력 불필요
       - AWS_DEFAULT_REGION=ap-northeast-2
-      # 컨테이너 시간대를 KST로 고정
       - TZ=Asia/Seoul
     volumes:
-      # 학습된 모델 파일 영속화 (컨테이너 재시작 후에도 유지)
+      # 학습된 모델 파일 영속화
       - ./models:/app/models
       # 출력 결과 (PNG, HTML, JSONL, 로그) 영속화
       - ./output:/app/output
-      # AWS 자격증명 공유 (읽기 전용)
+      # AWS 자격증명 공유 (Windows 환경 대응)
       - ${USERPROFILE}/.aws:/root/.aws:ro
-    restart: unless-stopped
+    restart: "no"
     logging:
       driver: "json-file"
       options:

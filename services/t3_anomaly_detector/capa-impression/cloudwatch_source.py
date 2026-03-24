@@ -24,6 +24,8 @@ class CloudWatchSource:
         config.HISTORY_DAYS에 해당하는 기간의 데이터를 한 번에 가져와서 반환합니다.
         train_model.py 에서 사용됩니다.
         """
+        # [기술 부채] 현재 3/21~22일로 날짜가 하드코딩되어 있습니다. 
+        # 향후 모델 재학습 시 config.HISTORY_DAYS를 사용하여 현재 기준 '최근 n일'을 동적으로 계산하도록 수정이 필요합니다.
         logger.info(f"CloudWatch에서 3/21 00시부터 현재까지 데이터를 수집 중입니다...")
 
         try:

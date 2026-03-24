@@ -7,7 +7,7 @@ import os
 REGION = 'ap-northeast-2'
 DATABASE = 'capa_ad_logs'
 S3_OUTPUT = 's3://capa-athena-results/queries/'
-DATA_DIR = os.path.join(os.getcwd(), 'data')
+DATA_DIR = os.path.dirname(os.path.abspath(__file__))
 os.makedirs(DATA_DIR, exist_ok=True)
 output_file = os.path.join(DATA_DIR, 'historical_data_202602_from_athena.csv')
 
@@ -58,12 +58,26 @@ pages = paginator.paginate(QueryExecutionId=query_id)
 rows = [['timestamp', 'impression_count']]
 total_count = 0
 
-for page in pages:
-    for row in page['ResultSet']['Rows'][1:]:
-        values = [col.get('VarCharValue', '') for col in row['Data']]
-        if values[0]:
-            rows.append(values)
-            total_count += 1
+clean_dict = {}
+for i, page in enumerate(pages):
+    start_idx = 1 if i == 0 else 0 # 첫 페이지만 헤더 스킵
+    for row in page['ResultSet']['Rows'][start_idx:]:
+        vals = [col.get('VarCharValue', '') for col in row['Data']]
+        if vals[0]:
+            clean_dict[vals[0]] = int(vals[1])
+
+# [Zero-filling] 2월 전체 윈도우 보간 (28일 = 8064개 윈도우)
+from datetime import datetime, timedelta
+start_dt = datetime(2026, 2, 1, 0, 0, 0)
+end_dt = datetime(2026, 3, 1, 0, 0, 0)
+current_dt = start_dt
+
+while current_dt < end_dt:
+    ts_str = current_dt.strftime('%Y-%m-%d %H:%M:%S')
+    val = clean_dict.get(ts_str, 0)
+    rows.append([ts_str, val])
+    total_count += 1
+    current_dt += timedelta(minutes=5)
 
 # CSV 저장
 with open(output_file, 'w', newline='', encoding='utf-8') as f:

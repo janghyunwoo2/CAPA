@@ -15,7 +15,7 @@ dimension_value = 'capa-knss-imp-00' # kinesis stream name: capa-knss-imp-00, ca
 # 시간 설정 (KST 기준: 3월 1일부터 현재까지)
 PERIOD_SECONDS = 300  # 5분 단위
 kst = timezone(timedelta(hours=9))
-start_time = datetime(2026, 3, 1, 0, 0, 0, tzinfo=kst)  # KST 명시
+start_time = datetime(2026, 3, 23, 0, 0, 0, tzinfo=kst)  # KST 명시
 end_time = datetime.now(tz=kst)  # KST 현재시간
 
 # [2] CloudWatch 클라이언트 초기화

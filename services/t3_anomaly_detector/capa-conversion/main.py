@@ -1,5 +1,5 @@
 """
-Real-time Ad Impression Anomaly Detector - 실시간 탐지 실행부 (main.py)
+Real-time Ad Conversion Anomaly Detector - 실시간 탐지 실행부 (main.py)
 
 동작 흐름:
 1. 기존 학습된 모델(.pkl) 로드 (없으면 종료 및 안내)
@@ -10,6 +10,11 @@ Real-time Ad Impression Anomaly Detector - 실시간 탐지 실행부 (main.py)
 import json
 import logging
 import os
+from dotenv import load_dotenv
+
+# .env 파일 로드 (가장 먼저 실행)
+load_dotenv()
+
 import sys
 import time
 import threading
@@ -75,6 +80,10 @@ class DetectionResult:
 def save_png(result: DetectionResult) -> None:
     """결과 그래프 PNG 저장"""
     try:
+        if not result.timestamps:
+            logger.warning("시각화할 탐지 결과가 없어 PNG 저장을 건너뜁니다.")
+            return
+
         t_ts = result.timestamps
         t_actuals = result.actuals
         t_predicted = result.predicted
@@ -92,9 +101,9 @@ def save_png(result: DetectionResult) -> None:
             anomaly_vals = [result.actuals[i] for i in valid_anomalies]
             ax.scatter(anomaly_ts, anomaly_vals, color="red", zorder=5, s=60, label=f"이상치 ({len(valid_anomalies)}건)")
 
-        ax.set_title("Ad Impression Anomaly Detection", fontsize=14, fontweight="bold")
+        ax.set_title("Ad Conversion Anomaly Detection", fontsize=14, fontweight="bold")
         ax.set_xlabel("시각")
-        ax.set_ylabel("Impression 수 (5분 단위)")
+        ax.set_ylabel("Conversion 수 (5분 단위)")
 
         # X축을 3시간 단위로 표시
         ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
@@ -132,6 +141,10 @@ def save_png(result: DetectionResult) -> None:
 def save_html(result: DetectionResult) -> None:
     """Plotly 인터랙티브 HTML 저장"""
     try:
+        if not result.timestamps:
+            logger.warning("시각화할 탐지 결과가 없어 HTML 저장을 건너뜁니다.")
+            return
+
         t_ts = result.timestamps
         t_actuals = result.actuals
         t_predicted = result.predicted
@@ -160,9 +173,9 @@ def save_html(result: DetectionResult) -> None:
             ))
         
         fig.update_layout(
-            title="Ad Impression Anomaly Detection", 
+            title="Ad Conversion Anomaly Detection", 
             xaxis_title="시각", 
-            yaxis_title="Impression 수", 
+            yaxis_title="Conversion 수", 
             hovermode="x",
             template="plotly_white",
             xaxis=dict(
@@ -249,9 +262,21 @@ def run_detection_pipeline(source: Union[MockKinesisSource, CloudWatchSource], p
                     res_dict = prophet.predict(ts, count)
                     status, pred, lower, upper, atype = res_dict["status"], res_dict["predicted"], res_dict["lower"], res_dict["upper"], res_dict["anomaly_type"]
                     
+                    p_anomaly = (status == "ANOMALY")
                     if_res = iso_forest.predict(count)
-                    if if_res["is_anomaly"] and status == "NORMAL":
-                        status, atype = "ANOMALY", "IsoForest Anomaly"
+                    i_anomaly = if_res["is_anomaly"]
+                    
+                    if p_anomaly or i_anomaly:
+                        status = "ANOMALY"
+                        if p_anomaly and i_anomaly:
+                            atype = f"{atype or 'Anomaly'} [Prophet + IsoForest]"
+                        elif p_anomaly:
+                            atype = f"{atype or 'Anomaly'} [Prophet]"
+                        else:
+                            atype = "Outlier [IsoForest]"
+                    else:
+                        status = "NORMAL"
+                        atype = None
 
                     result.timestamps.append(ts)
                     result.actuals.append(float(count))
@@ -259,8 +284,8 @@ def run_detection_pipeline(source: Union[MockKinesisSource, CloudWatchSource], p
                     result.lowers.append(lower)
                     result.uppers.append(upper)
 
-                    # 재훈련용 데이터 누적
-                    all_records.append({"timestamp": ts, "impression_count": count})
+                    # [수정] 전환 지표명 반영 (재훈련용)
+                    all_records.append({"timestamp": ts, "conversion_count": count})
 
                     if status == "ANOMALY":
                         result.anomaly_indices.append(result.total_windows)
@@ -339,7 +364,7 @@ def main():
     try:
         prophet, iso_forest = load_trained_models()
         if config.DATA_SOURCE == "cloudwatch":
-            source = CloudWatchSource()
+            source = CloudWatchSource(stream_name=config.KINESIS_STREAM_NAME)
         else:
             source = MockKinesisSource(history_days=config.HISTORY_DAYS)
 
@@ -355,7 +380,7 @@ def main():
             has_anomaly = result.anomaly_count > 0
             
             if has_anomaly or config.TEST_MODE_FORCE_SLACK:
-                msg = "[🚨 이상 탐지 알림]" if has_anomaly else "[🧪 테스트 알림]"
+                msg = "💰 [🚨 이상 탐지 알림: Conversion]" if has_anomaly else "💰 [🧪 테스트 알림: Conversion]"
                 msg += f" {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} 기준 탐지 결과입니다.\n"
                 msg += f"총 {result.anomaly_count}개의 이상 지점이 발견되었습니다."
                 
@@ -363,7 +388,7 @@ def main():
                 logger.info(f"슬랙 알림 전송 중... (사유: {'이상 탐지' if has_anomaly else '테스트 모드'})")
                 notifier.send_file(
                     file_path=png_path,
-                    title="Anomaly Detection Result",
+                    title="Anomaly Detection Result: Conversion",
                     initial_comment=msg
                 )
 

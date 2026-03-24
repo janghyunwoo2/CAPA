@@ -12,6 +12,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# .env 파일 이미지 내 통합
+COPY .env /app/.env
+
 COPY . .
 
 RUN mkdir -p /app/output

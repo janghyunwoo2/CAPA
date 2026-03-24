@@ -1,8 +1,9 @@
 """
 t3_anomaly_detector Airflow DAG
-- 매 5분(정각 기준) 마다 t3_anomaly_detector 도커 컨테이너를 실행합니다.
+- 매 5분(정각 + 2분 기준) 마다 t3_anomaly_detector 도커 컨테이너를 실행합니다.
+- 실행 시각: 02분, 07분, 12분, 17분, ..., 57분
 - 컨테이너는 1회 실행 후 자동 종료됩니다.
-- Airflow가 다음 5분에 다시 실행시킵니다.
+- Airflow가 다음 주기에 다시 실행시킵니다.
 """
 from airflow import DAG
 from airflow.operators.bash import BashOperator
@@ -29,28 +30,28 @@ default_args = {
 }
 
 with DAG(
-    dag_id="t3_anomaly_detector",
-    description="5분마다 이상 탐지 파이프라인 실행",
-    schedule_interval="*/5 * * * *",  # 매 5분 정각 기준 실행
+    dag_id="capa_impression_anomaly_detector",
+    description="매 시 2분부터 5분 간격으로 이상 탐지 파이프라인 실행",
+    schedule_interval="2-59/5 * * * *",  # 2분부터 시작해서 매 5분마다 실행
     start_date=datetime(2026, 3, 22),
     catchup=False,                    # 과거 놓친 실행은 무시
     max_active_runs=1,                # 동시에 하나의 실행만 허용
     default_args=default_args,
-    tags=["anomaly", "cloudwatch", "monitoring"],
+    tags=["anomaly", "impression", "monitoring"],
 ) as dag:
 
     run_anomaly_detector = BashOperator(
-        task_id="run_anomaly_detector",
+        task_id="run_impression_anomaly_detector",
         bash_command="""
             docker run --rm \
               --name anomaly_detector_airflow_run_{{ ts_nodash }} \
-              --env-file /opt/anomaly_detector/.env \
+              --env-file /opt/anomaly_detector/capa-impression/.env \
               -e AWS_DEFAULT_REGION=ap-northeast-2 \
               -e TZ=Asia/Seoul \
-              -v C:/Users/Dell3571/Desktop/projects/CAPA/services/t3_anomaly_detector/models:/app/models \
-              -v C:/Users/Dell3571/Desktop/projects/CAPA/services/t3_anomaly_detector/output:/app/output \
+              -v C:/Users/Dell3571/Desktop/projects/CAPA/services/t3_anomaly_detector/capa-impression/models:/app/models \
+              -v C:/Users/Dell3571/Desktop/projects/CAPA/services/t3_anomaly_detector/capa-impression/output:/app/output \
               -v C:/Users/Dell3571/.aws:/root/.aws:ro \
-              t3_anomaly_detector-t3_anomaly_detector
+              capa-impression
         """,
         doc_md="""
         ### t3_anomaly_detector 실행

@@ -52,13 +52,16 @@ def _parse_bool(key: str, default: str) -> bool:
 
 
 # ============ Prophet 모델 파라미터 ============
-PROPHET_INTERVAL_WIDTH = _parse_float("PROPHET_INTERVAL_WIDTH", "0.85", min_val=0.0, max_val=1.0)
+PROPHET_INTERVAL_WIDTH = _parse_float("PROPHET_INTERVAL_WIDTH", "0.95", min_val=0.0, max_val=1.0)
 PROPHET_LOWER_BOUND = _parse_int("PROPHET_LOWER_BOUND", "54", min_val=0)  # 2월 최소값
 PROPHET_YEARLY_SEASONALITY = _parse_bool("PROPHET_YEARLY_SEASONALITY", "true")
 PROPHET_WEEKLY_SEASONALITY = _parse_bool("PROPHET_WEEKLY_SEASONALITY", "true")
 PROPHET_DAILY_SEASONALITY = _parse_bool("PROPHET_DAILY_SEASONALITY", "true")
 PROPHET_CHANGEPOINT_PRIOR_SCALE = _parse_float("PROPHET_CHANGEPOINT_PRIOR_SCALE", "0.01", min_val=0.0, max_val=1.0)
 PROPHET_SEASONALITY_MODE = os.getenv("PROPHET_SEASONALITY_MODE", "additive")  # "additive" 또는 "multiplicative"
+
+# ============ Kinesis 스트림 설정 ============
+KINESIS_STREAM_NAME = os.getenv("KINESIS_STREAM_NAME", "capa-knss-imp-00")
 
 # ============ Isolation Forest 파라미터 ============
 ISOLATION_FOREST_CONTAMINATION = _parse_float(
@@ -73,8 +76,8 @@ RETRAIN_INTERVAL = _parse_int("RETRAIN_INTERVAL", "288", min_val=1)  # 24시간 
 ENABLE_RETRAIN = os.getenv("ENABLE_RETRAIN", "false").lower() in ("true", "1", "yes")  # 재훈련 활성화
 VISUALIZATION_UPDATE_INTERVAL = _parse_int("VISUALIZATION_UPDATE_INTERVAL", "1", min_val=1)
 
-# 가속 모드: 1=실시간, 300=5분→1초 (데모 기본값)
-ACCELERATION_FACTOR = _parse_int("ACCELERATION_FACTOR", "300", min_val=1)
+# 가속 모드: 1=실시간, 300=5분→1초
+ACCELERATION_FACTOR = _parse_int("ACCELERATION_FACTOR", "1", min_val=1)
 logger.info(f"파이프라인 가속 계수 설정 완료: {ACCELERATION_FACTOR}x")
 
 DATA_SOURCE = os.getenv("DATA_SOURCE", "cloudwatch")  # "mock" | "cloudwatch"

@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  capa-click:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: capa-click
+    env_file:
+      - .env
+    environment:
+      - AWS_DEFAULT_REGION=ap-northeast-2
+      - TZ=Asia/Seoul
+    volumes:
+      # 학습된 모델 파일 영속화
+      - ./models:/app/models
+      # 출력 결과 (PNG, HTML, JSONL, 로그) 영속화
+      - ./output:/app/output
+      # AWS 자격증명 공유 (Windows 환경 대응)
+      - ${USERPROFILE}/.aws:/root/.aws:ro
+    restart: "no"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
