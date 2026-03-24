@@ -1,8 +1,9 @@
-# Airflow DAG Loader 제외 목록
-tests/
-__pycache__/
-*.pyc
-.pytest_cache/
-pytest.ini
-conftest.py
-test_*.py
+# Airflow DAG Loader 제외 목록 (정규표현식 기반)
+tests/.*
+__pycache__/.*
+.*\.pyc
+\.pytest_cache/.*
+pytest\.ini
+conftest\.py
+test_.*\.py
+
