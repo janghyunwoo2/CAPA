@@ -281,6 +281,32 @@ cost_per_click: 클릭 1회당 비용
 클릭 비용만: SUM(cost_per_click)""",
 ]
 
+DOCS_NONEXISTENT_COLUMNS: list[str] = [
+    """[주의: 존재하지 않는 컬럼 — 절대 사용 금지]
+- campaign_name → 없음. campaign_id만 존재 (campaign_01~campaign_05)
+- ad_name       → 없음. ad_id만 존재 (ad_0001~ad_1000)
+- advertiser_name → 없음. advertiser_id만 존재 (advertiser_01~advertiser_30)
+- channel       → 없음. platform, ad_format, ad_position으로 세분화됨
+- gender        → 없음
+- age           → 없음
+위 컬럼들을 WHERE 절이나 SELECT 절에 사용하면 Athena 쿼리 오류 발생.""",
+]
+
+DOCS_CATEGORICAL_VALUES: list[str] = [
+    """[컬럼 범주값 — 정확한 값만 WHERE 조건에 사용할 것]
+- platform:          web | app_ios | app_android | tablet_ios | tablet_android
+- device_type:       mobile | tablet | desktop | others
+- os:                ios | android | macos | windows
+- conversion_type:   purchase | signup | download | view_content | add_to_cart
+- ad_format:         display | native | video | discount_coupon
+- ad_position:       home_top_rolling | list_top_fixed | search_ai_recommend | checkout_bottom
+- attribution_window: 1day | 7day | 30day
+- food_category:     chicken | pizza | korean | chinese | dessert (외 10개)
+- campaign_id:       campaign_01 ~ campaign_05
+- delivery_region:   강남구 | 서초구 | 마포구 등 서울 25개 자치구 (예: '강남구', '종로구')
+대소문자 구분: 모두 소문자 (예: 'Mobile' → 오류, 'mobile' → 정상)""",
+]
+
 DOCS_GLOSSARY: list[str] = [
     """광고 도메인 용어사전 (Glossary)
 노출(Impression): 광고가 사용자 화면에 보여진 횟수
@@ -941,6 +967,77 @@ ORDER BY ad_format, hour
 """
     },
 
+    # ── Jinja2 날짜 패턴 QA (평가용 ground_truth와 동일 포맷) ─────────────
+    # 설계서 §3.1.2: 파티션 조건에 {{ y_year }}/{{ y_month }}/{{ y_day }} 사용
+    # run_evaluation.py의 _render_ground_truth()가 실행 시점 날짜로 치환
+
+    {
+        "question": "어제 캠페인별 클릭률(CTR)을 내림차순으로 보여줘",
+        "sql": """SELECT campaign_id,
+    COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr
+FROM ad_combined_log_summary
+WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
+GROUP BY campaign_id
+ORDER BY ctr DESC""",
+    },
+    {
+        "question": "각 캠페인의 어제 CTR은?",
+        "sql": """SELECT campaign_id,
+    COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr
+FROM ad_combined_log_summary
+WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
+GROUP BY campaign_id
+ORDER BY ctr DESC""",
+    },
+    {
+        "question": "어제 캠페인별로 노출 대비 클릭 비율을 비교해줘",
+        "sql": """SELECT campaign_id,
+    COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr
+FROM ad_combined_log_summary
+WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
+GROUP BY campaign_id
+ORDER BY ctr DESC""",
+    },
+    {
+        "question": "어제 기기별 노출수와 클릭수를 보여줘",
+        "sql": """SELECT device_type,
+    COUNT(*) AS impressions,
+    COUNT(CASE WHEN is_click = true THEN 1 END) AS clicks
+FROM ad_combined_log_summary
+WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
+GROUP BY device_type
+ORDER BY impressions DESC""",
+    },
+    {
+        "question": "어제 전환율(CVR)이 가장 높은 캠페인 TOP 3는?",
+        "sql": """SELECT campaign_id,
+    COUNT(CASE WHEN is_conversion = true THEN 1 END) * 1.0 / NULLIF(COUNT(CASE WHEN is_click = true THEN 1 END), 0) AS cvr
+FROM ad_combined_log_summary
+WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
+GROUP BY campaign_id
+ORDER BY cvr DESC
+LIMIT 3""",
+    },
+    {
+        "question": "이번달 캠페인별 총 광고비를 구해줘",
+        "sql": """SELECT campaign_id,
+    SUM(cost_per_impression + cost_per_click) AS total_ad_spend
+FROM ad_combined_log_summary
+WHERE year='{{ year }}' AND month='{{ month }}'
+GROUP BY campaign_id
+ORDER BY total_ad_spend DESC""",
+    },
+    {
+        "question": "이번달 ROAS가 가장 높은 캠페인은?",
+        "sql": """SELECT campaign_id,
+    SUM(conversion_value) / NULLIF(SUM(cost_per_click), 0) AS roas
+FROM ad_combined_log_summary
+WHERE year='{{ year }}' AND month='{{ month }}'
+GROUP BY campaign_id
+ORDER BY roas DESC
+LIMIT 1""",
+    },
+
     {
         "question": "이번달 대비 2개월 전 ROAS 변화를 알려줘",
         "sql": """
@@ -964,6 +1061,175 @@ SELECT
     ROUND(cm.roas_percent - tma.roas_percent, 2) AS roas_growth
 FROM two_months_ago tma, current_month cm
 """
+    },
+
+    # ── GAP-B-01/02: 패러프레이징 QA 확장 (설계서 §3.1.2 우선순위 1~4) ─────
+
+    # ── 카테고리 2 추가: CTR 계산 패러프레이징 (동일 SQL 다른 표현) ─────────
+    # 이미 존재하는 3개(Jinja2 섹션)에 date_format 동적 패턴 표현 추가
+
+    {
+        "question": "어제 캠페인별 광고 클릭률을 높은 순으로 정렬해줘",
+        "sql": """SELECT campaign_id,
+    COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr
+FROM ad_combined_log_summary
+WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
+GROUP BY campaign_id
+ORDER BY ctr DESC""",
+    },
+    {
+        "question": "어제 캠페인 중 CTR이 제일 높은 건 어디야?",
+        "sql": """SELECT campaign_id,
+    COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr
+FROM ad_combined_log_summary
+WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
+GROUP BY campaign_id
+ORDER BY ctr DESC
+LIMIT 1""",
+    },
+
+    # ── 카테고리 6: TOP N 순위 패턴 패러프레이징 ───────────────────────────
+
+    {
+        "question": "이번달 클릭수 상위 5개 캠페인을 알려줘",
+        "sql": """SELECT campaign_id,
+    COUNT(CASE WHEN is_click = true THEN 1 END) AS total_clicks
+FROM ad_combined_log_summary
+WHERE year='{{ year }}' AND month='{{ month }}'
+GROUP BY campaign_id
+ORDER BY total_clicks DESC
+LIMIT 5""",
+    },
+    {
+        "question": "이번달 광고비 가장 많이 쓴 캠페인 TOP 3는?",
+        "sql": """SELECT campaign_id,
+    SUM(cost_per_impression + cost_per_click) AS total_ad_spend
+FROM ad_combined_log_summary
+WHERE year='{{ year }}' AND month='{{ month }}'
+GROUP BY campaign_id
+ORDER BY total_ad_spend DESC
+LIMIT 3""",
+    },
+    {
+        "question": "지난달 전환 수 기준 상위 3개 광고주를 보여줘",
+        "sql": """SELECT advertiser_id,
+    COUNT(CASE WHEN is_conversion = true THEN 1 END) AS total_conversions
+FROM ad_combined_log_summary
+WHERE year = date_format(date_add('month', -1, current_date), '%Y')
+  AND month = date_format(date_add('month', -1, current_date), '%m')
+GROUP BY advertiser_id
+ORDER BY total_conversions DESC
+LIMIT 3""",
+    },
+
+    # ── 카테고리 4: 기간 비교(CTE) 패턴 패러프레이징 ──────────────────────
+
+    {
+        "question": "어제 대비 오늘 노출수는 얼마나 늘었어?",
+        "sql": """WITH yesterday AS (
+    SELECT COUNT(*) AS impressions
+    FROM ad_combined_log_summary
+    WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
+),
+today AS (
+    SELECT COUNT(*) AS impressions
+    FROM ad_combined_log_summary
+    WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}'
+)
+SELECT
+    y.impressions AS yesterday_impressions,
+    t.impressions AS today_impressions,
+    ROUND((t.impressions - y.impressions) * 100.0 / NULLIF(y.impressions, 0), 2) AS growth_rate_percent
+FROM yesterday y, today t""",
+    },
+    {
+        "question": "전일 대비 클릭률 변화량을 알려줘",
+        "sql": """WITH yesterday AS (
+    SELECT ROUND(COUNT(CASE WHEN is_click = true THEN 1 END) * 100.0 / COUNT(*), 2) AS ctr_percent
+    FROM ad_combined_log_summary
+    WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
+),
+today AS (
+    SELECT ROUND(COUNT(CASE WHEN is_click = true THEN 1 END) * 100.0 / COUNT(*), 2) AS ctr_percent
+    FROM ad_combined_log_summary
+    WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}'
+)
+SELECT
+    y.ctr_percent AS yesterday_ctr,
+    t.ctr_percent AS today_ctr,
+    ROUND(t.ctr_percent - y.ctr_percent, 2) AS ctr_change
+FROM yesterday y, today t""",
+    },
+    {
+        "question": "이번달과 지난달 전환율(CVR) 비교해줘",
+        "sql": """WITH this_month AS (
+    SELECT ROUND(COUNT(CASE WHEN is_conversion = true THEN 1 END) * 100.0
+                 / NULLIF(COUNT(CASE WHEN is_click = true THEN 1 END), 0), 2) AS cvr_percent
+    FROM ad_combined_log_summary
+    WHERE year='{{ year }}' AND month='{{ month }}'
+),
+last_month AS (
+    SELECT ROUND(COUNT(CASE WHEN is_conversion = true THEN 1 END) * 100.0
+                 / NULLIF(COUNT(CASE WHEN is_click = true THEN 1 END), 0), 2) AS cvr_percent
+    FROM ad_combined_log_summary
+    WHERE year = date_format(date_add('month', -1, current_date), '%Y')
+      AND month = date_format(date_add('month', -1, current_date), '%m')
+)
+SELECT
+    lm.cvr_percent AS last_month_cvr,
+    tm.cvr_percent AS this_month_cvr,
+    ROUND(tm.cvr_percent - lm.cvr_percent, 2) AS cvr_change
+FROM this_month tm, last_month lm""",
+    },
+
+    # ── 카테고리 9: 지역별/기기별 GROUP BY 패러프레이징 ───────────────────
+
+    {
+        "question": "지역별로 어제 노출수와 클릭수를 비교해줘",
+        "sql": """SELECT delivery_region,
+    COUNT(*) AS impressions,
+    COUNT(CASE WHEN is_click = true THEN 1 END) AS clicks,
+    ROUND(COUNT(CASE WHEN is_click = true THEN 1 END) * 100.0 / COUNT(*), 2) AS ctr_percent
+FROM ad_combined_log_summary
+WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
+GROUP BY delivery_region
+ORDER BY impressions DESC""",
+    },
+    {
+        "question": "어제 어떤 지역에서 광고 성과가 제일 좋았어?",
+        "sql": """SELECT delivery_region,
+    COUNT(*) AS impressions,
+    COUNT(CASE WHEN is_click = true THEN 1 END) AS clicks,
+    ROUND(COUNT(CASE WHEN is_click = true THEN 1 END) * 100.0 / COUNT(*), 2) AS ctr_percent
+FROM ad_combined_log_summary
+WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
+GROUP BY delivery_region
+ORDER BY ctr_percent DESC
+LIMIT 5""",
+    },
+    {
+        "question": "기기 유형별 이번달 전환율을 보여줘",
+        "sql": """SELECT device_type,
+    COUNT(CASE WHEN is_click = true THEN 1 END) AS clicks,
+    COUNT(CASE WHEN is_conversion = true THEN 1 END) AS conversions,
+    ROUND(COUNT(CASE WHEN is_conversion = true THEN 1 END) * 100.0
+          / NULLIF(COUNT(CASE WHEN is_click = true THEN 1 END), 0), 2) AS cvr_percent
+FROM ad_combined_log_summary
+WHERE year='{{ year }}' AND month='{{ month }}'
+GROUP BY device_type
+ORDER BY cvr_percent DESC""",
+    },
+    {
+        "question": "모바일과 데스크톱 중 어느 쪽 CTR이 더 높아?",
+        "sql": """SELECT device_type,
+    COUNT(*) AS impressions,
+    COUNT(CASE WHEN is_click = true THEN 1 END) AS clicks,
+    ROUND(COUNT(CASE WHEN is_click = true THEN 1 END) * 100.0 / COUNT(*), 2) AS ctr_percent
+FROM ad_combined_log_summary
+WHERE year='{{ year }}' AND month='{{ month }}'
+  AND device_type IN ('mobile', 'desktop')
+GROUP BY device_type
+ORDER BY ctr_percent DESC""",
     },
 ]
 
@@ -1020,6 +1286,8 @@ def train_documentation(vanna_instance) -> None:
         ("DOCS_BUSINESS_METRICS", DOCS_BUSINESS_METRICS),
         ("DOCS_ATHENA_RULES", DOCS_ATHENA_RULES),
         ("DOCS_POLICIES", DOCS_POLICIES),
+        ("DOCS_NONEXISTENT_COLUMNS", DOCS_NONEXISTENT_COLUMNS),
+        ("DOCS_CATEGORICAL_VALUES", DOCS_CATEGORICAL_VALUES),
         ("DOCS_GLOSSARY", DOCS_GLOSSARY),
     ]
 
@@ -1092,8 +1360,8 @@ def main() -> None:
         logger.info("=" * 80)
         logger.info("학습된 컨텐츠:")
         logger.info("  - DDL: 2개 테이블 (ad_combined_log, ad_combined_log_summary)")
-        logger.info(f"  - Documentation: {sum(len(d) for d in [DOCS_BUSINESS_METRICS, DOCS_ATHENA_RULES, DOCS_POLICIES, DOCS_GLOSSARY])}개 항목 (4개 카테고리)")
-        logger.info(f"  - QA 예제: {len(QA_EXAMPLES)}개 (12개 카테고리 커버)")
+        logger.info(f"  - Documentation: {sum(len(d) for d in [DOCS_BUSINESS_METRICS, DOCS_ATHENA_RULES, DOCS_POLICIES, DOCS_NONEXISTENT_COLUMNS, DOCS_CATEGORICAL_VALUES, DOCS_GLOSSARY])}개 항목 (6개 카테고리)")
+        logger.info(f"  - QA 예제: {len(QA_EXAMPLES)}개 (CTR/CVR/TOP-N/기간비교/지역기기 패러프레이징 포함)")
 
     except Exception as e:
         logger.error("=" * 80)
