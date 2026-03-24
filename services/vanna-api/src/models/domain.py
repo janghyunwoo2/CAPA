@@ -65,6 +65,7 @@ class ValidationResult(BaseModel):
     is_valid: bool
     normalized_sql: Optional[str] = None
     error_message: Optional[str] = None
+    error_code: Optional[str] = None
     explain_result: Optional[str] = None
 
 
