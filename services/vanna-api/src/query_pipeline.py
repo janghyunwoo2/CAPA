@@ -99,9 +99,10 @@ class _VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
         - score = 1 / (1 + distance) → 클수록 유사 (0~1 범위)
         """
         # Phase2 활성화 시 reranker 후보 풀을 위해 n_results 확대
+        # CPU 환경 성능 최적화: 20 → 10 (reranker 처리 시간 단축)
         n_results = self.n_results_sql
         if PHASE2_RAG_ENABLED:
-            n_results = max(n_results, 20)
+            n_results = max(n_results, 10)
 
         results = self.sql_collection.query(
             query_texts=[question],
