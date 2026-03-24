@@ -1,0 +1,39 @@
+{
+  "total_cases": 5,
+  "exec": {
+    "passed": 2,
+    "accuracy": 0.4
+  },
+  "details": [
+    {
+      "test_id": "T001",
+      "question": "어제 캠페인별 클릭률(CTR)을 내림차순으로 보여줘",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T002",
+      "question": "어제 모바일 기기의 총 노출 수는?",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T003",
+      "question": "어제 전환이 발생한 광고 수를 알려줘",
+      "exec": 0.0,
+      "error": null
+    },
+    {
+      "test_id": "T004",
+      "question": "어제 캠페인별 전환율(CVR) 상위 5개를 보여줘",
+      "exec": 0.0,
+      "error": null
+    },
+    {
+      "test_id": "T005",
+      "question": "오늘 광고주별 총 광고비를 보여줘",
+      "exec": 0.0,
+      "error": "생성 SQL Athena 실행 실패 (results 없음)"
+    }
+  ]
+}
