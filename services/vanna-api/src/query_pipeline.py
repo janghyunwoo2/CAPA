@@ -18,7 +18,6 @@ Step 11. HistoryRecorder     → 질문-SQL-결과 이력 저장
 
 import logging
 import os
-import uuid
 from datetime import datetime
 from typing import Any, Optional
 
@@ -82,10 +81,20 @@ class _VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
         return id
 
     def get_similar_question_sql(self, question: str, **kwargs) -> list:
-        """metadata에서 SQL을 꺼내 {question, sql} dict 리스트로 반환."""
+        """metadata에서 SQL을 꺼내 {question, sql, score} dict 리스트로 반환.
+
+        distance 값을 score로 변환하여 반환:
+        - ChromaDB distance: 작을수록 유사 (L2 기준 0~∞)
+        - score = 1 / (1 + distance) → 클수록 유사 (0~1 범위)
+        """
+        # Phase2 활성화 시 reranker 후보 풀을 위해 n_results 확대
+        n_results = self.n_results_sql
+        if PHASE2_RAG_ENABLED:
+            n_results = max(n_results, 20)
+
         results = self.sql_collection.query(
             query_texts=[question],
-            n_results=self.n_results_sql,
+            n_results=n_results,
             include=["documents", "metadatas", "distances"],
         )
         if not results or "documents" not in results:
@@ -93,10 +102,15 @@ class _VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
 
         docs = results["documents"][0] if results["documents"] else []
         metas = results.get("metadatas", [[]])[0]
+        distances = results.get("distances", [[]])[0]
 
         return [
-            {"question": doc, "sql": meta.get("sql", "")}
-            for doc, meta in zip(docs, metas)
+            {
+                "question": doc,
+                "sql": meta.get("sql", ""),
+                "score": 1.0 / (1.0 + dist),  # distance → similarity score
+            }
+            for doc, meta, dist in zip(docs, metas, distances)
             if meta.get("sql")
         ]
 
@@ -127,15 +141,19 @@ class QueryPipeline:
             athena_client = boto3.client("athena", region_name=aws_region)
 
         if vanna_instance is None:
-            chroma_host = os.getenv("CHROMA_HOST", "chromadb.chromadb.svc.cluster.local")
+            chroma_host = os.getenv(
+                "CHROMA_HOST", "chromadb.chromadb.svc.cluster.local"
+            )
             chroma_port = int(os.getenv("CHROMA_PORT", "8000"))
             chroma_client = chromadb.HttpClient(host=chroma_host, port=chroma_port)
-            vanna_instance = _VannaAthena(config={
-                "api_key": anthropic_api_key,
-                "model": llm_model,
-                "client": chroma_client,
-                "embedding_function": _KO_EMBEDDING_FUNCTION,
-            })
+            vanna_instance = _VannaAthena(
+                config={
+                    "api_key": anthropic_api_key,
+                    "model": llm_model,
+                    "client": chroma_client,
+                    "embedding_function": _KO_EMBEDDING_FUNCTION,
+                }
+            )
 
         self._vanna = vanna_instance
         self._api_key = anthropic_api_key
@@ -148,13 +166,20 @@ class QueryPipeline:
         self._model = llm_model
 
         # 컴포넌트 초기화
-        self._intent_classifier = IntentClassifier(api_key=anthropic_api_key, model=llm_model)
-        self._question_refiner = QuestionRefiner(api_key=anthropic_api_key, model=llm_model)
-        self._keyword_extractor = KeywordExtractor(api_key=anthropic_api_key, model=llm_model)
+        self._intent_classifier = IntentClassifier(
+            api_key=anthropic_api_key, model=llm_model
+        )
+        self._question_refiner = QuestionRefiner(
+            api_key=anthropic_api_key, model=llm_model
+        )
+        self._keyword_extractor = KeywordExtractor(
+            api_key=anthropic_api_key, model=llm_model
+        )
         # Phase 2: PHASE2_RAG_ENABLED=true 시 CrossEncoderReranker + Anthropic 주입
         if PHASE2_RAG_ENABLED:
             from .pipeline.reranker import CrossEncoderReranker
             import anthropic as _anthropic
+
             _reranker = CrossEncoderReranker()
             _anthropic_client = _anthropic.Anthropic(api_key=anthropic_api_key)
         else:
@@ -203,7 +228,9 @@ class QueryPipeline:
         # Step 0: 멀티턴 대화 이력 조회 (FR-20)
         if MULTI_TURN_ENABLED and ctx.session_id and self._conversation_retriever:
             ctx = self._conversation_retriever.retrieve(ctx)
-            logger.info(f"Step 0 대화 이력: session_id={ctx.session_id}, turn={ctx.turn_number}, history={len(ctx.conversation_history)}건")
+            logger.info(
+                f"Step 0 대화 이력: session_id={ctx.session_id}, turn={ctx.turn_number}, history={len(ctx.conversation_history)}건"
+            )
 
         # Step 1: 의도 분류
         ctx.intent = self._intent_classifier.classify(question)
@@ -230,7 +257,9 @@ class QueryPipeline:
         # Step 2: 질문 정제
         ctx.refined_question = self._question_refiner.refine(
             question,
-            conversation_history=ctx.conversation_history if MULTI_TURN_ENABLED else None,
+            conversation_history=ctx.conversation_history
+            if MULTI_TURN_ENABLED
+            else None,
         )
         logger.info(f"Step 2 정제된 질문: {ctx.refined_question}")
 
@@ -255,7 +284,9 @@ class QueryPipeline:
             ctx.generated_sql = self._sql_generator.generate(
                 question=ctx.refined_question,
                 rag_context=ctx.rag_context,
-                conversation_history=ctx.conversation_history if MULTI_TURN_ENABLED else None,
+                conversation_history=ctx.conversation_history
+                if MULTI_TURN_ENABLED
+                else None,
             )
         except SQLGenerationError as e:
             logger.error(f"Step 5 SQL 생성 실패: {e}")
@@ -270,12 +301,15 @@ class QueryPipeline:
         # Step 6: SQL 검증
         ctx.validation_result = self._sql_validator.validate(ctx.generated_sql)
         if not ctx.validation_result.is_valid:
-            logger.warning(f"Step 6 SQL 검증 실패: {ctx.validation_result.error_message}")
+            logger.warning(
+                f"Step 6 SQL 검증 실패: {ctx.validation_result.error_message}"
+            )
             ctx.error = PipelineError(
                 failed_step=6,
                 step_name="SQL 검증",
                 error_code="SQL_VALIDATION_FAILED",
-                error_message=ctx.validation_result.error_message or "SQL 검증에 실패했습니다.",
+                error_message=ctx.validation_result.error_message
+                or "SQL 검증에 실패했습니다.",
                 generated_sql=ctx.generated_sql,
             )
             return ctx

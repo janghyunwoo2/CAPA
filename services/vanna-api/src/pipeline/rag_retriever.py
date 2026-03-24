@@ -92,7 +92,11 @@ class RAGRetriever:
             return RAGContext()
 
     def _retrieve_candidates(self, query: str) -> list[CandidateDocument]:
-        """Step 4-1: 기존 vanna 검색을 CandidateDocument 리스트로 변환"""
+        """Step 4-1: 기존 vanna 검색을 CandidateDocument 리스트로 변환.
+
+        SQL 예제는 get_similar_question_sql에서 반환한 score(ChromaDB distance 기반)를
+        initial_score로 주입. DDL/Documentation은 시맨팅 수 없어 1.0 고정.
+        """
         candidates: list[CandidateDocument] = []
 
         for text in self._retrieve_ddl(query):
@@ -103,9 +107,13 @@ class RAGRetriever:
             candidates.append(
                 CandidateDocument(text=text, source="documentation", initial_score=1.0)
             )
-        for text in self._retrieve_sql_examples(query):
+        for item in self._retrieve_sql_examples_with_score(query):
             candidates.append(
-                CandidateDocument(text=text, source="sql_example", initial_score=1.0)
+                CandidateDocument(
+                    text=item["text"],
+                    source="sql_example",
+                    initial_score=item["score"],  # ChromaDB distance 기반 실제 점수
+                )
             )
         return candidates
 
@@ -119,8 +127,7 @@ class RAGRetriever:
             return self._candidates_to_rag_context(candidates)
 
         doc_list = "\n".join(
-            f"[{i}] ({doc.source}) {doc.text[:300]}"
-            for i, doc in enumerate(candidates)
+            f"[{i}] ({doc.source}) {doc.text[:300]}" for i, doc in enumerate(candidates)
         )
         prompt = (
             f"You are a SQL expert. Given the following documents and a user question, "
@@ -129,7 +136,7 @@ class RAGRetriever:
             f"User question: {question}\n\n"
             f"Documents:\n{doc_list}\n\n"
             f"Respond in JSON format only: "
-            f'{{\"selected_indices\": [<list of int indices>], \"reason\": \"<brief reason>\"}}'
+            f'{{"selected_indices": [<list of int indices>], "reason": "<brief reason>"}}'
         )
         try:
             response = self._anthropic.messages.create(
@@ -142,13 +149,14 @@ class RAGRetriever:
             if raw.startswith("```"):
                 lines = raw.splitlines()
                 raw = "\n".join(
-                    line for line in lines
-                    if not line.strip().startswith("```")
+                    line for line in lines if not line.strip().startswith("```")
                 ).strip()
             parsed = json.loads(raw)
             selected_indices: list[int] = parsed.get("selected_indices", [])
             reason: str = parsed.get("reason", "")
-            logger.info(f"LLM 선별 완료: {len(selected_indices)}건 선택, 이유: {reason[:80]}")
+            logger.info(
+                f"LLM 선별 완료: {len(selected_indices)}건 선택, 이유: {reason[:80]}"
+            )
 
             selected = [
                 candidates[i] for i in selected_indices if 0 <= i < len(candidates)
@@ -196,18 +204,31 @@ class RAGRetriever:
             return []
 
     def _retrieve_sql_examples(self, query: str) -> list[str]:
+        """Phase 1 한정: SQL 텍스트만 리스트로 반환 (하위 호환 유지)."""
+        return [item["text"] for item in self._retrieve_sql_examples_with_score(query)]
+
+    def _retrieve_sql_examples_with_score(self, query: str) -> list[dict]:
+        """SQL 예제를 ChromaDB distance 기반 score와 함께 반환.
+
+        Returns:
+            list of {"text": str, "score": float}
+            score = 1 / (1 + distance) → 클수록 유사 (0~1)
+        """
         try:
             results = self._vanna.get_similar_question_sql(question=query)
             if not isinstance(results, list):
                 return []
-            converted: list[str] = []
+            converted: list[dict] = []
             for item in results:
                 if isinstance(item, str):
-                    converted.append(item)
+                    converted.append({"text": item, "score": 1.0})
                 elif isinstance(item, dict):
                     sql = item.get("sql") or item.get("SQL") or ""
                     if sql:
-                        converted.append(str(sql))
+                        score = item.get("score", 1.0)  # query_pipeline이 주입한 score
+                        question = item.get("question", "")
+                        text = f"Q: {question}\nSQL: {sql}" if question else str(sql)
+                        converted.append({"text": text, "score": float(score)})
             return converted
         except Exception as e:
             logger.warning(f"SQL 예제 RAG 검색 실패: {e}")
