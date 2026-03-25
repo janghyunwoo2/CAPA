@@ -57,6 +57,7 @@ from .history_recorder import HistoryRecorder
 logger = logging.getLogger(__name__)
 
 PHASE2_RAG_ENABLED = os.getenv("PHASE2_RAG_ENABLED", "false").lower() == "true"
+RERANKER_ENABLED = os.getenv("RERANKER_ENABLED", "true").lower() == "true"
 MULTI_TURN_ENABLED = os.getenv("MULTI_TURN_ENABLED", "false").lower() == "true"
 SCHEMA_MAPPER_ENABLED = os.getenv("SCHEMA_MAPPER_ENABLED", "false").lower() == "true"
 SELF_CORRECTION_ENABLED = os.getenv("SELF_CORRECTION_ENABLED", "false").lower() == "true"
@@ -244,9 +245,13 @@ class QueryPipeline:
         )
         # Phase 2: PHASE2_RAG_ENABLED=true 시 CrossEncoderReranker 활성화
         if PHASE2_RAG_ENABLED:
-            from .pipeline.reranker import CrossEncoderReranker
-            _reranker = CrossEncoderReranker()
             _phase2_client = _anthropic_client   # Phase 2: LLM 필터/SQL 생성에 전달
+            if RERANKER_ENABLED:
+                from .pipeline.reranker import CrossEncoderReranker
+                _reranker = CrossEncoderReranker()
+            else:
+                _reranker = None
+                logger.info("Reranker 비활성화 (RERANKER_ENABLED=false)")
         else:
             _reranker = None
             _phase2_client = None                # Phase 1: Vanna 경로 유지

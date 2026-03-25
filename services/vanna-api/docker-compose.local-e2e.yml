@@ -173,16 +173,32 @@ services:
       - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-60}
       - REDASH_QUERY_TIMEOUT_SEC=${REDASH_QUERY_TIMEOUT_SEC:-300}
 
-      # Phase 2 기능 활성화
-      - PHASE2_RAG_ENABLED=true
+      # Phase 2 RAG 파이프라인
+      - PHASE2_RAG_ENABLED=true        # true: 3단계 RAG(ChromaDB→Reranker→LLM필터) 사용 / false: Vanna 기본 검색
+      - RERANKER_ENABLED=false         # true: jina-reranker-v2 cross-encoder 재평가(CPU 57초) / false: ChromaDB 유사도 순서 그대로
+      - LLM_FILTER_ENABLED=false       # true: RAG 후보를 LLM이 한번 더 선별(추가 API 호출) / false: 후보 그대로 SQL 생성에 전달
+
+      # 멀티턴 대화
+      - MULTI_TURN_ENABLED=true        # true: 이전 대화 이력 참조하여 맥락 유지 / false: 매 질문 독립 처리
+
+      # SchemaMapper — 테이블 자동 선택
+      - SCHEMA_MAPPER_ENABLED=true     # true: 키워드로 테이블(log/summary) 자동 확정 / false: LLM이 직접 판단
+
+      # Self-Correction — SQL 검증 실패 시 에러 피드백 재주입 후 재생성
+      - SELF_CORRECTION_ENABLED=true   # true: 검증 실패 SQL을 LLM에 재주입하여 재생성 / false: 1회 생성 후 종료
+      - MAX_CORRECTION_ATTEMPTS=3      # Self-Correction 최대 재시도 횟수
+
+      # 비동기 쿼리 처리
+      - ASYNC_QUERY_ENABLED=true       # true: 긴 쿼리를 백그라운드 처리 후 폴링 / false: 동기 대기
+
+      # 피드백 수집
+      - PHASE2_FEEDBACK_ENABLED=true   # true: SQL 결과에 좋아요/싫어요 피드백 수집 / false: 피드백 비활성
+
+      # DynamoDB 테이블 설정
       - DYNAMODB_ENABLED=true
-      - ASYNC_QUERY_ENABLED=true
-      - PHASE2_FEEDBACK_ENABLED=true
-      - SCHEMA_MAPPER_ENABLED=true
-      - MULTI_TURN_ENABLED=true
-      - DYNAMODB_HISTORY_TABLE=capa-dev-query-history
-      - DYNAMODB_FEEDBACK_TABLE=capa-dev-pending-feedbacks
-      - DYNAMODB_ASYNC_TABLE=capa-dev-async-tasks
+      - DYNAMODB_HISTORY_TABLE=capa-dev-query-history      # 대화 이력 저장 테이블
+      - DYNAMODB_FEEDBACK_TABLE=capa-dev-pending-feedbacks # 피드백 임시 저장 테이블
+      - DYNAMODB_ASYNC_TABLE=capa-dev-async-tasks          # 비동기 작업 상태 테이블
 
       - PYTHONUNBUFFERED=1
       - DEBUG=true
