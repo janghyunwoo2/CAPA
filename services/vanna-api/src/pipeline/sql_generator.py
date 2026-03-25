@@ -103,14 +103,8 @@ class SQLGenerator:
             if conversation_history:
                 prev_sqls = [t.generated_sql for t in conversation_history if t.generated_sql]
                 if prev_sqls:
-                    history_block = (
-                        "<history>\n"
-                        + "\n".join(
-                            f"  이전 SQL {i + 1}: {sql}"
-                            for i, sql in enumerate(prev_sqls)
-                        )
-                        + "\n</history>\n"
-                    )
+                    sql_list = "\n".join(f"  {i+1}. {sql}" for i, sql in enumerate(prev_sqls))
+                    history_block = f"이전 대화에서 생성된 SQL:\n{sql_list}\n"
 
             # [FR-12] Phase 2 RAG 컨텍스트 주입 (rag_context 제공 시)
             rag_block = ""

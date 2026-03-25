@@ -58,6 +58,7 @@ logger = logging.getLogger(__name__)
 
 PHASE2_RAG_ENABLED = os.getenv("PHASE2_RAG_ENABLED", "false").lower() == "true"
 MULTI_TURN_ENABLED = os.getenv("MULTI_TURN_ENABLED", "false").lower() == "true"
+SCHEMA_MAPPER_ENABLED = os.getenv("SCHEMA_MAPPER_ENABLED", "false").lower() == "true"
 SELF_CORRECTION_ENABLED = os.getenv("SELF_CORRECTION_ENABLED", "false").lower() == "true"
 MAX_CORRECTION_ATTEMPTS = int(os.getenv("MAX_CORRECTION_ATTEMPTS", "3"))
 
@@ -125,6 +126,56 @@ class _VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
             for doc, meta, dist in zip(docs, metas, distances)
             if meta.get("sql")
         ]
+
+    def get_related_ddl_with_score(self, question: str, **kwargs) -> list[dict]:
+        """DDL을 ChromaDB distance 기반 score와 함께 반환.
+
+        Returns:
+            list of {"text": str, "score": float}  (score = 1/(1+distance))
+        """
+        try:
+            n_results = getattr(self, "n_results_ddl", 10)
+            results = self.ddl_collection.query(
+                query_texts=[question],
+                n_results=n_results,
+                include=["documents", "distances"],
+            )
+            if not results or "documents" not in results:
+                return []
+            docs = results["documents"][0] if results["documents"] else []
+            distances = results.get("distances", [[]])[0]
+            return [
+                {"text": doc, "score": 1.0 / (1.0 + dist)}
+                for doc, dist in zip(docs, distances)
+            ]
+        except Exception:
+            fallback = self.get_related_ddl(question=question)
+            return [{"text": doc, "score": 1.0} for doc in (fallback or [])]
+
+    def get_related_documentation_with_score(self, question: str, **kwargs) -> list[dict]:
+        """Documentation을 ChromaDB distance 기반 score와 함께 반환.
+
+        Returns:
+            list of {"text": str, "score": float}  (score = 1/(1+distance))
+        """
+        try:
+            n_results = getattr(self, "n_results_documentation", 10)
+            results = self.documentation_collection.query(
+                query_texts=[question],
+                n_results=n_results,
+                include=["documents", "distances"],
+            )
+            if not results or "documents" not in results:
+                return []
+            docs = results["documents"][0] if results["documents"] else []
+            distances = results.get("distances", [[]])[0]
+            return [
+                {"text": doc, "score": 1.0 / (1.0 + dist)}
+                for doc, dist in zip(docs, distances)
+            ]
+        except Exception:
+            fallback = self.get_related_documentation(question=question)
+            return [{"text": doc, "score": 1.0} for doc in (fallback or [])]
 
 
 class QueryPipeline:
@@ -203,6 +254,13 @@ class QueryPipeline:
             reranker=_reranker,
             anthropic_client=_anthropic_client,
         )
+
+        # Step 3.5: SchemaMapper (SCHEMA_MAPPER_ENABLED=true 시 활성화)
+        if SCHEMA_MAPPER_ENABLED:
+            from .pipeline.schema_mapper import SchemaMapper
+            self._schema_mapper: Optional[Any] = SchemaMapper()
+        else:
+            self._schema_mapper = None
         self._sql_generator = SQLGenerator(
             vanna_instance=vanna_instance,
             anthropic_client=_anthropic_client,
@@ -338,11 +396,24 @@ class QueryPipeline:
         ctx.keywords = self._keyword_extractor.extract(ctx.refined_question)
         logger.info(f"Step 3 키워드: {ctx.keywords}")
 
+        # Step 3.5: SchemaMapper — 키워드 → 테이블 힌트 (SCHEMA_MAPPER_ENABLED=true 시)
+        if SCHEMA_MAPPER_ENABLED and self._schema_mapper is not None:
+            try:
+                ctx.schema_hint = self._schema_mapper.map(ctx.keywords)
+                logger.info(
+                    f"Step 3.5 SchemaHint: tables={ctx.schema_hint.tables}, "
+                    f"is_definitive={ctx.schema_hint.is_definitive}, "
+                    f"confidence={ctx.schema_hint.confidence}"
+                )
+            except Exception as e:
+                logger.warning(f"Step 3.5 SchemaMapper 실패: {e}, schema_hint=None 유지")
+
         # Step 4: RAG 검색 (Phase 2: PHASE2_RAG_ENABLED=true 시 3단계 RAG 사용)
         if PHASE2_RAG_ENABLED:
-            ctx.rag_context = self._rag_retriever.retrieve_v2(
+            ctx.rag_context = await self._rag_retriever.retrieve_v2(
                 question=ctx.refined_question,
                 keywords=ctx.keywords,
+                schema_hint=ctx.schema_hint,
             )
         else:
             ctx.rag_context = self._rag_retriever.retrieve(
