@@ -46,12 +46,13 @@ with DAG(
         name="t2-daily-etl-pod",
         namespace=NAMESPACE,
         image=ECR_IMAGE,
-        # data_interval_start(UTC) → KST 변환 → 1일 감산 → ISO 8601 문자열 전달
+        # data_interval_start(UTC) → KST 변환 → ISO 8601 문자열 전달
+        # (Airflow의 data_interval_start는 이미 전날 실행 구간이므로 감산하지 않습니다)
         arguments=[
             "--mode",
             "daily",
             "--target-date",
-            "{{ data_interval_start.in_timezone('Asia/Seoul').subtract(days=1).isoformat() }}",
+            "{{ data_interval_start.in_timezone('Asia/Seoul').isoformat() }}",
         ],
         env_from=env_from,
         service_account_name=SA_NAME,

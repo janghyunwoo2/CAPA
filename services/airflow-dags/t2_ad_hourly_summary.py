@@ -46,12 +46,13 @@ with DAG(
         name="t2-hourly-etl-pod",
         namespace=NAMESPACE,
         image=ECR_IMAGE,
-        # data_interval_start(UTC) → KST 변환 → 1시간 감산 → ISO 8601 문자열 전달
+        # data_interval_start(UTC) → KST 변환 → ISO 8601 문자열 전달
+        # (Airflow의 data_interval_start는 실행 시간보다 1시간 빠르므로 빼지 않아야 알맞은 파티션(전 시간)을 바라봅니다)
         arguments=[
             "--mode",
             "hourly",
             "--target-hour",
-            "{{ data_interval_start.in_timezone('Asia/Seoul').subtract(hours=1).isoformat() }}",
+            "{{ data_interval_start.in_timezone('Asia/Seoul').isoformat() }}",
         ],
         env_from=env_from,
         service_account_name=SA_NAME,
