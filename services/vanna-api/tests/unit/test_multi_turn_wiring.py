@@ -11,7 +11,7 @@ TC 목록:
 """
 
 import asyncio
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -58,6 +58,7 @@ def _make_pipeline(history=None):
     # Step 4: RAG 검색
     mock_rag = MagicMock()
     mock_rag.retrieve.return_value = MagicMock()
+    mock_rag.retrieve_v2 = AsyncMock(return_value=MagicMock())
 
     # Step 5: SQL 생성
     mock_sql_gen = MagicMock()
