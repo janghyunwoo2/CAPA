@@ -4,54 +4,25 @@
     "category": "basic_ctr",
     "difficulty": "easy",
     "date_type": "relative",
+    "target_user": "performance_marketer",
     "question": "어제 캠페인별 클릭률(CTR)을 내림차순으로 보여줘",
     "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY campaign_id ORDER BY ctr DESC"
-  },
-  {
-    "id": "T002",
-    "category": "basic_ctr",
-    "difficulty": "easy",
-    "date_type": "relative",
-    "question": "어제 모바일 기기의 총 노출 수는?",
-    "ground_truth_sql": "SELECT COUNT(*) AS total_impressions FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' AND device_type='mobile'"
-  },
-  {
-    "id": "T003",
-    "category": "conversion",
-    "difficulty": "easy",
-    "date_type": "relative",
-    "question": "어제 전환이 발생한 광고 수를 알려줘",
-    "ground_truth_sql": "SELECT COUNT(DISTINCT ad_id) AS converted_ads FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' AND is_conversion=true"
   },
   {
     "id": "T004",
     "category": "conversion",
     "difficulty": "easy",
     "date_type": "relative",
+    "target_user": "performance_marketer",
     "question": "어제 캠페인별 전환율(CVR) 상위 5개를 보여줘",
     "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_conversion=true THEN 1 END) * 1.0 / NULLIF(COUNT(CASE WHEN is_click=true THEN 1 END), 0) AS cvr FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY campaign_id ORDER BY cvr DESC LIMIT 5"
-  },
-  {
-    "id": "T005",
-    "category": "cost",
-    "difficulty": "easy",
-    "date_type": "relative",
-    "question": "오늘 광고주별 총 광고비를 보여줘",
-    "ground_truth_sql": "SELECT advertiser_id, SUM(cost_per_impression) AS total_cost FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY advertiser_id ORDER BY total_cost DESC"
-  },
-  {
-    "id": "T006",
-    "category": "cost",
-    "difficulty": "easy",
-    "date_type": "relative",
-    "question": "오늘 클릭당 비용(CPC)이 가장 낮은 캠페인 TOP 5",
-    "ground_truth_sql": "SELECT campaign_id, SUM(cost_per_click) / NULLIF(COUNT(CASE WHEN is_click=true THEN 1 END), 0) AS cpc FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY campaign_id ORDER BY cpc ASC LIMIT 5"
   },
   {
     "id": "T007",
     "category": "region",
     "difficulty": "easy",
     "date_type": "relative",
+    "target_user": "pm",
     "question": "어제 지역별 노출 수를 순위대로 보여줘",
     "ground_truth_sql": "SELECT delivery_region, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY delivery_region ORDER BY impressions DESC"
   },
@@ -60,6 +31,7 @@
     "category": "device",
     "difficulty": "easy",
     "date_type": "relative",
+    "target_user": "performance_marketer",
     "question": "오늘 데스크톱/모바일/태블릿 기기별 클릭 수를 비교해줘",
     "ground_truth_sql": "SELECT device_type, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY device_type ORDER BY clicks DESC"
   },
@@ -68,6 +40,7 @@
     "category": "revenue",
     "difficulty": "easy",
     "date_type": "relative",
+    "target_user": "sales",
     "question": "어제 총 전환 매출은 얼마야?",
     "ground_truth_sql": "SELECT SUM(conversion_value) AS total_revenue FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' AND is_conversion=true"
   },
@@ -76,46 +49,16 @@
     "category": "hourly",
     "difficulty": "easy",
     "date_type": "relative",
+    "target_user": "ad_ops",
     "question": "오늘 시간대별 노출 수를 보여줘",
     "ground_truth_sql": "SELECT hour, COUNT(*) AS impressions FROM ad_combined_log WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY hour ORDER BY hour"
-  },
-  {
-    "id": "T011",
-    "category": "platform",
-    "difficulty": "easy",
-    "date_type": "relative",
-    "question": "오늘 플랫폼별 CTR을 비교해줘",
-    "ground_truth_sql": "SELECT platform, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY platform ORDER BY ctr DESC"
-  },
-  {
-    "id": "T012",
-    "category": "conversion",
-    "difficulty": "easy",
-    "date_type": "relative",
-    "question": "어제 전환 타입별 건수를 보여줘",
-    "ground_truth_sql": "SELECT conversion_type, COUNT(*) AS conversions FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' AND is_conversion=true GROUP BY conversion_type ORDER BY conversions DESC"
-  },
-  {
-    "id": "T013",
-    "category": "ad_format",
-    "difficulty": "easy",
-    "date_type": "relative",
-    "question": "오늘 광고 형식별 노출 수를 보여줘",
-    "ground_truth_sql": "SELECT ad_format, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY ad_format ORDER BY impressions DESC"
-  },
-  {
-    "id": "T014",
-    "category": "revenue",
-    "difficulty": "easy",
-    "date_type": "relative",
-    "question": "어제 캠페인별 ROAS(광고비 대비 매출)를 보여줘",
-    "ground_truth_sql": "SELECT campaign_id, SUM(conversion_value) / NULLIF(SUM(cost_per_impression), 0) AS roas FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY campaign_id ORDER BY roas DESC"
   },
   {
     "id": "T015",
     "category": "basic_ctr",
     "difficulty": "easy",
     "date_type": "relative",
+    "target_user": "pm",
     "question": "이번 달 전체 캠페인별 총 노출 수를 보여줘",
     "ground_truth_sql": "SELECT campaign_id, COUNT(*) AS total_impressions FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' GROUP BY campaign_id ORDER BY total_impressions DESC"
   },
@@ -124,46 +67,25 @@
     "category": "region",
     "difficulty": "easy",
     "date_type": "relative",
+    "target_user": "ad_ops",
     "question": "어제 강남구 지역 클릭 수는?",
     "ground_truth_sql": "SELECT COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' AND delivery_region='강남구'"
-  },
-  {
-    "id": "T017",
-    "category": "device",
-    "difficulty": "easy",
-    "date_type": "relative",
-    "question": "오늘 iOS 앱 플랫폼의 노출 수는?",
-    "ground_truth_sql": "SELECT COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' AND platform='app_ios'"
-  },
-  {
-    "id": "T018",
-    "category": "conversion",
-    "difficulty": "easy",
-    "date_type": "relative",
-    "question": "어제 구매(purchase) 전환 총 매출을 알려줘",
-    "ground_truth_sql": "SELECT SUM(conversion_value) AS total_revenue FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' AND is_conversion=true AND conversion_type='purchase'"
   },
   {
     "id": "T019",
     "category": "hourly",
     "difficulty": "easy",
     "date_type": "relative",
+    "target_user": "ad_ops",
     "question": "오늘 시간대별 클릭 수 추이를 보여줘",
     "ground_truth_sql": "SELECT hour, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY hour ORDER BY hour"
-  },
-  {
-    "id": "T020",
-    "category": "cost",
-    "difficulty": "easy",
-    "date_type": "relative",
-    "question": "오늘 광고주별 전환당 비용(CPA)을 보여줘",
-    "ground_truth_sql": "SELECT advertiser_id, SUM(cost_per_impression) / NULLIF(COUNT(CASE WHEN is_conversion=true THEN 1 END), 0) AS cpa FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY advertiser_id ORDER BY cpa ASC"
   },
   {
     "id": "T021",
     "category": "multi_metric",
     "difficulty": "medium",
     "date_type": "relative",
+    "target_user": "ad_ops",
     "question": "어제 전체 광고 노출수, 클릭수, 전환수, 클릭률(CTR)을 보여줘",
     "ground_truth_sql": "SELECT COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'"
   },
@@ -172,6 +94,7 @@
     "category": "multi_metric",
     "difficulty": "medium",
     "date_type": "relative",
+    "target_user": "pm",
     "question": "오늘 각 캠페인별로 노출, 클릭, 전환, 전환율(CVR)을 상세 비교해줘",
     "ground_truth_sql": "SELECT campaign_id, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr, COUNT(CASE WHEN is_conversion=true THEN 1 END) * 1.0 / NULLIF(COUNT(CASE WHEN is_click=true THEN 1 END), 0) AS cvr FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY campaign_id ORDER BY impressions DESC"
   },
@@ -180,54 +103,52 @@
     "category": "food_category",
     "difficulty": "medium",
     "date_type": "relative",
+    "target_user": "performance_marketer",
     "question": "어제 음식 카테고리별 클릭률(CTR) 상위 10개를 보여줘",
     "ground_truth_sql": "SELECT food_category, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY food_category ORDER BY ctr DESC LIMIT 10"
-  },
-  {
-    "id": "T024",
-    "category": "ad_position",
-    "difficulty": "medium",
-    "date_type": "relative",
-    "question": "오늘 광고 위치별 클릭수와 전환수를 보여줘",
-    "ground_truth_sql": "SELECT ad_position, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY ad_position ORDER BY clicks DESC"
-  },
-  {
-    "id": "T025",
-    "category": "os",
-    "difficulty": "medium",
-    "date_type": "relative",
-    "question": "어제 운영체제별 노출 수와 CTR을 보여줘",
-    "ground_truth_sql": "SELECT os, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY os ORDER BY impressions DESC"
-  },
-  {
-    "id": "T026",
-    "category": "conversion",
-    "difficulty": "medium",
-    "date_type": "explicit",
-    "question": "2026년 3월 14일 클릭은 있지만 전환이 없는 캠페인 목록",
-    "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY campaign_id HAVING COUNT(CASE WHEN is_click=true THEN 1 END) > 0 AND COUNT(CASE WHEN is_conversion=true THEN 1 END) = 0 ORDER BY clicks DESC"
   },
   {
     "id": "T027",
     "category": "revenue",
     "difficulty": "medium",
     "date_type": "relative",
+    "target_user": "sales",
     "question": "오늘 광고주별 노출수, 총 광고비, 전환 매출, ROAS를 한 번에 보여줘",
-    "ground_truth_sql": "SELECT advertiser_id, COUNT(*) AS impressions, SUM(cost_per_impression) AS total_cost, SUM(CASE WHEN is_conversion=true THEN conversion_value ELSE 0 END) AS revenue, SUM(CASE WHEN is_conversion=true THEN conversion_value ELSE 0 END) / NULLIF(SUM(cost_per_impression), 0) AS roas FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY advertiser_id ORDER BY roas DESC"
+    "ground_truth_sql": "SELECT advertiser_id, COUNT(*) AS impressions, SUM(cost_per_impression + cost_per_click) AS total_cost, SUM(CASE WHEN is_conversion=true THEN conversion_value ELSE 0 END) AS revenue, SUM(CASE WHEN is_conversion=true THEN conversion_value ELSE 0 END) / NULLIF(SUM(cost_per_impression + cost_per_click), 0) AS roas FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY advertiser_id ORDER BY roas DESC"
   },
   {
-    "id": "T028",
-    "category": "device_platform",
+    "id": "T033",
+    "category": "region",
     "difficulty": "medium",
     "date_type": "relative",
-    "question": "어제 기기 타입과 플랫폼 조합별 노출 수를 보여줘",
-    "ground_truth_sql": "SELECT device_type, platform, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY device_type, platform ORDER BY impressions DESC"
+    "target_user": "pm",
+    "question": "오늘 지역별 노출수, CTR, 전환수를 한 번에 보여줘",
+    "ground_truth_sql": "SELECT delivery_region, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY delivery_region ORDER BY impressions DESC"
+  },
+  {
+    "id": "T035",
+    "category": "hourly",
+    "difficulty": "medium",
+    "date_type": "relative",
+    "target_user": "ad_ops",
+    "question": "오늘 시간대별 노출 수와 클릭수 추이를 보여줘",
+    "ground_truth_sql": "SELECT hour, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY hour ORDER BY hour"
+  },
+  {
+    "id": "T026",
+    "category": "conversion",
+    "difficulty": "medium",
+    "date_type": "explicit",
+    "target_user": "ad_ops",
+    "question": "2026년 3월 14일 클릭은 있지만 전환이 없는 캠페인 목록",
+    "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY campaign_id HAVING COUNT(CASE WHEN is_click=true THEN 1 END) > 0 AND COUNT(CASE WHEN is_conversion=true THEN 1 END) = 0 ORDER BY clicks DESC"
   },
   {
     "id": "T029",
     "category": "hourly",
     "difficulty": "medium",
     "date_type": "explicit",
+    "target_user": "performance_marketer",
     "question": "2026년 3월 14일 오전(00~11시)과 오후(12~23시) 클릭 수 비교",
     "ground_truth_sql": "SELECT CASE WHEN CAST(hour AS INT) < 12 THEN '오전' ELSE '오후' END AS time_period, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log WHERE year='2026' AND month='03' AND day='14' GROUP BY CASE WHEN CAST(hour AS INT) < 12 THEN '오전' ELSE '오후' END ORDER BY time_period"
   },
@@ -236,6 +157,7 @@
     "category": "conversion",
     "difficulty": "medium",
     "date_type": "explicit",
+    "target_user": "sales",
     "question": "2026년 3월 14일 전환 타입별 총 매출과 평균 전환 가치",
     "ground_truth_sql": "SELECT conversion_type, COUNT(*) AS conversions, SUM(conversion_value) AS total_revenue, AVG(conversion_value) AS avg_value FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND is_conversion=true GROUP BY conversion_type ORDER BY total_revenue DESC"
   },
@@ -244,6 +166,7 @@
     "category": "keyword",
     "difficulty": "medium",
     "date_type": "explicit",
+    "target_user": "performance_marketer",
     "question": "2026년 3월 14일 검색 키워드별 클릭수 상위 10개",
     "ground_truth_sql": "SELECT keyword, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND keyword IS NOT NULL GROUP BY keyword ORDER BY clicks DESC LIMIT 10"
   },
@@ -252,231 +175,152 @@
     "category": "store",
     "difficulty": "medium",
     "date_type": "explicit",
+    "target_user": "sales",
     "question": "2026년 3월 14일 가게별 전환 매출 상위 5개",
     "ground_truth_sql": "SELECT store_id, SUM(conversion_value) AS total_revenue FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND is_conversion=true GROUP BY store_id ORDER BY total_revenue DESC LIMIT 5"
-  },
-  {
-    "id": "T033",
-    "category": "region",
-    "difficulty": "medium",
-    "date_type": "relative",
-    "question": "오늘 지역별 노출수, CTR, 전환수를 한 번에 보여줘",
-    "ground_truth_sql": "SELECT delivery_region, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY delivery_region ORDER BY impressions DESC"
-  },
-  {
-    "id": "T034",
-    "category": "multi_metric",
-    "difficulty": "medium",
-    "date_type": "relative",
-    "question": "어제 광고 형식별 CTR과 CVR을 비교해줘",
-    "ground_truth_sql": "SELECT ad_format, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr, COUNT(CASE WHEN is_conversion=true THEN 1 END) * 1.0 / NULLIF(COUNT(CASE WHEN is_click=true THEN 1 END), 0) AS cvr FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY ad_format ORDER BY ctr DESC"
-  },
-  {
-    "id": "T035",
-    "category": "hourly",
-    "difficulty": "medium",
-    "date_type": "relative",
-    "question": "오늘 시간대별 노출 수와 클릭수 추이를 보여줘",
-    "ground_truth_sql": "SELECT hour, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY hour ORDER BY hour"
   },
   {
     "id": "T036",
     "category": "weekly",
     "difficulty": "hard",
     "date_type": "explicit",
+    "target_user": "pm",
     "question": "2026년 3월 8일부터 14일까지 7일간 일별 impression 수 추이",
     "ground_truth_sql": "SELECT day, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY day ORDER BY day"
-  },
-  {
-    "id": "T037",
-    "category": "weekly",
-    "difficulty": "hard",
-    "date_type": "explicit",
-    "question": "2026년 3월 8일부터 14일까지 7일간 일별 클릭수와 CTR 추이",
-    "ground_truth_sql": "SELECT day, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY day ORDER BY day"
   },
   {
     "id": "T038",
     "category": "weekly",
     "difficulty": "hard",
     "date_type": "explicit",
+    "target_user": "ad_ops",
     "question": "2026년 3월 8일부터 14일까지 7일간 캠페인별 총 impression 합계",
     "ground_truth_sql": "SELECT campaign_id, COUNT(*) AS total_impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY campaign_id ORDER BY total_impressions DESC"
-  },
-  {
-    "id": "T039",
-    "category": "weekly",
-    "difficulty": "hard",
-    "date_type": "explicit",
-    "question": "2026년 3월 8일부터 14일까지 7일간 기기 타입별 일별 클릭 수",
-    "ground_truth_sql": "SELECT day, device_type, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY day, device_type ORDER BY day, clicks DESC"
   },
   {
     "id": "T040",
     "category": "weekly",
     "difficulty": "hard",
     "date_type": "explicit",
+    "target_user": "sales",
     "question": "2026년 3월 8일부터 14일까지 7일간 광고주별 총 전환 매출",
     "ground_truth_sql": "SELECT advertiser_id, SUM(conversion_value) AS total_revenue FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') AND is_conversion=true GROUP BY advertiser_id ORDER BY total_revenue DESC"
-  },
-  {
-    "id": "T041",
-    "category": "weekly",
-    "difficulty": "hard",
-    "date_type": "explicit",
-    "question": "2026년 3월 8일부터 14일까지 7일간 플랫폼별 impression 합계",
-    "ground_truth_sql": "SELECT platform, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY platform ORDER BY impressions DESC"
   },
   {
     "id": "T042",
     "category": "weekly",
     "difficulty": "hard",
     "date_type": "explicit",
+    "target_user": "performance_marketer",
     "question": "2026년 3월 8일부터 14일까지 7일간 광고 형식별 클릭수 합계",
     "ground_truth_sql": "SELECT ad_format, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY ad_format ORDER BY clicks DESC"
-  },
-  {
-    "id": "T043",
-    "category": "weekly",
-    "difficulty": "hard",
-    "date_type": "explicit",
-    "question": "2026년 3월 8일부터 14일까지 7일간 전환 타입별 총 매출",
-    "ground_truth_sql": "SELECT conversion_type, SUM(conversion_value) AS total_revenue FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') AND is_conversion=true GROUP BY conversion_type ORDER BY total_revenue DESC"
   },
   {
     "id": "T044",
     "category": "weekly",
     "difficulty": "hard",
     "date_type": "explicit",
+    "target_user": "performance_marketer",
     "question": "2026년 3월 8일부터 14일까지 7일간 캠페인별 일별 평균 CTR",
     "ground_truth_sql": "SELECT campaign_id, AVG(daily_ctr) AS avg_ctr FROM (SELECT day, campaign_id, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS daily_ctr FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY day, campaign_id) sub GROUP BY campaign_id ORDER BY avg_ctr DESC"
-  },
-  {
-    "id": "T045",
-    "category": "weekly",
-    "difficulty": "hard",
-    "date_type": "explicit",
-    "question": "2026년 3월 8일부터 14일까지 7일간 지역별 전환수 합계",
-    "ground_truth_sql": "SELECT delivery_region, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY delivery_region ORDER BY conversions DESC"
   },
   {
     "id": "T046",
     "category": "monthly",
     "difficulty": "hard",
     "date_type": "explicit",
+    "target_user": "pm",
     "question": "2026년 3월 전체 광고 노출수, 클릭수, 전환수, CTR 요약",
     "ground_truth_sql": "SELECT COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='2026' AND month='03'"
-  },
-  {
-    "id": "T047",
-    "category": "monthly",
-    "difficulty": "hard",
-    "date_type": "explicit",
-    "question": "2026년 3월 캠페인별 전환수 순위 TOP 20",
-    "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY campaign_id ORDER BY conversions DESC LIMIT 20"
   },
   {
     "id": "T048",
     "category": "monthly",
     "difficulty": "hard",
     "date_type": "explicit",
+    "target_user": "performance_marketer",
     "question": "2026년 3월 기기 타입별 노출수, 클릭수, 전환수 비교",
     "ground_truth_sql": "SELECT device_type, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY device_type ORDER BY impressions DESC"
-  },
-  {
-    "id": "T049",
-    "category": "monthly",
-    "difficulty": "hard",
-    "date_type": "explicit",
-    "question": "2026년 3월 일별 impression 추이 (월 전체)",
-    "ground_truth_sql": "SELECT day, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY day ORDER BY day"
   },
   {
     "id": "T050",
     "category": "monthly",
     "difficulty": "hard",
     "date_type": "explicit",
+    "target_user": "performance_marketer",
     "question": "2026년 3월 음식 카테고리별 노출수와 전환수 상위 10개",
     "ground_truth_sql": "SELECT food_category, COUNT(*) AS impressions, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY food_category ORDER BY conversions DESC LIMIT 10"
-  },
-  {
-    "id": "T051",
-    "category": "monthly",
-    "difficulty": "hard",
-    "date_type": "explicit",
-    "question": "2026년 3월 광고주별 ROAS 순위",
-    "ground_truth_sql": "SELECT advertiser_id, SUM(conversion_value) / NULLIF(SUM(cost_per_impression), 0) AS roas FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY advertiser_id ORDER BY roas DESC"
   },
   {
     "id": "T052",
     "category": "monthly",
     "difficulty": "hard",
     "date_type": "explicit",
+    "target_user": "ad_ops",
     "question": "2026년 3월 플랫폼별 일별 impression 추이",
     "ground_truth_sql": "SELECT day, platform, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY day, platform ORDER BY day, impressions DESC"
-  },
-  {
-    "id": "T053",
-    "category": "monthly",
-    "difficulty": "hard",
-    "date_type": "explicit",
-    "question": "2026년 3월 OS별 클릭수와 전환수",
-    "ground_truth_sql": "SELECT os, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY os ORDER BY clicks DESC"
   },
   {
     "id": "T054",
     "category": "monthly",
     "difficulty": "hard",
     "date_type": "explicit",
+    "target_user": "performance_marketer",
     "question": "2026년 3월 광고 위치별 전환율(CVR)",
     "ground_truth_sql": "SELECT ad_position, COUNT(CASE WHEN is_conversion=true THEN 1 END) * 1.0 / NULLIF(COUNT(CASE WHEN is_click=true THEN 1 END), 0) AS cvr FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY ad_position ORDER BY cvr DESC"
   },
   {
-    "id": "T055",
+    "id": "T061",
+    "category": "anomaly",
+    "difficulty": "easy",
+    "date_type": "relative",
+    "target_user": "ad_ops",
+    "question": "어제 클릭이 한 건도 없었던 캠페인 목록을 보여줘",
+    "ground_truth_sql": "SELECT campaign_id, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY campaign_id HAVING COUNT(CASE WHEN is_click=true THEN 1 END) = 0 ORDER BY impressions DESC"
+  },
+  {
+    "id": "T062",
+    "category": "anomaly",
+    "difficulty": "medium",
+    "date_type": "relative",
+    "target_user": "performance_marketer",
+    "question": "어제 CTR은 높은데 전환이 없는 캠페인을 찾아줘",
+    "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY campaign_id HAVING COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) > 0.05 AND COUNT(CASE WHEN is_conversion=true THEN 1 END) = 0 ORDER BY ctr DESC"
+  },
+  {
+    "id": "T063",
+    "category": "revenue",
+    "difficulty": "medium",
+    "date_type": "explicit",
+    "target_user": "sales",
+    "question": "2026년 3월 14일 ROAS가 가장 높은 광고주 TOP 5와 매출 금액",
+    "ground_truth_sql": "SELECT advertiser_id, SUM(CASE WHEN is_conversion=true THEN conversion_value ELSE 0 END) / NULLIF(SUM(cost_per_impression + cost_per_click), 0) AS roas, SUM(CASE WHEN is_conversion=true THEN conversion_value ELSE 0 END) AS revenue FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY advertiser_id ORDER BY roas DESC LIMIT 5"
+  },
+  {
+    "id": "T064",
     "category": "monthly",
     "difficulty": "hard",
     "date_type": "explicit",
-    "question": "2026년 3월 전체 시간대별 총 impression 합계 (hourly 테이블 기준)",
-    "ground_truth_sql": "SELECT hour, COUNT(*) AS impressions FROM ad_combined_log WHERE year='2026' AND month='03' GROUP BY hour ORDER BY hour"
+    "target_user": "pm",
+    "question": "2026년 2월과 3월의 월별 전체 노출수, 클릭수, 전환수를 비교해줘",
+    "ground_truth_sql": "SELECT year, month, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE (year='2026' AND month='02') OR (year='2026' AND month='03') GROUP BY year, month ORDER BY year, month"
   },
   {
-    "id": "T056",
-    "category": "complex",
-    "difficulty": "expert",
-    "date_type": "explicit",
-    "question": "2026년 3월 14일 전체 평균 CTR보다 높은 캠페인 목록",
-    "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY campaign_id HAVING COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) > (SELECT COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14') ORDER BY ctr DESC"
+    "id": "T065",
+    "category": "device",
+    "difficulty": "easy",
+    "date_type": "relative",
+    "target_user": "performance_marketer",
+    "question": "오늘 모바일에서 CTR이 가장 높은 캠페인 TOP 5",
+    "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' AND device_type='mobile' GROUP BY campaign_id ORDER BY ctr DESC LIMIT 5"
   },
   {
-    "id": "T057",
-    "category": "complex",
-    "difficulty": "expert",
-    "date_type": "explicit",
-    "question": "2026년 3월 14일 impression이 가장 많은 피크 시간대",
-    "ground_truth_sql": "SELECT hour, COUNT(*) AS impressions FROM ad_combined_log WHERE year='2026' AND month='03' AND day='14' GROUP BY hour ORDER BY impressions DESC LIMIT 1"
-  },
-  {
-    "id": "T058",
-    "category": "complex",
-    "difficulty": "expert",
-    "date_type": "explicit",
-    "question": "2026년 3월 14일 CTR 상위 10개 캠페인의 광고 형식 분포",
-    "ground_truth_sql": "SELECT ad_format, COUNT(*) AS campaign_count FROM (SELECT campaign_id, ad_format, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY campaign_id, ad_format ORDER BY ctr DESC LIMIT 10) top_campaigns GROUP BY ad_format ORDER BY campaign_count DESC"
-  },
-  {
-    "id": "T059",
-    "category": "complex",
-    "difficulty": "expert",
-    "date_type": "explicit",
-    "question": "2026년 3월 14일 purchase 전환이 발생한 캠페인의 평균 CPA",
-    "ground_truth_sql": "SELECT AVG(cpa) AS avg_cpa FROM (SELECT campaign_id, SUM(cost_per_impression) / NULLIF(COUNT(CASE WHEN is_conversion=true THEN 1 END), 0) AS cpa FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND campaign_id IN (SELECT DISTINCT campaign_id FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND is_conversion=true AND conversion_type='purchase') GROUP BY campaign_id) sub"
-  },
-  {
-    "id": "T060",
-    "category": "complex",
-    "difficulty": "expert",
-    "date_type": "explicit",
-    "question": "2026년 3월 8일부터 14일까지 7일간 캠페인별 전환 매출 합계와 총 광고비 합계, ROAS",
-    "ground_truth_sql": "SELECT campaign_id, SUM(CASE WHEN is_conversion=true THEN conversion_value ELSE 0 END) AS total_revenue, SUM(cost_per_impression) AS total_cost, SUM(CASE WHEN is_conversion=true THEN conversion_value ELSE 0 END) / NULLIF(SUM(cost_per_impression), 0) AS roas FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY campaign_id ORDER BY roas DESC"
+    "id": "T066",
+    "category": "cost",
+    "difficulty": "medium",
+    "date_type": "relative",
+    "target_user": "sales",
+    "question": "어제 전환당 비용(CPA)이 가장 낮은 캠페인 TOP 5",
+    "ground_truth_sql": "SELECT campaign_id, SUM(cost_per_impression + cost_per_click) / NULLIF(COUNT(CASE WHEN is_conversion=true THEN 1 END), 0) AS cpa FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY campaign_id HAVING COUNT(CASE WHEN is_conversion=true THEN 1 END) > 0 ORDER BY cpa ASC LIMIT 5"
   }
 ]

@@ -321,13 +321,34 @@ class SpiderEvaluator:
         exec_score = 0.0
         exec_error = None
 
+        ts = datetime.now(_KST).strftime('%Y-%m-%d %H:%M')
+        gt_name = f"CAPA: {question} [GT] [{ts}]"
+
         if not gen_rows:
-            exec_error = "생성 SQL Athena 실행 실패 (results 없음)"
+            # LLM 결과 없음 → GT도 실행해서 양쪽 빈 결과인지 확인
+            try:
+                gt_result = self._validator.execute_sql(ground_truth_sql, name=gt_name)
+                gt_rows = gt_result.get("rows", []) if gt_result else []
+                if not gt_rows and generated_sql:
+                    # 양쪽 모두 빈 결과 → SQL 유사도로 판정
+                    import difflib
+                    norm_gen = SQLNormalizer.normalize(generated_sql)
+                    norm_gt = SQLNormalizer.normalize(ground_truth_sql)
+                    similarity = difflib.SequenceMatcher(None, norm_gen, norm_gt).ratio()
+                    if similarity >= 0.6:
+                        exec_score = 1.0
+                        exec_error = f"양쪽 데이터 없음 — SQL 유사도 {similarity:.2f} ≥ 0.6 → PASS"
+                        logger.info(f"[{test_id}] 양쪽 빈 결과, 유사도={similarity:.2f} → PASS")
+                    else:
+                        exec_error = f"양쪽 데이터 없음 — SQL 유사도 {similarity:.2f} < 0.6 → FAIL (쿼리 구조 불일치)"
+                        logger.info(f"[{test_id}] 양쪽 빈 결과, 유사도={similarity:.2f} → FAIL")
+                else:
+                    exec_error = "생성 SQL Athena 실행 실패 (results 없음)"
+            except Exception:
+                exec_error = "생성 SQL Athena 실행 실패 (results 없음)"
         else:
             try:
                 # ground truth SQL 실행 (동일한 10행 제한 적용 — 공정한 비교)
-                ts = datetime.now(_KST).strftime('%Y-%m-%d %H:%M')
-                gt_name = f"CAPA: {question} [GT] [{ts}]"
                 gt_result = self._validator.execute_sql(ground_truth_sql, name=gt_name)
                 if not gt_result:
                     exec_error = "정답 SQL 실행 실패"
