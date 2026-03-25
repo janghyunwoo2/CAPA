@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # LLM_FILTER_ENABLED: LLM 선별 단계 전체 활성화 여부 (기본값 true)
 RERANKER_TOP_K: int = int(os.getenv("RERANKER_TOP_K", "7"))
 RERANKER_TOP_K_DEFINITIVE: int = int(os.getenv("RERANKER_TOP_K_DEFINITIVE", "5"))
-LLM_FILTER_ENABLED: bool = os.getenv("LLM_FILTER_ENABLED", "true").lower() == "true"
+LLM_FILTER_ENABLED: bool = os.getenv("LLM_FILTER_ENABLED", "false").lower() == "true"
 
 # is_definitive=True 시 ChromaDB 벡터 검색 없이 직접 주입할 DDL 상수
 _TABLE_DDL: dict[str, str] = {
