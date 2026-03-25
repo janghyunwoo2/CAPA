@@ -8,6 +8,8 @@ from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field
 
+from .rag import SchemaHint
+
 
 # ---------------------------------------------------------------------------
 # 공통 Enum
@@ -103,6 +105,7 @@ class PipelineContext(BaseModel):
     # Step 0: 멀티턴 (FR-20)
     session_id: Optional[str] = None
     turn_number: Optional[int] = None
+    slack_thread_ts: Optional[str] = None
     conversation_history: list["ConversationTurn"] = Field(default_factory=list)
 
     # Step 1
@@ -113,6 +116,9 @@ class PipelineContext(BaseModel):
 
     # Step 3
     keywords: list[str] = Field(default_factory=list)
+
+    # Step 3.5 (rag-retrieval-optimization)
+    schema_hint: Optional[SchemaHint] = None
 
     # Step 4
     rag_context: Optional[RAGContext] = None
