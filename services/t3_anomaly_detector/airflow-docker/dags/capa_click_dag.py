@@ -24,7 +24,7 @@ default_args = {
 with DAG(
     dag_id="capa_click_anomaly_detector",
     description="5분마다 Click 지표 이상 탐지 파이프라인 실행",
-    schedule_interval="*/5 * * * *",
+    schedule_interval="2-59/5 * * * *",
     start_date=datetime(2026, 3, 22),
     catchup=False,
     max_active_runs=1,

@@ -91,11 +91,11 @@ def save_png(result: DetectionResult) -> None:
         ax.plot(t_ts, t_predicted, label="예측값", color="blue", linestyle="--")
         ax.fill_between(t_ts, t_lowers, t_uppers, color="blue", alpha=0.1, label="신뢰구간")
 
-        valid_anomalies = result.anomaly_indices
+        valid_anomalies = [i for i in result.anomaly_indices if i == len(result.timestamps) - 1]
         if valid_anomalies:
             anomaly_ts = [result.timestamps[i] for i in valid_anomalies]
             anomaly_vals = [result.actuals[i] for i in valid_anomalies]
-            ax.scatter(anomaly_ts, anomaly_vals, color="red", zorder=5, s=60, label=f"이상치 ({len(valid_anomalies)}건)")
+            ax.scatter(anomaly_ts, anomaly_vals, color="red", zorder=5, s=60, label="최신 이상치")
 
         ax.set_title("Ad Click Anomaly Detection", fontsize=14, fontweight="bold")
         ax.set_xlabel("시각")
@@ -148,7 +148,7 @@ def save_html(result: DetectionResult) -> None:
         fig.add_trace(go.Scatter(x=t_ts, y=t_predicted, mode="lines", name="예측값", line=dict(color="blue", width=1)))
         fig.add_trace(go.Scatter(x=t_ts, y=t_actuals, mode="lines", name="실제값", line=dict(color="green", width=1)))
         
-        valid_anomalies = result.anomaly_indices
+        valid_anomalies = [i for i in result.anomaly_indices if i == len(result.timestamps) - 1]
         if valid_anomalies:
             anomaly_ts = [result.timestamps[i] for i in valid_anomalies]
             anomaly_vals = [result.actuals[i] for i in valid_anomalies]
@@ -159,7 +159,7 @@ def save_html(result: DetectionResult) -> None:
                 y=anomaly_vals, 
                 mode="markers", 
                 marker=dict(color="red", size=10), 
-                name="이상치",
+                name="최신 이상치",
                 text=anomaly_texts,
                 hovertemplate="<b>[이상치 감지]</b><br>타입: %{text}<br>수치: %{y}<extra></extra>"
             ))
@@ -369,15 +369,27 @@ def main():
         # 슬랙 알림 전송 (신규 추가)
         if config.ENABLE_SLACK_NOTIF:
             notifier = SlackNotifier(config.SLACK_BOT_TOKEN, config.SLACK_CHANNEL_ID)
-            has_anomaly = result.anomaly_count > 0
             
-            if has_anomaly or config.TEST_MODE_FORCE_SLACK:
-                msg = "🖱️ [🚨 이상 탐지 알림: Click]" if has_anomaly else "🖱️ [🧪 테스트 알림: Click]"
-                msg += f" {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} 기준 탐지 결과입니다.\n"
-                msg += f"총 {result.anomaly_count}개의 이상 지점이 발견되었습니다."
+            # 마지막 데이터가 이상치인지 확인
+            latest_idx = len(result.timestamps) - 1
+            is_latest_anomaly = latest_idx in result.anomaly_indices
+            
+            if is_latest_anomaly or config.TEST_MODE_FORCE_SLACK:
+                latest_ts = result.timestamps[latest_idx] if result.timestamps else datetime.now()
+                start_str = (latest_ts - timedelta(minutes=5)).strftime('%H:%M')
+                end_str = latest_ts.strftime('%H:%M')
+                
+                status_emoji = "🚨" if is_latest_anomaly else "🧪"
+                msg = f"🖱️ [{status_emoji} 이상 탐지 알람: Click]"
+                msg += f" {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} 기준\n\n"
+                
+                if is_latest_anomaly:
+                    msg += f"⚠️ **{start_str} ~ {end_str}** 사이에 이상 징후가 포착되었습니다. 즉시 확인이 필요합니다."
+                else:
+                    msg += f"✅ **{start_str} ~ {end_str}** 사이는 정상 패턴을 보이고 있습니다. (테스트 알림)"
                 
                 png_path = os.path.join(config.OUTPUT_DIR, "anomaly_result.png")
-                logger.info(f"슬랙 알림 전송 중... (사유: {'이상 탐지' if has_anomaly else '테스트 모드'})")
+                logger.info(f"슬랙 알림 전송 중... (사유: {'최신 이상 탐지' if is_latest_anomaly else '테스트 모드'})")
                 notifier.send_file(
                     file_path=png_path,
                     title="Anomaly Detection Result: Click",

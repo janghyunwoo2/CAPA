@@ -152,7 +152,7 @@ class ProphetDetector:
                 if forecast.empty or len(forecast) == 0:
                     raise ModelError(f"Prophet 예측 실패: {timestamp}")
 
-                predicted = float(forecast["yhat"].iloc[0])
+                predicted = max(3.0, float(forecast["yhat"].iloc[0]))
                 lower = max(config.PROPHET_LOWER_BOUND, float(forecast["yhat_lower"].iloc[0]))
                 # 상단 신뢰구간에 가중치를 적용하여 Spike 감지 기준을 완화
                 upper = float(forecast["yhat_upper"].iloc[0]) * config.PROPHET_UPPER_WEIGHT
