@@ -176,8 +176,10 @@ services:
       # Phase 2 기능 활성화
       - PHASE2_RAG_ENABLED=true
       - DYNAMODB_ENABLED=true
-      - ASYNC_QUERY_ENABLED=false  # 평가 실행 시 임시 비활성화
+      - ASYNC_QUERY_ENABLED=true
       - PHASE2_FEEDBACK_ENABLED=true
+      - SCHEMA_MAPPER_ENABLED=true
+      - MULTI_TURN_ENABLED=true
       - DYNAMODB_HISTORY_TABLE=capa-dev-query-history
       - DYNAMODB_FEEDBACK_TABLE=capa-dev-pending-feedbacks
       - DYNAMODB_ASYNC_TABLE=capa-dev-async-tasks

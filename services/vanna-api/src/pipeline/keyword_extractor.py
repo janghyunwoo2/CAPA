@@ -13,13 +13,13 @@ logger = logging.getLogger(__name__)
 _SYSTEM_PROMPT = """당신은 광고 도메인 키워드 추출기입니다.
 사용자의 질문에서 광고 분석에 관련된 핵심 명사와 지표를 추출하세요.
 
-[중요] 반드시 질문에 직접 언급된 단어/표현만 추출하세요.
-질문에 없는 관련 지표나 컬럼명을 절대 추가하지 마세요.
+[중요] 현재 질문에 직접 언급된 단어 뿐만 아니라, 이전 대화 맥락에서 참조하는 도메인 키워드도 포함하세요.
 예시:
-  - "어제 CTR 보여줘" → ["CTR", "어제"]  ← 올바름
-  - "어제 CTR 보여줘" → ["CTR", "ROAS", "cost"]  ← 잘못됨 (ROAS, cost는 질문에 없음)
+  - 이전: "어제 기기별 클릭수 알려줘", 현재: "2번째로 높은 건?" → ["클릭수", "기기", "어제"]  ← 이전 맥락 반영
+  - 현재만: "어제 CTR 보여줘" → ["CTR", "어제"]  ← 올바름
+  - 현재만: "어제 CTR 보여줘" → ["CTR", "ROAS", "cost"]  ← 잘못됨 (ROAS, cost는 맥락에 없음)
 
-추출 대상 (질문에 언급된 것만):
+추출 대상 (현재 질문 + 이전 대화 맥락 기준):
 - 광고 지표: CTR, CVR, ROAS, CPA, CPC, 클릭률, 전환율, 광고비 등
 - 도메인 객체: 캠페인, 광고, 광고주, 디바이스, 플랫폼 등
 - 시간 표현: 어제, 지난주, 지난달, 최근 7일 등
@@ -77,16 +77,31 @@ class KeywordExtractor:
         self._client = anthropic.Anthropic(api_key=api_key)
         self._model = model
 
-    def extract(self, question: str) -> list[str]:
+    def extract(self, question: str, conversation_history: list | None = None) -> list[str]:
         """질문에서 키워드를 추출하여 반환.
+        conversation_history가 있으면 이전 대화 맥락을 포함하여 추출.
         LLM 호출 실패 시 빈 리스트 반환 → RAG 전체 질문 검색으로 fallback.
         """
         try:
+            messages: list[dict] = []
+            # 이전 대화 맥락 주입 (멀티턴)
+            if conversation_history:
+                history_lines = []
+                for turn in conversation_history:
+                    history_lines.append(f"- 이전 질문: {turn.question}")
+                history_text = "\n".join(history_lines)
+                messages.append({
+                    "role": "user",
+                    "content": f"[이전 대화 맥락]\n{history_text}\n\n[현재 질문]\n{question}",
+                })
+            else:
+                messages.append({"role": "user", "content": question})
+
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=200,
                 system=_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": question}],
+                messages=messages,
             )
             raw = response.content[0].text.strip()
             # markdown 코드블록 제거 (```json ... ``` 형식 처리)

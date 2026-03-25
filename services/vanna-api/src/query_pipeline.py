@@ -228,31 +228,33 @@ class QueryPipeline:
         self._recorder = history_recorder or HistoryRecorder()
         self._model = llm_model
 
+        # Anthropic 클라이언트 — QuestionRefiner(멀티턴) + Phase 2(LLM 필터/SQL 생성) 공용
+        import anthropic as _anthropic
+        _anthropic_client = _anthropic.Anthropic(api_key=anthropic_api_key)
+
         # 컴포넌트 초기화
         self._intent_classifier = IntentClassifier(
             api_key=anthropic_api_key, model=llm_model
         )
         self._question_refiner = QuestionRefiner(
-            api_key=anthropic_api_key, model=llm_model
+            llm_client=_anthropic_client, model=llm_model
         )
         self._keyword_extractor = KeywordExtractor(
             api_key=anthropic_api_key, model=llm_model
         )
-        # Phase 2: PHASE2_RAG_ENABLED=true 시 CrossEncoderReranker + Anthropic 주입
+        # Phase 2: PHASE2_RAG_ENABLED=true 시 CrossEncoderReranker 활성화
         if PHASE2_RAG_ENABLED:
             from .pipeline.reranker import CrossEncoderReranker
-            import anthropic as _anthropic
-
             _reranker = CrossEncoderReranker()
-            _anthropic_client = _anthropic.Anthropic(api_key=anthropic_api_key)
+            _phase2_client = _anthropic_client   # Phase 2: LLM 필터/SQL 생성에 전달
         else:
             _reranker = None
-            _anthropic_client = None
+            _phase2_client = None                # Phase 1: Vanna 경로 유지
 
         self._rag_retriever = RAGRetriever(
             vanna_instance=vanna_instance,
             reranker=_reranker,
-            anthropic_client=_anthropic_client,
+            anthropic_client=_phase2_client,
         )
 
         # Step 3.5: SchemaMapper (SCHEMA_MAPPER_ENABLED=true 시 활성화)
@@ -263,7 +265,7 @@ class QueryPipeline:
             self._schema_mapper = None
         self._sql_generator = SQLGenerator(
             vanna_instance=vanna_instance,
-            anthropic_client=_anthropic_client,
+            anthropic_client=_phase2_client,   # Phase 1: None(Vanna 경로), Phase 2: client
             model=llm_model,
         )
         self._sql_validator = SQLValidator(
@@ -392,8 +394,11 @@ class QueryPipeline:
         )
         logger.info(f"Step 2 정제된 질문: {ctx.refined_question}")
 
-        # Step 3: 키워드 추출
-        ctx.keywords = self._keyword_extractor.extract(ctx.refined_question)
+        # Step 3: 키워드 추출 (멀티턴 시 이전 대화 맥락 포함)
+        ctx.keywords = self._keyword_extractor.extract(
+            ctx.refined_question,
+            conversation_history=ctx.conversation_history if MULTI_TURN_ENABLED else None,
+        )
         logger.info(f"Step 3 키워드: {ctx.keywords}")
 
         # Step 3.5: SchemaMapper — 키워드 → 테이블 힌트 (SCHEMA_MAPPER_ENABLED=true 시)

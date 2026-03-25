@@ -223,6 +223,44 @@ LIMIT 절은 반드시 최대 10,000 이하로 지정
 파티션 조건으로 스캔 범위 반드시 제한
 필요한 컬럼만 SELECT (SELECT * 지양)
 집계 쿼리는 GROUP BY 사용""",
+    """Athena 미지원 SQL 구문 — 반드시 대체 방법 사용
+[OFFSET 미지원]
+  금지: ORDER BY click_count DESC LIMIT 1 OFFSET 1
+  대체: ROW_NUMBER() OVER (ORDER BY click_count DESC) — 'N번째로 높은/낮은' 결과
+  예시:
+    SELECT device_type FROM (
+      SELECT device_type,
+             ROW_NUMBER() OVER (ORDER BY click_count DESC) AS rn
+      FROM (SELECT device_type, COUNT(*) AS click_count
+            FROM ad_combined_log_summary
+            WHERE year='2026' AND month='03' AND day='24'
+            GROUP BY device_type)
+    ) WHERE rn = 2
+
+[DATEDIFF 미지원]
+  금지: DATEDIFF(click_timestamp, impression_timestamp)
+  대체: date_diff('second', from_unixtime(impression_timestamp), from_unixtime(click_timestamp))
+  단위: 'day' | 'hour' | 'minute' | 'second'
+
+[MEDIAN 미지원]
+  금지: MEDIAN(cost_per_click)
+  대체: approx_percentile(cost_per_click, 0.5)
+
+[ILIKE 미지원 — 대소문자 무관 검색]
+  금지: keyword ILIKE '%패션%'
+  대체: LOWER(keyword) LIKE LOWER('%패션%')
+
+[SELECT TOP N 미지원 — SQL Server 방언]
+  금지: SELECT TOP 10 campaign_id FROM ...
+  대체: SELECT campaign_id FROM ... LIMIT 10
+
+[QUALIFY 미지원 — BigQuery/Snowflake 방언]
+  금지: SELECT ... QUALIFY ROW_NUMBER() OVER (...) = 1
+  대체: SELECT * FROM (SELECT ..., ROW_NUMBER() OVER (...) AS rn FROM ...) WHERE rn = 1
+
+[STRING_AGG 미지원 — PostgreSQL/BigQuery 방언]
+  금지: STRING_AGG(device_type, ',')
+  대체: array_join(array_agg(device_type), ',')""",
 ]
 
 DOCS_POLICIES: list[str] = [

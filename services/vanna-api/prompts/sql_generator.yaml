@@ -102,6 +102,13 @@ negative_rules: |
        올바른 예: HAVING COUNT(CASE WHEN is_click=true THEN 1 END) > 0
                         AND COUNT(CASE WHEN is_conversion=true THEN 1 END) = 0
        금지 예:   WHERE is_click = true AND is_conversion = false
+   15. LIMIT x OFFSET y 금지 — Athena OFFSET 미지원 → ROW_NUMBER() 서브쿼리 사용
+   16. DATEDIFF() 금지 — Athena 미지원 → date_diff('day'|'hour'|'second', t1, t2) 사용
+   17. MEDIAN() 금지 — Athena 미지원 → approx_percentile(col, 0.5) 사용
+   18. ILIKE 금지 — Athena 미지원 → LOWER(col) LIKE LOWER('%keyword%') 사용
+   19. SELECT TOP N 금지 — SQL Server 방언 → LIMIT N 사용
+   20. QUALIFY 금지 — BigQuery/Snowflake 방언 → ROW_NUMBER() 서브쿼리 + WHERE rn = N 사용
+   21. STRING_AGG() 금지 — PostgreSQL 방언 → array_join(array_agg(col), ',') 사용
   </constraints>
 
 table_selection_rules: |
