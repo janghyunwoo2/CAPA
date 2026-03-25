@@ -82,7 +82,13 @@ def format_executive_summary(data: dict[str, Any], daily_item: dict[str, Any] = 
     md += "### 핵심 KPI 카드\n\n"
     curr_header = f"{period_name} ({curr_label})" if curr_label else f"{period_name} 실적"
     
-    if daily_item:
+    # 일간 보고서에서 어제 데이터가 없더라도 컬럼은 유지하고 N/A로 표시하기 위해
+    # daily_label이 있는 경우(일간 보고서 의도) 헤더를 무조건 3열로 구성
+    if daily_label and period_name == "당월 누적":
+        daily_header = f"{daily_label} 성적"
+        md += f"| KPI | {daily_header} | {curr_header} |\n"
+        md += "|:---|:---:|:---:|\n"
+    elif daily_item:
         daily_header = f"{daily_label} 성적"
         md += f"| KPI | {daily_header} | {curr_header} |\n"
         md += "|:---|:---:|:---:|\n"
@@ -109,7 +115,17 @@ def format_executive_summary(data: dict[str, Any], daily_item: dict[str, Any] = 
         else:
             total_str = str(total_val)
             
-        if daily_item:
+        if daily_label and period_name == "당월 누적": # 일간 보고서인 경우 (비교 컬럼 상시 노출)
+            if daily_item:
+                daily_val = daily_item.get(key, 0)
+                if fmt == "currency": daily_str = format_currency(daily_val)
+                elif fmt == "percent": daily_str = format_number(daily_val, True)
+                elif fmt == "count": daily_str = f"{_safe_int(daily_val):,}건"
+                else: daily_str = str(daily_val)
+            else:
+                daily_str = "N/A"
+            md += f"| {label} | {daily_str} | {total_str} |\n"
+        elif daily_item: # 주간/월간 등에서 보조적으로 아이템이 있는 경우
             daily_val = daily_item.get(key, 0)
             if fmt == "currency": daily_str = format_currency(daily_val)
             elif fmt == "percent": daily_str = format_number(daily_val, True)
@@ -148,6 +164,9 @@ def format_executive_summary(data: dict[str, Any], daily_item: dict[str, Any] = 
 
 def format_kpi_detail(data: dict[str, Any], daily_item: dict[str, Any] = None, curr_label: str = "", daily_label: str = "어제", period_name: str = "당월 누적") -> str:
     """KPI 상세를 생성합니다. 어제와 누적을 비교합니다."""
+    # 일간 보고서 의도 파악 (daily_label이 명시적으로 주어졌을 때)
+    is_daily_report = (daily_label and period_name == "당월 누적")
+    
     daily_header = f"{daily_label} 성적"
     curr_header = f"{period_name}{(' ('+curr_label+')') if curr_label else ''}"
 
@@ -174,7 +193,7 @@ def format_kpi_detail(data: dict[str, Any], daily_item: dict[str, Any] = None, c
 
     for section_name, metrics in sections:
         md += f"### {section_name}\n\n"
-        if daily_item:
+        if is_daily_report or daily_item:
             md += f"| 지표 | {daily_header} | {curr_header} |\n"
             md += "|:---|:---:|:---:|\n"
         else:
@@ -182,27 +201,50 @@ def format_kpi_detail(data: dict[str, Any], daily_item: dict[str, Any] = None, c
             md += "|:---|:---:|\n"
 
         for label, key, format_type in metrics:
-            if key is None:  # net_profit 계산
+            # 1. 공통 집계(MTD/전체) 값 계산 및 포맷팅
+            if key is None: # net_profit
                 total_val = _safe_float(data.get("revenue", 0)) - _safe_float(data.get("cost", 0))
-                daily_val = (_safe_float(daily_item.get("revenue", 0)) - _safe_float(daily_item.get("cost", 0))) if daily_item else 0
             else:
                 total_val = data.get(key, 0)
-                daily_val = daily_item.get(key, 0) if daily_item else 0
-
-            if format_type == "currency":
+            
+            if format_type == "currency" or format_type == "net_profit":
                 total_str = format_currency(total_val)
-                daily_str = format_currency(daily_val)
-            elif format_type == True:  # percentage
+            elif format_type == True:
                 total_str = format_number(total_val, True)
-                daily_str = format_number(daily_val, True)
-            elif format_type == "net_profit":
-                total_str = format_currency(total_val)
-                daily_str = format_currency(daily_val)
-            else:  # number
+            else:
                 total_str = format_number(total_val, False)
-                daily_str = format_number(daily_val, False)
 
-            if daily_item:
+            # 2. 일간/비교 데이터 처리
+            if is_daily_report: # 일간 보고서인 경우 (비교 컬럼 필수)
+                if daily_item:
+                    if key is None:  # net_profit
+                        daily_val = _safe_float(daily_item.get("revenue", 0)) - _safe_float(daily_item.get("cost", 0))
+                    else:
+                        daily_val = daily_item.get(key, 0)
+                    
+                    if format_type == "currency" or format_type == "net_profit":
+                        daily_str = format_currency(daily_val)
+                    elif format_type == True:
+                        daily_str = format_number(daily_val, True)
+                    else:
+                        daily_str = format_number(daily_val, False)
+                else:
+                    daily_str = "N/A"
+                
+                md += f"| {label} | {daily_str} | {total_str} |\n"
+            elif daily_item: # 주간/월간 등에서 보조적으로 사용될 때
+                if key is None:
+                    daily_val = _safe_float(daily_item.get("revenue", 0)) - _safe_float(daily_item.get("cost", 0))
+                else:
+                    daily_val = daily_item.get(key, 0)
+                
+                if format_type == "currency" or format_type == "net_profit":
+                    daily_str = format_currency(daily_val)
+                elif format_type == True:
+                    daily_str = format_number(daily_val, True)
+                else:
+                    daily_str = format_number(daily_val, False)
+                
                 md += f"| {label} | {daily_str} | {total_str} |\n"
             else:
                 md += f"| {label} | {total_str} |\n"
@@ -212,23 +254,27 @@ def format_kpi_detail(data: dict[str, Any], daily_item: dict[str, Any] = None, c
     return md
 
 
-def format_daily_trend(daily_data: list[dict[str, Any]]) -> str:
-    """일별 트렌드를 생성합니다."""
+def format_daily_trend(daily_data: list[dict[str, Any]], expected_date: str = "") -> str:
+    """일별 트렌드를 생성합니다. 마지막 날짜가 expected_date와 다르면 N/A 행을 추가합니다."""
     md = "## 일별 추이\n\n"
     md += "### 일별 상세 테이블\n\n"
     md += "| 날짜 | 요일 | 노출 | 클릭 | 전환 | 광고 기여 매출 | 광고비 (광고 수수료) | CTR | ROAS |\n"
     md += "|:---|---|:---|---|:---|---|:---|---|:---|\n"
 
     day_map = ["월", "화", "수", "목", "금", "토", "일"]
-
+    
+    # 1. 기존 데이터 출력
+    last_date = ""
     for record in daily_data:
         date_str = record.get("date", "")
+        last_date = date_str
         try:
             date_obj = datetime.strptime(date_str, "%Y-%m-%d")
             day_name = day_map[date_obj.weekday()]
         except:
             day_name = "?"
 
+        # ... (이하 동일 로직)
         impressions = _safe_int(record.get("impressions", 0))
         clicks = _safe_int(record.get("clicks", 0))
         conversions = _safe_int(record.get("conversions", 0))
@@ -239,6 +285,16 @@ def format_daily_trend(daily_data: list[dict[str, Any]]) -> str:
 
         md += f"| {date_str} | {day_name} | {impressions:,} | {clicks:,} | {conversions:,} | "
         md += f"{format_currency(revenue)} | {format_currency(cost)} | {format_number(ctr, True)} | {format_number(roas, True)} |\n"
+
+    # 2. 어제 데이터가 누락된 경우 N/A 행 추가
+    if expected_date and last_date != expected_date:
+        try:
+            e_date_obj = datetime.strptime(expected_date, "%Y-%m-%d")
+            e_day_name = day_map[e_date_obj.weekday()]
+        except:
+            e_day_name = "?"
+        
+        md += f"| **{expected_date}** | {e_day_name} | N/A | N/A | N/A | N/A | N/A | N/A | N/A |\n"
 
     return md
 
@@ -402,16 +458,16 @@ def build_daily(
     md = _report_header("일간")
     md += "## 일간 (어제 vs 당월 누적 실적)\n\n"
     
-    # 어제 데이터 추출 (브레이크다운의 마지막 항목)
+    # 어제 데이터 찾기 (end_date_str와 정확히 일치하는 데이터)
     yesterday_item = None
-    daily_label = "어제"
     if daily_data.get("daily_breakdown"):
-        yesterday_item = daily_data["daily_breakdown"][-1]
-        try:
-            y_date = datetime.strptime(yesterday_item["date"], "%Y-%m-%d")
-            daily_label = f"{y_date.month}/{y_date.day}(어제)"
-        except:
-            pass
+        for item in reversed(daily_data["daily_breakdown"]):
+            if item.get("date") == end_date_str:
+                yesterday_item = item
+                break
+    
+    y_dt = datetime.strptime(end_date_str, "%Y-%m-%d")
+    daily_label = f"{y_dt.month}/{y_dt.day}(어제)"
 
     if start_date_str and end_date_str:
         md += f"> **[집계 기준]** {daily_label} / 누적: {start_date_str} ~ {end_date_str}\n\n"
@@ -422,7 +478,7 @@ def build_daily(
     md += "\n"
     md += format_kpi_detail(daily_data["summary"], yesterday_item, curr_label=curr_label, daily_label=daily_label)
     md += "\n"
-    md += format_daily_trend(daily_data["daily_breakdown"])
+    md += format_daily_trend(daily_data["daily_breakdown"], expected_date=end_date_str)
     md += _report_footer()
     return md
 
@@ -444,7 +500,7 @@ def build_weekly(
     md += "\n"
     md += format_kpi_detail(weekly_data["summary"], None, curr_label=curr_label, period_name="주간 누적")
     md += "\n"
-    md += format_daily_trend(weekly_data["daily_breakdown"])
+    md += format_daily_trend(weekly_data["daily_breakdown"], expected_date=weekly_data['end_date'])
     md += _report_footer()
     return md
 
@@ -461,9 +517,9 @@ def build_monthly(
     if start_date_str and end_date_str:
         md += f"> **[집계 기준]** {start_date_str} ~ {end_date_str}\n\n"
 
-    md += format_executive_summary(monthly_data["summary"], None)
+    md += format_executive_summary(monthly_data["summary"], None, daily_label=None, period_name="월간 실적")
     md += "\n"
-    md += format_kpi_detail(monthly_data["summary"], None)
+    md += format_kpi_detail(monthly_data["summary"], None, daily_label=None, period_name="월간 실적")
     md += "\n"
 
     if monthly_data.get("categories"):
