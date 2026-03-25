@@ -57,7 +57,7 @@ from .history_recorder import HistoryRecorder
 logger = logging.getLogger(__name__)
 
 PHASE2_RAG_ENABLED = os.getenv("PHASE2_RAG_ENABLED", "false").lower() == "true"
-RERANKER_ENABLED = os.getenv("RERANKER_ENABLED", "true").lower() == "true"
+RERANKER_ENABLED = os.getenv("RERANKER_ENABLED", "false").lower() == "true"
 MULTI_TURN_ENABLED = os.getenv("MULTI_TURN_ENABLED", "false").lower() == "true"
 SCHEMA_MAPPER_ENABLED = os.getenv("SCHEMA_MAPPER_ENABLED", "false").lower() == "true"
 SELF_CORRECTION_ENABLED = os.getenv("SELF_CORRECTION_ENABLED", "false").lower() == "true"
@@ -431,14 +431,10 @@ class QueryPipeline:
                 keywords=ctx.keywords,
             )
 
-        # Step 5: SQL 생성
+        # Step 5+6: SQL 생성 + 검증 (Self-Correction Loop 포함)
         try:
-            ctx.generated_sql = self._sql_generator.generate(
-                question=ctx.refined_question,
-                rag_context=ctx.rag_context,
-                conversation_history=ctx.conversation_history
-                if MULTI_TURN_ENABLED
-                else None,
+            ctx.generated_sql, ctx.validation_result = (
+                await self._generate_and_validate_with_correction(ctx)
             )
         except SQLGenerationError as e:
             logger.error(f"Step 5 SQL 생성 실패: {e}")
@@ -450,8 +446,6 @@ class QueryPipeline:
             )
             return ctx
 
-        # Step 6: SQL 검증
-        ctx.validation_result = self._sql_validator.validate(ctx.generated_sql)
         if not ctx.validation_result.is_valid:
             logger.warning(
                 f"Step 6 SQL 검증 실패: {ctx.validation_result.error_message}"

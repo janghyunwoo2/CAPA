@@ -62,8 +62,9 @@ Plan → Design → Do(TDD 구현) → Test 사이클을 완료한 시점에서,
 | 재시도 가능 에러 분류 (`_RETRYABLE_CORRECTION_ERRORS`) | ✅ `SQL_PARSE_ERROR` 포함, `SQL_BLOCKED_KEYWORD` 제외 | PASS | TC-SAT-06~07 검증 |
 | 최대 3회 재시도 상한 (`MAX_CORRECTION_ATTEMPTS`) | ✅ 환경변수로 설정, range(1, MAX+1) 루프 | PASS | TC-SAT-08 검증 |
 | 1회 성공 시 즉시 종료 | ✅ `if not is_valid: return` 구조 | PASS | TC-SAT-05 검증 |
+| `run()`에서 루프 메서드 호출 | ⚠️ **배선 누락 → 2026-03-25 수정** | FIXED | TC-SAT-05~08은 메서드 직접 호출로 통과했으나, `run()`이 `generate()+validate()` 직접 호출 중이었음. `_generate_and_validate_with_correction()` 호출로 교체 완료 |
 
-**Phase C Match Rate: 5/5 = 100%**
+**Phase C Match Rate: 5/5 = 100%** ⚠️ 단, `run()` 배선 누락으로 실제 파이프라인에서 Self-Correction이 미동작 상태였음 (2026-03-25 수정 완료)
 
 ### 2.4 Phase D — 평가 스크립트 + Config 튜닝
 

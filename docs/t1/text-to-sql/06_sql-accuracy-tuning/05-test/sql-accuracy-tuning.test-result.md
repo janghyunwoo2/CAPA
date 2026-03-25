@@ -49,6 +49,7 @@
 | TC-SAT-06 | C | SQL_PARSE_ERROR 재시도 | 1차 실패(PARSE_ERROR) → 2차 성공 | `generate_with_error_feedback.call_count == 1` | `assert call_count == 1` | ✅ PASS | RETRYABLE_ERRORS에 SQL_PARSE_ERROR 포함, 1회 재시도 후 성공 |
 | TC-SAT-07 | C | 보안 차단 재시도 없음 | SQL_BLOCKED_KEYWORD 발생 | `generate_with_error_feedback.call_count == 0` | `assert call_count == 0` | ✅ PASS | `_RETRYABLE_CORRECTION_ERRORS`에 BLOCKED_KEYWORD 미포함 → break |
 | TC-SAT-08 | C | MAX 횟수 후 중단 | MAX_CORRECTION_ATTEMPTS=2, 모든 시도 실패 | `generate_with_error_feedback.call_count == 2` | `assert call_count == 2` | ✅ PASS | range(1, MAX+1) 루프가 정확히 2회 후 종료 |
+| **[배선 버그]** | C | `run()`에서 루프 메서드 미호출 | 실제 파이프라인 실행 | Self-Correction 미동작 | `run()`이 `_generate_and_validate_with_correction()` 대신 `generate()+validate()` 직접 호출 | ❌ **배선 누락** | TC-SAT-05~08은 메서드 단독 호출로만 검증 — `run()` 통합 테스트 부재. 2026-03-25 `run()` 수정 완료, `SELF_CORRECTION_ENABLED=true` docker-compose 환경변수 추가 완료 |
 | TC-SAT-09 | D | 어제 날짜 렌더링 | `"WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'"` | 실제 어제 날짜로 치환됨 | `assert yesterday.strftime("%Y") in result` | ✅ PASS | jinja2.Environment로 렌더링, y_year/y_month/y_day 변수 주입 |
 | TC-SAT-10 | D | 오늘 날짜 렌더링 | `"WHERE year='{{ year }}' AND month='{{ month }}'"` | 오늘 날짜로 치환됨 | `assert today.strftime("%Y") in result` | ✅ PASS | 동일 패턴, year/month 변수 주입 |
 | TC-SAT-11 | D | --limit 기본값 None | argparse 파싱 (인수 없음) | `args.limit is None` | `assert args.limit is None` | ✅ PASS | `default=3` → `default=None` 변경 |
