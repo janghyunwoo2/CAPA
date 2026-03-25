@@ -83,6 +83,10 @@
 | BUG-03 | `evaluation/run_evaluation.py` | `generate_sql()` 메서드가 SQL만 반환 — Exec 평가에 results가 필요함에도 SQL만 반환 | `generate_sql()` → `query()` 변경, `(sql, results)` tuple 반환 |
 | BUG-04 | `src/query_pipeline.py`, `src/redash_client.py` | Redash 쿼리 이름에 UTC 시간 사용 — `datetime.utcnow()`로 기록되어 Redash UI에서 KST와 9시간 차이 | `datetime.now(_KST)` 로 변경 (KST = UTC+9) |
 | BUG-05 | `prompts/sql_generator.yaml` | `table_selection_rules` 기준 모호 — "일별 집계면 summary" 설명이 불명확해 LLM이 `ad_combined_log` 오선택 | 컬럼 존재 여부 기반 결정 규칙으로 교체 (전환 컬럼 필요 시 summary 필수, hour 분석 시 log 필수, 기본값 summary) |
+| BUG-06 | `evaluation/spider_evaluation.py` | `compare_results()` 컬럼명까지 비교 — alias가 달라도 값이 같으면 동일 결과인데 컬럼명 불일치로 FAIL 처리 | 컬럼명 비교 제거 → 컬럼 수만 비교, 값은 `list(r.values())`로 위치 기준 비교 |
+| BUG-07 | `evaluation/spider_evaluation.py` | ground truth 쿼리명이 `eval_{hash}` 형식 — Redash에서 어떤 질문의 정답 SQL인지 식별 불가 | `execute_sql()`에 `name` 파라미터 추가, `CAPA: {question} [GT] [{KST}]` 형식으로 변경 |
+| BUG-08 | `src/query_pipeline.py` | Reranker 후보 풀 20건 — CPU 환경에서 41초 소요, 슬랙봇 타임아웃 유발 | 후보 수 20 → 10으로 축소 (처리 시간 약 50% 단축) |
+| BUG-09 | `src/pipeline/reranker.py`, `src/pipeline/rag_retriever.py`, `src/query_pipeline.py` | Reranker `predict()`가 동기 함수라 비동기(async) 처리 불가 — event loop 블록으로 여러 사용자 동시 요청 시 병렬 처리 불가 | `predict()` → `run_in_executor`로 분리, `rerank()` / `retrieve_v2()` → `async def` + `await` 적용 |
 
 ---
 
