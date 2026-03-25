@@ -13,7 +13,12 @@ RUN pip install --no-cache-dir \
     boto3>=1.26.0 \
     botocore>=1.29.0 \
     pendulum>=3.0.0 \
-    python-dotenv>=0.19.0
+    python-dotenv>=0.19.0 \
+    pandas>=2.0.0 \
+    pyarrow>=12.0.0 \
+    numpy>=1.24.0
+
+
 
 # 2. ETL 핵심 모듈 복사 (Source of Truth)
 # (이미지 빌드 시 프로젝트 루트를 컨텍스트로 사용해야 함)
