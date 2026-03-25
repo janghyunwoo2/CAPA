@@ -10,11 +10,11 @@ from src.pipeline.question_refiner import QuestionRefiner
 
 
 @pytest.fixture
-def refiner(fake_api_key):
-    """QuestionRefiner 인스턴스 (API 호출은 Mock 처리)"""
-    with patch("src.pipeline.question_refiner.anthropic.Anthropic") as mock_cls:
-        instance = QuestionRefiner(api_key=fake_api_key)
-        yield instance, mock_cls.return_value
+def refiner():
+    """QuestionRefiner 인스턴스 (llm_client 직접 주입, API 호출은 Mock 처리)"""
+    mock_client = MagicMock()
+    instance = QuestionRefiner(llm_client=mock_client)
+    yield instance, mock_client
 
 
 def _make_response(text: str) -> MagicMock:

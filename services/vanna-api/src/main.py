@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import time
+from datetime import datetime
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 
@@ -215,6 +216,7 @@ async def _run_pipeline_async(
             question=request.question,
             slack_user_id=request.slack_user_id,
             slack_channel_id=request.slack_channel_id,
+            conversation_id=request.conversation_id or "",
         )
         if ctx.error:
             async_manager.update_status(
@@ -243,6 +245,7 @@ async def _run_pipeline_async(
                 "redash_url": ctx.redash_url,
                 "redash_query_id": ctx.redash_query_id,
                 "execution_path": ctx.query_results.execution_path if ctx.query_results else "unknown",
+                "elapsed_seconds": round((datetime.utcnow() - ctx.started_at).total_seconds(), 2),
             }
             async_manager.update_status(task_id, AsyncTaskStatus.COMPLETED, result=result)
     except Exception as e:
@@ -258,7 +261,7 @@ async def _run_pipeline_async(
 async def query_natural_language(
     request: QueryRequest,
     background_tasks: BackgroundTasks,
-) -> dict:
+) -> NewQueryResponse:
     """자연어 질의 → 파이프라인 실행.
 
     ASYNC_QUERY_ENABLED=true: 202 Accepted + task_id 즉시 반환 (BackgroundTasks)
@@ -289,6 +292,7 @@ async def query_natural_language(
             question=request.question,
             slack_user_id=request.slack_user_id,
             slack_channel_id=request.slack_channel_id,
+            conversation_id=request.conversation_id or "",
         )
     except Exception as e:
         logger.error(f"파이프라인 예외: {e}", exc_info=True)
@@ -337,6 +341,7 @@ async def query_natural_language(
         redash_query_id=ctx.redash_query_id,
         execution_path=ctx.query_results.execution_path if ctx.query_results else "unknown",
         elapsed_seconds=round(elapsed, 2),
+        session_id=ctx.session_id,
     )
 
 

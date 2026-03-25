@@ -294,6 +294,8 @@ if __name__ == "__main__":
         uvicorn.run(app, host="0.0.0.0", port=8000)
         sys.exit(0)
 
+    import sys
+    
     date_arg = sys.argv[1] if len(sys.argv) > 1 else None
     type_arg = sys.argv[2] if len(sys.argv) > 2 else "daily"
     # 세 번째 인자에 --only-upload가 있는지 확인

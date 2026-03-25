@@ -1,0 +1,225 @@
+{
+  "total_cases": 36,
+  "exec": {
+    "passed": 25,
+    "accuracy": 0.6944444444444444
+  },
+  "details": [
+    {
+      "test_id": "T001",
+      "question": "어제 캠페인별 클릭률(CTR)을 내림차순으로 보여줘",
+      "exec": 1.0,
+      "error": "양쪽 데이터 없음 — SQL 유사도 0.95 ≥ 0.6 → PASS"
+    },
+    {
+      "test_id": "T004",
+      "question": "어제 캠페인별 전환율(CVR) 상위 5개를 보여줘",
+      "exec": 1.0,
+      "error": "양쪽 데이터 없음 — SQL 유사도 0.96 ≥ 0.6 → PASS"
+    },
+    {
+      "test_id": "T007",
+      "question": "어제 지역별 노출 수를 순위대로 보여줘",
+      "exec": 1.0,
+      "error": "양쪽 데이터 없음 — SQL 유사도 0.93 ≥ 0.6 → PASS"
+    },
+    {
+      "test_id": "T008",
+      "question": "오늘 데스크톱/모바일/태블릿 기기별 클릭 수를 비교해줘",
+      "exec": 1.0,
+      "error": "양쪽 데이터 없음 — SQL 유사도 0.92 ≥ 0.6 → PASS"
+    },
+    {
+      "test_id": "T009",
+      "question": "어제 총 전환 매출은 얼마야?",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T010",
+      "question": "오늘 시간대별 노출 수를 보여줘",
+      "exec": 0.0,
+      "error": null
+    },
+    {
+      "test_id": "T015",
+      "question": "이번 달 전체 캠페인별 총 노출 수를 보여줘",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T016",
+      "question": "어제 강남구 지역 클릭 수는?",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T019",
+      "question": "오늘 시간대별 클릭 수 추이를 보여줘",
+      "exec": 0.0,
+      "error": null
+    },
+    {
+      "test_id": "T021",
+      "question": "어제 전체 광고 노출수, 클릭수, 전환수, 클릭률(CTR)을 보여줘",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T022",
+      "question": "오늘 각 캠페인별로 노출, 클릭, 전환, 전환율(CVR)을 상세 비교해줘",
+      "exec": 1.0,
+      "error": "양쪽 데이터 없음 — SQL 유사도 0.83 ≥ 0.6 → PASS"
+    },
+    {
+      "test_id": "T023",
+      "question": "어제 음식 카테고리별 클릭률(CTR) 상위 10개를 보여줘",
+      "exec": 1.0,
+      "error": "양쪽 데이터 없음 — SQL 유사도 0.69 ≥ 0.6 → PASS"
+    },
+    {
+      "test_id": "T027",
+      "question": "오늘 광고주별 노출수, 총 광고비, 전환 매출, ROAS를 한 번에 보여줘",
+      "exec": 1.0,
+      "error": "양쪽 데이터 없음 — SQL 유사도 0.93 ≥ 0.6 → PASS"
+    },
+    {
+      "test_id": "T033",
+      "question": "오늘 지역별 노출수, CTR, 전환수를 한 번에 보여줘",
+      "exec": 1.0,
+      "error": "양쪽 데이터 없음 — SQL 유사도 0.91 ≥ 0.6 → PASS"
+    },
+    {
+      "test_id": "T035",
+      "question": "오늘 시간대별 노출 수와 클릭수 추이를 보여줘",
+      "exec": 0.0,
+      "error": null
+    },
+    {
+      "test_id": "T026",
+      "question": "2026년 3월 14일 클릭은 있지만 전환이 없는 캠페인 목록",
+      "exec": 0.0,
+      "error": "양쪽 데이터 없음 — SQL 유사도 0.46 < 0.6 → FAIL (쿼리 구조 불일치)"
+    },
+    {
+      "test_id": "T029",
+      "question": "2026년 3월 14일 오전(00~11시)과 오후(12~23시) 클릭 수 비교",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T030",
+      "question": "2026년 3월 14일 전환 타입별 총 매출과 평균 전환 가치",
+      "exec": 0.0,
+      "error": null
+    },
+    {
+      "test_id": "T031",
+      "question": "2026년 3월 14일 검색 키워드별 클릭수 상위 10개",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T032",
+      "question": "2026년 3월 14일 가게별 전환 매출 상위 5개",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T036",
+      "question": "2026년 3월 8일부터 14일까지 7일간 일별 impression 수 추이",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T038",
+      "question": "2026년 3월 8일부터 14일까지 7일간 캠페인별 총 impression 합계",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T040",
+      "question": "2026년 3월 8일부터 14일까지 7일간 광고주별 총 전환 매출",
+      "exec": 0.0,
+      "error": null
+    },
+    {
+      "test_id": "T042",
+      "question": "2026년 3월 8일부터 14일까지 7일간 광고 형식별 클릭수 합계",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T044",
+      "question": "2026년 3월 8일부터 14일까지 7일간 캠페인별 일별 평균 CTR",
+      "exec": 0.0,
+      "error": null
+    },
+    {
+      "test_id": "T046",
+      "question": "2026년 3월 전체 광고 노출수, 클릭수, 전환수, CTR 요약",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T048",
+      "question": "2026년 3월 기기 타입별 노출수, 클릭수, 전환수 비교",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T050",
+      "question": "2026년 3월 음식 카테고리별 노출수와 전환수 상위 10개",
+      "exec": 0.0,
+      "error": null
+    },
+    {
+      "test_id": "T052",
+      "question": "2026년 3월 플랫폼별 일별 impression 추이",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T054",
+      "question": "2026년 3월 광고 위치별 전환율(CVR)",
+      "exec": 1.0,
+      "error": null
+    },
+    {
+      "test_id": "T061",
+      "question": "어제 클릭이 한 건도 없었던 캠페인 목록을 보여줘",
+      "exec": 1.0,
+      "error": "양쪽 데이터 없음 — SQL 유사도 0.70 ≥ 0.6 → PASS"
+    },
+    {
+      "test_id": "T062",
+      "question": "어제 CTR은 높은데 전환이 없는 캠페인을 찾아줘",
+      "exec": 0.0,
+      "error": "양쪽 데이터 없음 — SQL 유사도 0.48 < 0.6 → FAIL (쿼리 구조 불일치)"
+    },
+    {
+      "test_id": "T063",
+      "question": "2026년 3월 14일 ROAS가 가장 높은 광고주 TOP 5와 매출 금액",
+      "exec": 0.0,
+      "error": null
+    },
+    {
+      "test_id": "T064",
+      "question": "2026년 2월과 3월의 월별 전체 노출수, 클릭수, 전환수를 비교해줘",
+      "exec": 0.0,
+      "error": null
+    },
+    {
+      "test_id": "T065",
+      "question": "오늘 모바일에서 CTR이 가장 높은 캠페인 TOP 5",
+      "exec": 1.0,
+      "error": "양쪽 데이터 없음 — SQL 유사도 0.96 ≥ 0.6 → PASS"
+    },
+    {
+      "test_id": "T066",
+      "question": "어제 전환당 비용(CPA)이 가장 낮은 캠페인 TOP 5",
+      "exec": 1.0,
+      "error": null
+    }
+  ]
+}

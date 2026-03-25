@@ -67,6 +67,15 @@ class DynamoDBHistoryRecorder(HistoryRecorder):
             "trained": False,
             "ttl": ttl,
         }
+        # 멀티턴 필드 (FR-20): session_id 있을 때만 저장
+        if ctx.session_id:
+            answer_text = ctx.analysis.answer if ctx.analysis else None
+            item["session_id"] = ctx.session_id
+            item["turn_number"] = ctx.turn_number
+            if answer_text:
+                item["answer"] = answer_text[:500]
+            if ctx.slack_thread_ts:
+                item["slack_thread_ts"] = ctx.slack_thread_ts
         # None 값 제거 (DynamoDB PutItem 허용 불가)
         item = {k: v for k, v in item.items() if v is not None}
         try:

@@ -5,7 +5,9 @@ Step 2: QuestionRefiner — 인사말/부연설명 제거, 핵심 질문 추출
 """
 
 import logging
+from typing import Any, Optional
 import anthropic
+from ..prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -27,20 +29,40 @@ _SYSTEM_PROMPT = """당신은 광고 데이터 분석 질의 정제기입니다.
 class QuestionRefiner:
     """Step 2 — 질문 정제"""
 
-    def __init__(self, api_key: str, model: str = "claude-haiku-4-5-20251001") -> None:
-        self._client = anthropic.Anthropic(api_key=api_key)
+    def __init__(self, llm_client: Any, model: str = "claude-haiku-4-5-20251001") -> None:
+        self._client = llm_client
         self._model = model
 
-    def refine(self, question: str) -> str:
+    def refine(self, question: str, conversation_history: Optional[list] = None) -> str:
         """질문을 정제하여 반환.
         LLM 호출 실패 시 원본 질문 그대로 반환 (graceful degradation).
+        conversation_history: 멀티턴 대화 이력 — LLM 프롬프트에 이전 대화 맥락 주입 (FR-20).
         """
         try:
+            prompts = load_prompt("question_refiner")
+            system = prompts.get("system", _SYSTEM_PROMPT)
+
+            messages: list[dict] = []
+            if conversation_history:
+                history_text = "\n".join(
+                    f"- Q: {t.question} / A: {t.answer or '(답변 없음)'}"
+                    for t in conversation_history
+                )
+                messages.append({
+                    "role": "user",
+                    "content": f"이전 대화 맥락:\n{history_text}",
+                })
+                messages.append({
+                    "role": "assistant",
+                    "content": "이전 대화 맥락을 참고하겠습니다.",
+                })
+            messages.append({"role": "user", "content": question})
+
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=200,
-                system=_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": question}],
+                system=system,
+                messages=messages,
             )
             refined = response.content[0].text.strip()
             logger.info(f"질문 정제: '{question[:50]}' → '{refined[:50]}'")
