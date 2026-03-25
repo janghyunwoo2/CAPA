@@ -51,7 +51,7 @@
 | 항목 | 설계 | 구현 | 영향 |
 |------|------|------|------|
 | **SlackApiError 폴백** | 설계 §5.1: 루트 메시지 생성 실패 시 `except SlackApiError`로 `thread_ts=None` 폴백 | `app.py:214-217`: `isinstance(thread_response, dict)` 체크로 실질적 폴백 처리되나, `SlackApiError` 명시적 catch 없음 | 낮음 — 기능적으로 동등 |
-| **비동기 폴링 경로** | 설계 미포함 | `app.py:38-39, 222-268`: ASYNC_QUERY_ENABLED 비동기 폴링 흐름에도 conversation_id 포함 | 추가 기능 — 설계 범위 초과이나 하위 호환 유지 |
+| **비동기 폴링 경로** | 설계 미포함 | `app.py:38-39, 222-268`: ASYNC_QUERY_ENABLED 비동기 폴링 흐름에도 conversation_id 포함. 2026-03-25 기준 `ASYNC_QUERY_ENABLED=true` 정식 활성화, 30초마다 진행 중 메시지 전송 기능 추가 | 추가 기능 — 정식 운영 모드로 전환 완료 |
 
 ---
 
@@ -68,7 +68,7 @@
 | 우선순위 | 항목 | 내용 |
 |----------|------|------|
 | 낮음 | `SlackApiError` 명시적 catch | 현재 `isinstance` 체크로 대체 가능하나, 향후 가독성을 위해 명시적 catch 추가 고려 |
-| 백로그 | `ASYNC_QUERY_ENABLED` 설계 반영 | Phase 2 비동기 폴링 구현이 현재 설계서에 미포함 — 별도 Phase 2 설계서에 문서화 권장 |
+| ~~백로그~~ ✅ 완료 | `ASYNC_QUERY_ENABLED` 정식 활성화 | 2026-03-25: `docker-compose.local-e2e.yml` vanna-api `ASYNC_QUERY_ENABLED=true`로 변경, 30초마다 진행 중 메시지 전송 기능 추가(`app.py` 폴링 루프 내 `_elapsed % 30 == 0` 조건) |
 
 ---
 

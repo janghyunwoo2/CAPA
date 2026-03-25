@@ -199,3 +199,5 @@ tests/unit/test_slack_thread.py::TestElapsedSeconds::test_elapsed_shown_even_wit
 | BUG-05 간략히보기 | ⚠️ elapsed 위치는 이미 올바름 — 원인은 SQL 결과 테이블 텍스트 길이 (Slack 3000자 제한) |
 | BUG-06 처리 중 중복 | ✅ 수정 완료 — 첫 번째 `say(text="🔄 처리 중...")` 제거 |
 | BUG-07 elapsed_seconds 미표시 | ✅ 수정 완료 — vanna-api 비동기 result에 `elapsed_seconds` 추가 + app.py `float()` 변환 추가, Slack 정상 표시 확인 |
+| **2026-03-25 운영 변경** | ✅ `ASYNC_QUERY_ENABLED=false`(평가 임시 비활성) → `true` 정식 복구 (`docker-compose.local-e2e.yml` vanna-api 섹션) |
+| **2026-03-25 UX 개선** | ✅ 폴링 루프 내 30초마다 "⏳ 아직 처리 중입니다... (N초 경과)" 메시지 전송 추가 (`app.py` `_elapsed % _progress_interval == 0` 조건) |
