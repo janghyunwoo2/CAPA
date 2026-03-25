@@ -53,6 +53,7 @@ def _parse_bool(key: str, default: str) -> bool:
 
 # ============ Prophet 모델 파라미터 ============
 PROPHET_INTERVAL_WIDTH = _parse_float("PROPHET_INTERVAL_WIDTH", "0.95", min_val=0.0, max_val=1.0)
+PROPHET_UPPER_WEIGHT = _parse_float("PROPHET_UPPER_WEIGHT", "1.0", min_val=0.1)  # 상단 신뢰구간 가중치
 PROPHET_LOWER_BOUND = _parse_int("PROPHET_LOWER_BOUND", "54", min_val=0)  # 2월 최소값
 PROPHET_YEARLY_SEASONALITY = _parse_bool("PROPHET_YEARLY_SEASONALITY", "true")
 PROPHET_WEEKLY_SEASONALITY = _parse_bool("PROPHET_WEEKLY_SEASONALITY", "true")

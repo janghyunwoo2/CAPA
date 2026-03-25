@@ -101,8 +101,10 @@ class CloudWatchSource:
         kst = timezone(timedelta(hours=9))
 
         try:
-            # [1단계] 실행 시점 기준 24시간 전 정각부터 현재까지 데이터 가져오기
-            end_time = datetime.now(tz=kst)
+            # [1단계] 실행 시점 기준 24시간 전 정각부터 '가장 최근 완료된 5분 버킷'까지만 가져오기
+            now = datetime.now(tz=kst)
+            # 분 단위를 5분 단위로 내림(Floor) 처리 (예: 18:48 -> 18:45)
+            end_time = now.replace(minute=now.minute // 5 * 5, second=0, microsecond=0)
             
             # 24시간 전 시간 계산 후, 분/초/마이크로초를 0으로 버림 (예: 13:36 -> 전날 13:00)
             past_24h = end_time - timedelta(hours=24)

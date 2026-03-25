@@ -91,11 +91,11 @@ def save_png(result: DetectionResult) -> None:
         ax.plot(t_ts, t_predicted, label="예측값", color="blue", linestyle="--")
         ax.fill_between(t_ts, t_lowers, t_uppers, color="blue", alpha=0.1, label="신뢰구간")
 
-        valid_anomalies = result.anomaly_indices
+        valid_anomalies = [i for i in result.anomaly_indices if i == len(result.timestamps) - 1]
         if valid_anomalies:
             anomaly_ts = [result.timestamps[i] for i in valid_anomalies]
             anomaly_vals = [result.actuals[i] for i in valid_anomalies]
-            ax.scatter(anomaly_ts, anomaly_vals, color="red", zorder=5, s=60, label=f"이상치 ({len(valid_anomalies)}건)")
+            ax.scatter(anomaly_ts, anomaly_vals, color="red", zorder=5, s=60, label="최신 이상치")
 
         ax.set_title("Ad Impression Anomaly Detection", fontsize=14, fontweight="bold")
         ax.set_xlabel("시각")
@@ -105,7 +105,8 @@ def save_png(result: DetectionResult) -> None:
         ax.xaxis.set_major_locator(mdates.HourLocator(interval=3))
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%m/%d %H:%M"))
         
-        ax.legend(loc="upper right")
+        # 범례를 그래프 오른쪽 바깥으로 이동
+        ax.legend(bbox_to_anchor=(1.02, 1), loc='upper left', borderaxespad=0.)
         ax.grid(True, alpha=0.3)
         
         # [모니터링 차트 스타일 스위치]
@@ -127,6 +128,8 @@ def save_png(result: DetectionResult) -> None:
             
         plt.xticks(rotation=45)
         plt.tight_layout()
+        # 범례가 잘리지 않도록 오른쪽 여백 확보
+        fig.subplots_adjust(right=0.85)
         path = os.path.join(OUTPUT_DIR, "anomaly_result.png")
         plt.savefig(path, dpi=100)
         plt.close(fig)
@@ -148,7 +151,7 @@ def save_html(result: DetectionResult) -> None:
         fig.add_trace(go.Scatter(x=t_ts, y=t_predicted, mode="lines", name="예측값", line=dict(color="blue", width=1)))
         fig.add_trace(go.Scatter(x=t_ts, y=t_actuals, mode="lines", name="실제값", line=dict(color="green", width=1)))
         
-        valid_anomalies = result.anomaly_indices
+        valid_anomalies = [i for i in result.anomaly_indices if i == len(result.timestamps) - 1]
         if valid_anomalies:
             anomaly_ts = [result.timestamps[i] for i in valid_anomalies]
             anomaly_vals = [result.actuals[i] for i in valid_anomalies]
@@ -170,6 +173,14 @@ def save_html(result: DetectionResult) -> None:
             yaxis_title="Impression 수", 
             hovermode="x",
             template="plotly_white",
+            showlegend=True,
+            legend=dict(
+                orientation="v",
+                yanchor="top",
+                y=1,
+                xanchor="left",
+                x=1.02
+            ),
             xaxis=dict(
                 tickformat="%m/%d %H:%M",
                 dtick=10800000  # 밀리초 기준 3시간
@@ -362,22 +373,38 @@ def main():
 
         result = run_detection_pipeline(source, prophet, iso_forest)
         
-        # 종료 전 최종 저장
-        save_png(result)
-        save_html(result)
-        
-        # 슬랙 알림 전송 (신규 추가)
+        # 결과 시각화 및 알림 (데이터가 있을 경우에만 실행)
+        if result.timestamps:
+            save_png(result)
+            save_html(result)
+        else:
+            logger.warning("수집된 데이터가 없어 시각화 및 알림 단계를 건너뜁니다.")
+            return
+
+        # 슬랙 알림 전송 (최근 시점 기준)
         if config.ENABLE_SLACK_NOTIF:
             notifier = SlackNotifier(config.SLACK_BOT_TOKEN, config.SLACK_CHANNEL_ID)
-            has_anomaly = result.anomaly_count > 0
             
-            if has_anomaly or config.TEST_MODE_FORCE_SLACK:
-                msg = "👁️ [🚨 이상 탐지 알림: Impression]" if has_anomaly else "👁️ [🧪 테스트 알림: Impression]"
-                msg += f" {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} 기준 탐지 결과입니다.\n"
-                msg += f"총 {result.anomaly_count}개의 이상 지점이 발견되었습니다."
+            # 마지막 데이터가 이상치인지 확인
+            latest_idx = len(result.timestamps) - 1
+            is_latest_anomaly = latest_idx in result.anomaly_indices
+            
+            if is_latest_anomaly or config.TEST_MODE_FORCE_SLACK:
+                latest_ts = result.timestamps[latest_idx] if result.timestamps else datetime.now()
+                start_str = (latest_ts - timedelta(minutes=5)).strftime('%H:%M')
+                end_str = latest_ts.strftime('%H:%M')
+                
+                status_emoji = "🚨" if is_latest_anomaly else "🧪"
+                msg = f"👁️ [{status_emoji} 이상 탐지 알람: Impression]"
+                msg += f" {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} 기준\n\n"
+                
+                if is_latest_anomaly:
+                    msg += f"⚠️ **{start_str} ~ {end_str}** 사이에 이상 징후가 포착되었습니다. 즉시 확인이 필요합니다."
+                else:
+                    msg += f"✅ **{start_str} ~ {end_str}** 사이는 정상 패턴을 보이고 있습니다. (테스트 알림)"
                 
                 png_path = os.path.join(config.OUTPUT_DIR, "anomaly_result.png")
-                logger.info(f"슬랙 알림 전송 중... (사유: {'이상 탐지' if has_anomaly else '테스트 모드'})")
+                logger.info(f"슬랙 알림 전송 중... (사유: {'최신 이상 탐지' if is_latest_anomaly else '테스트 모드'})")
                 notifier.send_file(
                     file_path=png_path,
                     title="Anomaly Detection Result: Impression",

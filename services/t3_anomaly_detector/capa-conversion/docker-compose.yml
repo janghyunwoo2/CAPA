@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: capa-conversion
     container_name: capa-conversion
     env_file:
       - .env

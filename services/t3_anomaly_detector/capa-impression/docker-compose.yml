@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: capa-impression
     container_name: capa-impression
     env_file:
       - .env

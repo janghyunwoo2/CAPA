@@ -154,8 +154,9 @@ class ProphetDetector:
 
                 predicted = float(forecast["yhat"].iloc[0])
                 lower = max(config.PROPHET_LOWER_BOUND, float(forecast["yhat_lower"].iloc[0]))
-                upper = float(forecast["yhat_upper"].iloc[0])
-
+                # 상단 신뢰구간에 가중치를 적용하여 Spike 감지 기준을 완화
+                upper = float(forecast["yhat_upper"].iloc[0]) * config.PROPHET_UPPER_WEIGHT
+                
                 self._window_count += 1
 
                 # 이상치 판별

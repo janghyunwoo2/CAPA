@@ -5,6 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    image: capa-click
     container_name: capa-click
     env_file:
       - .env
