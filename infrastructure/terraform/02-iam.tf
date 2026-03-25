@@ -269,6 +269,32 @@ resource "aws_iam_role_policy_attachment" "airflow_athena_access" {
   role       = aws_iam_role.airflow.name
 }
 
+resource "aws_iam_policy" "airflow_cloudwatch_read" {
+  name        = "${var.project_name}-airflow-cloudwatch-read"
+  description = "CloudWatch 읽기 권한 (Airflow DAG용)"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "cloudwatch:GetMetricData",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics",
+        "logs:GetLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ]
+      Resource = "*"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "airflow_cloudwatch_read" {
+  policy_arn = aws_iam_policy.airflow_cloudwatch_read.arn
+  role       = aws_iam_role.airflow.name
+}
+
 # Consumer Role에도 Workload S3 권한 추가 (기존 ReadOnly 대체/보완)
 resource "aws_iam_role_policy_attachment" "app_s3_access" {
   policy_arn = aws_iam_policy.workload_s3_access.arn

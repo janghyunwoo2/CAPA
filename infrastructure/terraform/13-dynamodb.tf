@@ -5,17 +5,19 @@
 # FR-16: 피드백 루프 품질 제어 (pending_feedbacks 테이블)
 #
 # 무료 요금 범위 (테이블 + GSI 전체 합산 25 WCU/RCU 이하):
-#   query_history 테이블 8 + feedback-status-index GSI 3 + channel-index GSI 3
+#   query_history 테이블 5 + feedback-status-index GSI 3 + channel-index GSI 3
+#   + session_id-turn_number-index GSI 3
 #   + pending_feedbacks 테이블 7 + status-index GSI 4 = 합계 25 WCU/RCU
+# FR-20: session_id-turn_number-index GSI 추가 (멀티턴 이력 조회), query_history 8→5 조정
 # ==============================================================================
 
 resource "aws_dynamodb_table" "query_history" {
-  name           = "${var.project_name}-${var.environment}-query-history"
-  billing_mode   = "PROVISIONED"
-  hash_key       = "history_id"
+  name         = "${var.project_name}-${var.environment}-query-history"
+  billing_mode = "PROVISIONED"
+  hash_key     = "history_id"
 
-  write_capacity = 8
-  read_capacity  = 8
+  write_capacity = 5
+  read_capacity  = 5
 
   attribute {
     name = "history_id"
@@ -37,22 +39,41 @@ resource "aws_dynamodb_table" "query_history" {
     type = "S"
   }
 
-  global_secondary_index {
-    name               = "feedback-status-index"
-    hash_key           = "feedback"
-    range_key          = "timestamp"
-    projection_type    = "ALL"
-    write_capacity     = 3
-    read_capacity      = 3
+  attribute {
+    name = "session_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "turn_number"
+    type = "N"
   }
 
   global_secondary_index {
-    name               = "channel-index"
-    hash_key           = "slack_channel_id"
-    range_key          = "timestamp"
-    projection_type    = "ALL"
-    write_capacity     = 3
-    read_capacity      = 3
+    name            = "feedback-status-index"
+    hash_key        = "feedback"
+    range_key       = "timestamp"
+    projection_type = "ALL"
+    write_capacity  = 3
+    read_capacity   = 3
+  }
+
+  global_secondary_index {
+    name            = "channel-index"
+    hash_key        = "slack_channel_id"
+    range_key       = "timestamp"
+    projection_type = "ALL"
+    write_capacity  = 3
+    read_capacity   = 3
+  }
+
+  global_secondary_index {
+    name            = "session_id-turn_number-index"
+    hash_key        = "session_id"
+    range_key       = "turn_number"
+    projection_type = "ALL"
+    write_capacity  = 3
+    read_capacity   = 3
   }
 
   ttl {
@@ -69,9 +90,9 @@ resource "aws_dynamodb_table" "query_history" {
 }
 
 resource "aws_dynamodb_table" "pending_feedbacks" {
-  name           = "${var.project_name}-${var.environment}-pending-feedbacks"
-  billing_mode   = "PROVISIONED"
-  hash_key       = "feedback_id"
+  name         = "${var.project_name}-${var.environment}-pending-feedbacks"
+  billing_mode = "PROVISIONED"
+  hash_key     = "feedback_id"
 
   write_capacity = 7
   read_capacity  = 7
@@ -92,12 +113,12 @@ resource "aws_dynamodb_table" "pending_feedbacks" {
   }
 
   global_secondary_index {
-    name               = "status-index"
-    hash_key           = "status"
-    range_key          = "created_at"
-    projection_type    = "ALL"
-    write_capacity     = 4
-    read_capacity      = 4
+    name            = "status-index"
+    hash_key        = "status"
+    range_key       = "created_at"
+    projection_type = "ALL"
+    write_capacity  = 4
+    read_capacity   = 4
   }
 
   ttl {
