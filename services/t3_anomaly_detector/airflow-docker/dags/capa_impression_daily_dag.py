@@ -39,7 +39,7 @@ with DAG(
               -v C:/Users/Dell3571/Desktop/projects/CAPA/services/t3_anomaly_detector/capa-impression/models:/app/models \
               -v C:/Users/Dell3571/Desktop/projects/CAPA/services/t3_anomaly_detector/capa-impression/output:/app/output \
               -v C:/Users/Dell3571/.aws:/root/.aws:ro \
-              capa-impression
+              capa-impression-anomaly
         """,
         doc_md="""
         ### 아침 정기 슬랙 전송

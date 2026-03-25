@@ -51,11 +51,11 @@ with DAG(
               -v C:/Users/Dell3571/Desktop/projects/CAPA/services/t3_anomaly_detector/capa-impression/models:/app/models \
               -v C:/Users/Dell3571/Desktop/projects/CAPA/services/t3_anomaly_detector/capa-impression/output:/app/output \
               -v C:/Users/Dell3571/.aws:/root/.aws:ro \
-              capa-impression
+              capa-impression-anomaly
         """,
         doc_md="""
         ### t3_anomaly_detector 실행
-        - CloudWatch에서 최근 24시간 데이터를 가져옵니다.
+        - CloudWatch에서 최근 24시간 데이터를 가져옵s니다.
         - Prophet + IsolationForest로 이상 탐지를 수행합니다.
         - 결과를 PNG/HTML/JSONL로 저장합니다.
         - 실행 완료 후 컨테이너는 자동 종료됩니다.

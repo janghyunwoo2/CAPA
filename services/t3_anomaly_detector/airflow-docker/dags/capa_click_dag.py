@@ -43,6 +43,6 @@ with DAG(
               -v C:/Users/Dell3571/Desktop/projects/CAPA/services/t3_anomaly_detector/capa-click/models:/app/models \
               -v C:/Users/Dell3571/Desktop/projects/CAPA/services/t3_anomaly_detector/capa-click/output:/app/output \
               -v C:/Users/Dell3571/.aws:/root/.aws:ro \
-              capa-click
+              capa-click-anomaly
         """,
     )
