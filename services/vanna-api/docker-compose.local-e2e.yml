@@ -139,6 +139,8 @@ services:
       dockerfile: Dockerfile
     container_name: capa-vanna-api-e2e
     command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - .env.local-e2e
     ports:
       - "8000:8000"
     environment:
@@ -176,6 +178,8 @@ services:
       - DYNAMODB_ENABLED=true
       - ASYNC_QUERY_ENABLED=true
       - PHASE2_FEEDBACK_ENABLED=true
+      - SCHEMA_MAPPER_ENABLED=true
+      - MULTI_TURN_ENABLED=true
       - DYNAMODB_HISTORY_TABLE=capa-dev-query-history
       - DYNAMODB_FEEDBACK_TABLE=capa-dev-pending-feedbacks
       - DYNAMODB_ASYNC_TABLE=capa-dev-async-tasks
@@ -186,6 +190,8 @@ services:
     volumes:
       - ./src:/app/src
       - ./scripts:/app/scripts
+      - ./prompts:/app/prompts
+      - ./evaluation:/app/evaluation  # ⚠️ 로컬 평가 전용 — 배포 시 제거 필요
 
     depends_on:
       chromadb:
@@ -215,6 +221,7 @@ services:
       - VANNA_API_URL=http://vanna-api:8000
       - REPORT_API_URL=http://localhost:9999
       - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN:-test-token}
+      - ASYNC_QUERY_ENABLED=true
       - PYTHONUNBUFFERED=1
     volumes:
       - ../slack-bot/app.py:/app/app.py

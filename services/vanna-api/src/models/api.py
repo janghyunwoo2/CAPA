@@ -45,6 +45,7 @@ class QueryResponse(BaseModel):
     execution_path: str = Field(default="redash")
     error: Optional[ErrorResponse] = None
     elapsed_seconds: float = 0.0
+    session_id: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

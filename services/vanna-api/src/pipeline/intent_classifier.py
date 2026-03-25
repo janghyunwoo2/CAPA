@@ -8,6 +8,7 @@ import logging
 from typing import Optional
 import anthropic
 from ..models.domain import IntentType
+from ..prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +37,12 @@ class IntentClassifier:
         LLM 호출 실패 시 DATA_QUERY로 fallback (graceful degradation).
         """
         try:
+            prompts = load_prompt("intent_classifier")
+            system = prompts.get("system", _SYSTEM_PROMPT)
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=20,
-                system=_SYSTEM_PROMPT,
+                system=system,
                 messages=[{"role": "user", "content": question}],
             )
             raw = response.content[0].text.strip().upper()

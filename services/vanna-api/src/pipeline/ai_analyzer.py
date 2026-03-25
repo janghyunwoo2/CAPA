@@ -10,6 +10,7 @@ import re
 from typing import Optional
 import anthropic
 from ..models.domain import AnalysisResult, ChartType, QueryResults
+from ..prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -68,18 +69,8 @@ class AIAnalyzer:
         # PII 마스킹 후 최대 10행만 전달 (SEC-15, SEC-16)
         masked_rows = mask_sensitive_data(query_results.rows[:10])
 
-        try:
-            # SEC-09: 시스템 지시와 사용자 데이터 영역 분리
-            response = self._client.messages.create(
-                model=self._model,
-                max_tokens=1024,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": """<instructions>
+        # YAML instructions 로드 (FR-PE-04, FR-PE-05)
+        _INSTRUCTIONS_FALLBACK = """<instructions>
 You are a data analyst for an ad-tech company. Analyze the query results below.
 Rules:
 - Provide insights in Korean
@@ -99,7 +90,22 @@ Respond in JSON format:
   "chart_type": "bar|line|pie|scatter|none",
   "insight_points": ["핵심 인사이트1", "핵심 인사이트2"]
 }
-</instructions>""",
+</instructions>"""
+        prompts = load_prompt("ai_analyzer")
+        instructions = prompts.get("instructions", _INSTRUCTIONS_FALLBACK)
+
+        try:
+            # SEC-09: 시스템 지시와 사용자 데이터 영역 분리
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=1024,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": instructions,
                             },
                             {
                                 "type": "text",

@@ -8,6 +8,8 @@ from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field
 
+from .rag import SchemaHint
+
 
 # ---------------------------------------------------------------------------
 # 공통 Enum
@@ -65,6 +67,7 @@ class ValidationResult(BaseModel):
     is_valid: bool
     normalized_sql: Optional[str] = None
     error_message: Optional[str] = None
+    error_code: Optional[str] = None
     explain_result: Optional[str] = None
 
 
@@ -83,12 +86,27 @@ class AnalysisResult(BaseModel):
     insight_points: list[str] = Field(default_factory=list)
 
 
+class ConversationTurn(BaseModel):
+    """멀티턴 대화 한 턴의 이력 (FR-20)"""
+    turn_number: int
+    question: str
+    refined_question: Optional[str] = None
+    generated_sql: Optional[str] = None
+    answer: Optional[str] = None
+
+
 class PipelineContext(BaseModel):
     """파이프라인 공유 컨텍스트 — 전 단계에 걸쳐 상태를 전달 (설계 §2.3.1)"""
     # 입력
     original_question: str
     slack_user_id: str = ""
     slack_channel_id: str = ""
+
+    # Step 0: 멀티턴 (FR-20)
+    session_id: Optional[str] = None
+    turn_number: Optional[int] = None
+    slack_thread_ts: Optional[str] = None
+    conversation_history: list["ConversationTurn"] = Field(default_factory=list)
 
     # Step 1
     intent: Optional[IntentType] = None
@@ -98,6 +116,9 @@ class PipelineContext(BaseModel):
 
     # Step 3
     keywords: list[str] = Field(default_factory=list)
+
+    # Step 3.5 (rag-retrieval-optimization)
+    schema_hint: Optional[SchemaHint] = None
 
     # Step 4
     rag_context: Optional[RAGContext] = None

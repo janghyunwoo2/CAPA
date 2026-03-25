@@ -136,6 +136,7 @@ resource "aws_iam_role_policy" "report_generator" {
 # ---------------------------------------------------------------------------------------------------------------------
 
 # ServiceAccount (IRSA)
+/*
 resource "kubernetes_service_account" "report_generator_sa" {
   metadata {
     name      = "report-generator-sa"
@@ -325,6 +326,7 @@ resource "kubernetes_deployment" "report_generator" {
 
   depends_on = [kubernetes_service.report_generator]
 }
+*/
 
 # =====================================================================================================================
 # Vanna AI (Text-to-SQL Service)
@@ -1110,6 +1112,7 @@ resource "kubernetes_horizontal_pod_autoscaler_v2" "slack_bot" {
   depends_on = [kubernetes_deployment.slack_bot]
 }
 
+/*
 resource "kubernetes_horizontal_pod_autoscaler_v2" "report_generator" {
   metadata {
     name      = "report-generator-hpa"
@@ -1138,5 +1141,6 @@ resource "kubernetes_horizontal_pod_autoscaler_v2" "report_generator" {
     }
   }
 
-  depends_on = [kubernetes_deployment.report_generator]
+  # depends_on = [kubernetes_deployment.report_generator]
 }
+*/

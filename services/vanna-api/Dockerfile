@@ -19,6 +19,15 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# 한국어 임베딩 모델 사전 다운로드 (빌드 시 캐시 — 런타임 다운로드 방지)
+RUN python -c "from sentence_transformers import SentenceTransformer; \
+    SentenceTransformer('jhgan/ko-sroberta-multitask')"
+
+# Reranker 모델 사전 다운로드 (jinaai/jina-reranker-v2-base-multilingual)
+# SQL-aware 다국어 Reranker — TableSearch recall@3: 93.31%
+RUN python -c "from sentence_transformers import CrossEncoder; \
+    CrossEncoder('jinaai/jina-reranker-v2-base-multilingual', trust_remote_code=True)"
+
 
 
 # 애플리케이션 코드 복사 (src/ 를 패키지 구조로 유지 — relative import 정상 동작)
@@ -26,6 +35,9 @@ COPY src/ ./src/
 
 # 유틸리티 스크립트 복사 (seed_chromadb.py 등)
 COPY scripts/ ./scripts/
+
+# 프롬프트 YAML 파일 복사 (FR-PE-04: 외부화된 프롬프트)
+COPY prompts/ ./prompts/
 
 # 헬스체크
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \

@@ -53,6 +53,37 @@ resource "kubernetes_secret" "slack_bot_secrets" {
 }
 */
 
+# T3 Report Generator - Slack Secret (for KubernetesPodOperator DAG)
+resource "kubernetes_secret" "t3_report_slack" {
+  metadata {
+    name      = "t3-report-secret"
+    namespace = kubernetes_namespace.airflow.metadata[0].name
+  }
+
+  data = {
+    SLACK_BOT_TOKEN  = var.slack_bot_token
+    SLACK_CHANNEL_ID = var.slack_channel_id
+  }
+
+  type = "Opaque"
+}
+
+# T2 ETL Runner - AWS Credentials Secret (for KubernetesPodOperator DAG)
+resource "kubernetes_secret" "t2_etl_secret" {
+  metadata {
+    name      = "t2-etl-secret"
+    namespace = kubernetes_namespace.airflow.metadata[0].name
+  }
+
+  data = {
+    AWS_ACCESS_KEY_ID     = var.aws_access_key
+    AWS_SECRET_ACCESS_KEY = var.aws_secret_key
+    AWS_DEFAULT_REGION    = "ap-northeast-2" # 기본 Region 지정
+  }
+
+  type = "Opaque"
+}
+
 # ---------------------------------------------------------------------------------------------------------------------
 # 3. Helm Releases
 # ---------------------------------------------------------------------------------------------------------------------

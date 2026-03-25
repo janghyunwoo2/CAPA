@@ -83,7 +83,7 @@ dags:
   gitSync:
     enabled: true
     repo: https://github.com/janghyunwoo2/CAPA.git
-    branch: airflow-test
+    branch: develop
     subPath: services/airflow-dags
     wait: 60
 

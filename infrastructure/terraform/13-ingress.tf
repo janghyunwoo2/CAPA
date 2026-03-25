@@ -7,14 +7,14 @@ resource "kubernetes_ingress_v1" "unified_ingress" {
     name      = "unified-ingress"
     namespace = "airflow"
     annotations = {
-      "alb.ingress.kubernetes.io/scheme"                    = "internet-facing"
-      "alb.ingress.kubernetes.io/group.name"                = "capa-unified-lb"
-      "alb.ingress.kubernetes.io/target-type"               = "ip"
-      "alb.ingress.kubernetes.io/healthcheck-path"          = "/health" # Airflow Webserver Health Check
-      "alb.ingress.kubernetes.io/healthcheck-port"          = "traffic-port"
-      "alb.ingress.kubernetes.io/success-codes"             = "200,302"
-      "alb.ingress.kubernetes.io/listen-ports"              = "[{\"HTTP\": 80}]"
-      "alb.ingress.kubernetes.io/load-balancer-attributes"  = "idle_timeout.timeout_seconds=300"
+      "alb.ingress.kubernetes.io/scheme"                   = "internet-facing"
+      "alb.ingress.kubernetes.io/group.name"               = "capa-unified-lb"
+      "alb.ingress.kubernetes.io/target-type"              = "ip"
+      "alb.ingress.kubernetes.io/healthcheck-path"         = "/health" # Airflow Webserver Health Check
+      "alb.ingress.kubernetes.io/healthcheck-port"         = "traffic-port"
+      "alb.ingress.kubernetes.io/success-codes"            = "200,302"
+      "alb.ingress.kubernetes.io/listen-ports"             = "[{\"HTTP\": 80}]"
+      "alb.ingress.kubernetes.io/load-balancer-attributes" = "idle_timeout.timeout_seconds=300"
     }
   }
 
@@ -44,14 +44,14 @@ resource "kubernetes_ingress_v1" "redash_ingress" {
     name      = "redash-ingress"
     namespace = "redash"
     annotations = {
-      "alb.ingress.kubernetes.io/scheme"                    = "internet-facing"
-      "alb.ingress.kubernetes.io/group.name"                = "capa-unified-lb"
-      "alb.ingress.kubernetes.io/target-type"               = "ip"
-      "alb.ingress.kubernetes.io/healthcheck-path"          = "/ping" # Redash Server Health Check
-      "alb.ingress.kubernetes.io/healthcheck-port"          = "traffic-port"
-      "alb.ingress.kubernetes.io/success-codes"             = "200,302"
-      "alb.ingress.kubernetes.io/listen-ports"              = "[{\"HTTP\": 80}]"
-      "alb.ingress.kubernetes.io/load-balancer-attributes"  = "idle_timeout.timeout_seconds=300"
+      "alb.ingress.kubernetes.io/scheme"                   = "internet-facing"
+      "alb.ingress.kubernetes.io/group.name"               = "capa-unified-lb"
+      "alb.ingress.kubernetes.io/target-type"              = "ip"
+      "alb.ingress.kubernetes.io/healthcheck-path"         = "/ping" # Redash Server Health Check
+      "alb.ingress.kubernetes.io/healthcheck-port"         = "traffic-port"
+      "alb.ingress.kubernetes.io/success-codes"            = "200,302"
+      "alb.ingress.kubernetes.io/listen-ports"             = "[{\"HTTP\": 80}]"
+      "alb.ingress.kubernetes.io/load-balancer-attributes" = "idle_timeout.timeout_seconds=300"
     }
   }
 

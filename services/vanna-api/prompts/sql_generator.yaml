@@ -1,0 +1,148 @@
+date_rules: |
+  <date_rules>
+    ⚠️ 파티션 조건 규칙 (위반 시 풀 스캔 발생):
+      허용: year='YYYY' AND month='MM' AND day='DD'  (문자열 등호만)
+      금지: DATE(), TO_DATE(), CAST(), BETWEEN, date_format(), DATE_TRUNC()
+
+    오늘({{ today }}):
+      WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}'
+
+    어제({{ yesterday }}):
+      WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
+
+    이번달({{ this_month }}):
+      WHERE year='{{ year }}' AND month='{{ month }}'
+
+    지난달({{ last_month }}):
+      WHERE year='{{ lm_year }}' AND month='{{ lm_month }}'
+
+    지난주({{ week_start }} ~ {{ week_end }}):
+      WHERE year='{{ year }}' AND month='{{ month }}'
+        AND day IN ({{ week_days }})
+
+    특정 날짜 'N월 M일':
+      month을 2자리 문자열로 변환 후 → AND month='NN' AND day='MM'
+
+    특정 월 'N월':
+      → AND year='YYYY' AND month='NN'
+  </date_rules>
+
+cot_template: |
+  <thinking>
+  Step 1. DDL에서 실제 존재하는 테이블과 컬럼을 먼저 확인한다.
+          - 반드시 제공된 DDL에 명시된 컬럼만 사용할 것.
+          - DDL에 없는 컬럼은 절대 추측하거나 생성하지 않는다.
+          - 존재하지 않는 컬럼 예시: campaign_name, ad_name, advertiser_name
+            (실제로는 campaign_id, ad_id, advertiser_id만 존재)
+  Step 2. 질문에 필요한 컬럼이 어느 테이블에 있는지 확인하여 테이블을 결정한다.
+          - is_conversion / conversion_id / conversion_type / conversion_value /
+            product_id / quantity / attribution_window 중 하나라도 필요하면
+            → ad_combined_log_summary 필수 (해당 컬럼은 ad_combined_log에 없음)
+          - 시간대별(hour) 분석이 필요하면
+            → ad_combined_log 필수 (ad_combined_log_summary에 hour 파티션 없음)
+          - 위 조건 없으면 (CTR, CPC, 노출수, 클릭수 등 일반 집계)
+            → 기본값: ad_combined_log_summary 사용
+          - 두 조건 모두 해당하면 JOIN 사용
+  Step 3. 날짜/기간 표현을 파티션 조건으로 변환한다.
+          - 반드시 year='YYYY' AND month='MM' AND day='DD' 형식 사용
+          - month, day는 반드시 2자리 zero-padded 문자열 (예: '03', '09')
+          ⚠️ GROUP BY 규칙 (위반 시 결과 행 수가 달라짐):
+          - WHERE 절에 이미 고정된 파티션 컬럼은 GROUP BY에 추가 금지
+            예) WHERE year='2026' AND month='03' → GROUP BY에 year, month 추가 금지
+            예) WHERE year='2026' AND month='03' AND day='14' → GROUP BY day 금지
+          - 필요한 집계 기준만 GROUP BY에 포함
+            예) 일별 집계: GROUP BY day  (year/month는 WHERE에 있으므로 생략)
+            예) 플랫폼+일별: GROUP BY day, platform
+  Step 4. 집계·필터·정렬 로직을 설계한다.
+          ⚠️ 지표 계산은 반드시 아래 공식만 사용 — 임의 변형·퍼센트 변환 절대 금지
+          - CTR = COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0)
+            → 비율(0~1) 그대로 반환. * 100 퍼센트 변환·ROUND·_percent suffix 절대 금지
+          - CVR = COUNT(CASE WHEN is_conversion = true THEN 1 END) * 1.0
+                  / NULLIF(COUNT(CASE WHEN is_click = true THEN 1 END), 0)
+            → 분모는 반드시 클릭수. COUNT(*) 전체 노출수 사용 절대 금지
+          - ROAS = SUM(CASE WHEN is_conversion = true THEN conversion_value ELSE 0 END)
+                   / NULLIF(SUM(cost_per_impression + cost_per_click), 0)
+            → 분모는 cost_per_impression + cost_per_click 합산. 단일 컬럼 사용 금지
+          - CPA = SUM(cost_per_impression + cost_per_click)
+                  / NULLIF(COUNT(CASE WHEN is_conversion = true THEN 1 END), 0)
+            → 분자는 cost_per_impression + cost_per_click 합산. 단일 컬럼 사용 금지
+          - 0 나눗셈 방지: NULLIF(분모, 0) 항상 사용
+  Step 5. 위 분석을 바탕으로 SQL을 작성한다.
+  Step 6. 최종 검증: 사용한 모든 컬럼이 DDL에 존재하는지 재확인한다.
+  </thinking>
+
+  ⚠️ 출력 규칙:
+  - SQL 쿼리만 출력할 것 (마크다운 코드블록 금지: ```sql 사용 금지)
+  - 설명·주석·제목 없이 SELECT 문부터 바로 시작할 것
+
+negative_rules: |
+  <constraints>
+    ❌ 절대 금지 사항:
+    1. DDL에 정의되지 않은 컬럼 사용 금지
+       (campaign_name, ad_name, advertiser_name, channel 등은 존재하지 않음)
+    2. DATE(), TO_DATE(), CAST(... AS DATE), BETWEEN, date_format(), DATE_TRUNC() 사용 금지
+    3. 파티션 컬럼(year, month, day, hour)에 함수 적용 금지
+    4. SELECT * 금지 — 필요한 컬럼만 명시적으로 선택
+    5. 불필요한 서브쿼리 중첩 금지 — 단일 쿼리로 해결 가능하면 단일 쿼리 사용
+    6. 존재하지 않는 테이블 참조 금지 — ad_combined_log, ad_combined_log_summary 두 개만 존재
+    7. 비율 계산 시 NULLIF 없이 나눗셈 금지 (ZeroDivisionError 방지)
+    8. CAST(hour AS INT) 없이 hour 컬럼 숫자 비교 금지 (hour는 STRING 타입)
+    9. CTR/CVR/ROAS 결과에 * 100 퍼센트 변환 금지 — 반드시 0~1 비율로 반환
+   10. WHERE 조건에 고정된 year/month/day를 SELECT·GROUP BY에 중복 추가 금지
+       (예: WHERE year='2026' AND month='03' 이면 GROUP BY에 year, month 추가 금지)
+   11. 날짜 범위 day BETWEEN '08' AND '14' 금지
+       → day IN ('08','09','10','11','12','13','14') 또는 day >= '08' AND day <= '14' 사용
+   12. CASE 레이블은 간결하게 — 괄호·시간범위 설명 추가 금지
+       올바른 예: CASE WHEN CAST(hour AS INT) < 12 THEN '오전' ELSE '오후' END
+       금지 예:   CASE WHEN CAST(hour AS INT) < 12 THEN '오전(00~11시)' ELSE '오후(12~23시)' END
+   13. 전환 필터는 WHERE 절에 직접 사용 (불필요한 CASE WHEN 래핑 금지)
+       올바른 예: WHERE is_conversion = true
+       금지 예:   SUM(CASE WHEN is_conversion = true THEN conversion_value ELSE 0 END) (필터 목적)
+   14. 클릭있고 전환없는 조건은 HAVING 사용
+       올바른 예: HAVING COUNT(CASE WHEN is_click=true THEN 1 END) > 0
+                        AND COUNT(CASE WHEN is_conversion=true THEN 1 END) = 0
+       금지 예:   WHERE is_click = true AND is_conversion = false
+   15. LIMIT x OFFSET y 금지 — Athena OFFSET 미지원 → ROW_NUMBER() 서브쿼리 사용
+   16. DATEDIFF() 금지 — Athena 미지원 → date_diff('day'|'hour'|'second', t1, t2) 사용
+   17. MEDIAN() 금지 — Athena 미지원 → approx_percentile(col, 0.5) 사용
+   18. ILIKE 금지 — Athena 미지원 → LOWER(col) LIKE LOWER('%keyword%') 사용
+   19. SELECT TOP N 금지 — SQL Server 방언 → LIMIT N 사용
+   20. QUALIFY 금지 — BigQuery/Snowflake 방언 → ROW_NUMBER() 서브쿼리 + WHERE rn = N 사용
+   21. STRING_AGG() 금지 — PostgreSQL 방언 → array_join(array_agg(col), ',') 사용
+  </constraints>
+
+table_selection_rules: |
+  <table_rules>
+    ⚠️ 테이블 선택 — 필요한 컬럼이 없는 테이블은 반드시 제외
+
+    규칙 1. 전환 키워드/컬럼이 포함되면 → ad_combined_log_summary 필수 (확정)
+      트리거 키워드: CVR, ROAS, CPA, 전환, 전환율, 전환수, 전환매출, 수익률
+      트리거 컬럼:  is_conversion, conversion_id, conversion_type, conversion_value,
+                   product_id, quantity, attribution_window
+      → 이 컬럼들은 ad_combined_log에 존재하지 않음
+
+    규칙 2. 시간대 키워드/컬럼이 포함되면 → ad_combined_log 필수 (확정)
+      트리거 키워드: 시간대, 피크타임, 시간별, hourly
+      트리거 컬럼:  hour
+      → ad_combined_log_summary에는 hour 파티션이 없음
+
+    규칙 3. 위 조건 없으면 → 기본값: ad_combined_log_summary
+      트리거 키워드: CTR, 클릭률, 클릭수, 노출수, CPC, CPM, impression, click
+      → 두 테이블 모두 가능하지만 summary가 일별 집계에 최적화됨
+
+    규칙 4. 규칙 1 + 규칙 2 동시 충족 시에만 JOIN 허용
+      → ad_combined_log.impression_id = ad_combined_log_summary.impression_id
+
+    [전용 컬럼 요약]
+    ad_combined_log 전용:         hour (파티션)
+    ad_combined_log_summary 전용: is_conversion, conversion_id, conversion_type,
+                                   conversion_value, product_id, quantity,
+                                   attribution_window, conversion_timestamp
+    공통: impression_id, user_id, ad_id, campaign_id, advertiser_id,
+          platform, device_type, os, delivery_region, keyword,
+          store_id, food_category, ad_position, ad_format,
+          user_lat, user_long, user_agent, ip_address, session_id,
+          click_id, click_position_x, click_position_y, landing_page_url,
+          is_click, cost_per_impression, cost_per_click,
+          impression_timestamp, click_timestamp, year, month, day
+  </table_rules>

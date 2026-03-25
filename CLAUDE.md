@@ -33,6 +33,23 @@ CAPA/
 │   └── helm-values/        # Kubernetes Helm 설정
 ├── docs/                   # 프로젝트 문서
 │   ├── t1/                 # t1(본인) 담당 문서
+│   │   ├── text-to-sql/                        # AI Text-to-SQL 파이프라인 (주요 개발)
+│   │   │   ├── 00_mvp_develop/                 # Phase 1+2 MVP 개발 완료
+│   │   │   │   ├── 00-기타/                    # 사전조사, E2E 시나리오
+│   │   │   │   ├── 01-plan/                    # 기획 문서
+│   │   │   │   ├── 02-design/                  # 설계 문서 (Phase 1+2 RAG 고도화 포함)
+│   │   │   │   ├── 03-analysis/                # Gap 분석
+│   │   │   │   ├── 04-report/                  # 완료 보고서
+│   │   │   │   └── 05-test/                    # 테스트 계획/결과
+│   │   │   ├── 01_multi-turn-conversation/     # 멀티턴 대화 기능
+│   │   │   ├── 02_txt-to-sql-slack/            # Slack 봇 연동
+│   │   │   ├── 03_chromadb-seed-upgrade/       # ChromaDB 시딩 업그레이드
+│   │   │   ├── 04-evaluation/                  # Spider EM/Exec 평가 체계 (진행 중)
+│   │   │   └── 05_prompt-engineering-enhancement/  # 프롬프트 엔지니어링 강화
+│   │   ├── airflow-dag-deployment/             # Airflow DAG 배포 문서
+│   │   ├── devops/                             # DevOps 작업 기록
+│   │   ├── vibe-coding/                        # 바이브 코딩 방법론 실험
+│   │   └── project_concept/                    # 프로젝트 컨셉 문서
 │   ├── t2/                 # t2 팀원 담당 문서
 │   └── t3/                 # t3 팀원 담당 문서
 └── .github/                # CI/CD, 프로젝트 규칙
@@ -184,3 +201,25 @@ Feature: {피처명}
 
 - [세부 코딩 규칙](.claude/rules/coding-rules.md)
 - [테스트 규칙](.claude/rules/test-rules.md)
+
+---
+
+## 작업 기록
+
+### 2026-03-24 — Text-to-SQL RAG 정확도 개선 (jina-reranker-v2 최적화)
+
+**작업 배경**
+- `PHASE2_RAG_ENABLED=true` 환경에서 `jina-reranker-v2-base-multilingual`이 이미 활성화되어 있었으나,
+  ChromaDB 검색 거리(distance) 정보가 reranker에 전달되지 않는 버그 발견
+
+**수정 파일 및 내용**
+
+| 파일 | 수정 내용 |
+|------|----------|
+| `src/query_pipeline.py` | `get_similar_question_sql` 오버라이드에서 ChromaDB `distances`를 `score = 1/(1+distance)`로 변환 후 반환<br>Phase2 활성화 시 `n_results`를 `max(n_results_sql, 20)`으로 확대하여 reranker 후보 풀 증가<br>미사용 `import uuid` 제거 |
+| `src/pipeline/rag_retriever.py` | `_retrieve_sql_examples_with_score()` 메서드 신설 — score와 `Q:/SQL:` 포맷 텍스트 함께 반환<br>`_retrieve_candidates()`에서 SQL 예제에 한해 `initial_score=1.0` 고정값 → 실제 ChromaDB 유사도 점수로 교체<br>Phase1 하위 호환 `_retrieve_sql_examples()`는 위 메서드에 위임하는 구조로 리팩토링 |
+
+**개선 효과**
+- Bi-encoder(ko-sroberta) 유사도 정보가 reranker에 정확히 전달되어 재정렬 품질 향상
+- 후보 풀 확대(10→20)로 구어체 질문도 관련 예제가 후보에 포함될 가능성 증가
+- `Q: {question}\nSQL: {sql}` 포맷으로 reranker가 질문-SQL 맥락을 함께 평가 가능
