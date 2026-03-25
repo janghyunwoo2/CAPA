@@ -391,7 +391,7 @@ DOCS_SCHEMA_MAPPER: list[str] = [
 ]
 
 
-# ========================= QA 예제 (28개) =========================
+# ========================= QA 예제 (70개) =========================
 
 QA_EXAMPLES = [
     # ── GROUP 1: CTR 기본 분석 ──────────────────────────────────────────────
@@ -1257,15 +1257,6 @@ ORDER BY ctr_percent DESC""",
     },
     # ── 정확한 계산식 패턴 — 비율(0~1) 단위, 올바른 분모 ────────────────────
     {
-        "question": "어제 캠페인별 클릭률(CTR)을 내림차순으로 보여줘",
-        "sql": """SELECT campaign_id,
-    COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr
-FROM ad_combined_log_summary
-WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
-GROUP BY campaign_id
-ORDER BY ctr DESC""",
-    },
-    {
         "question": "어제 캠페인별 전환율(CVR) 상위 5개를 보여줘",
         "sql": """SELECT campaign_id,
     COUNT(CASE WHEN is_conversion = true THEN 1 END) * 1.0
@@ -1367,15 +1358,6 @@ ORDER BY day, impressions DESC""",
     },
     # ── GROUP BY 과잉 방지 패턴 — WHERE에 고정된 파티션은 GROUP BY 생략 ────
     {
-        "question": "2026년 3월 8일부터 14일까지 7일간 일별 impression 수 추이",
-        "sql": """SELECT day, COUNT(*) AS impressions
-FROM ad_combined_log_summary
-WHERE year='2026' AND month='03'
-  AND day IN ('08','09','10','11','12','13','14')
-GROUP BY day
-ORDER BY day""",
-    },
-    {
         "question": "2026년 3월 8일부터 14일까지 7일간 캠페인별 일별 평균 CTR",
         "sql": """SELECT campaign_id, AVG(daily_ctr) AS avg_ctr
 FROM (
@@ -1401,17 +1383,6 @@ GROUP BY CASE WHEN CAST(hour AS INT) < 12 THEN '오전' ELSE '오후' END
 ORDER BY time_period""",
     },
     # ── HAVING 패턴 — 클릭/전환 조건을 HAVING으로 처리 ─────────────────────
-    {
-        "question": "2026년 3월 14일 클릭은 있지만 전환이 없는 캠페인 목록",
-        "sql": """SELECT campaign_id,
-    COUNT(CASE WHEN is_click = true THEN 1 END) AS clicks
-FROM ad_combined_log_summary
-WHERE year='2026' AND month='03' AND day='14'
-GROUP BY campaign_id
-HAVING COUNT(CASE WHEN is_click = true THEN 1 END) > 0
-  AND COUNT(CASE WHEN is_conversion = true THEN 1 END) = 0
-ORDER BY clicks DESC""",
-    },
     {
         "question": "어제 CTR은 높은데 전환이 없는 캠페인을 찾아줘",
         "sql": """SELECT campaign_id,
