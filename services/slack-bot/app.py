@@ -312,14 +312,19 @@ def handle_mention(event, say, client):
 
             # ③ GET /query/{task_id} 폴링 (3초 간격, 최대 100회)
             result = None
+            _progress_interval = 30  # 진행 중 메시지 전송 간격 (초)
+            _elapsed = 0
             for _ in range(_ASYNC_POLL_MAX):
                 time.sleep(_ASYNC_POLL_INTERVAL)
+                _elapsed += _ASYNC_POLL_INTERVAL
                 poll_resp = requests.get(
                     f"{VANNA_API_URL}/query/{task_id}",
                     headers=_build_internal_headers(),
                     timeout=10,
                 )
                 if poll_resp.status_code == 202:
+                    if _elapsed % _progress_interval == 0:
+                        say(f"⏳ 아직 처리 중입니다... ({_elapsed}초 경과)", thread_ts=thread_ts)
                     continue  # 아직 처리 중
                 if poll_resp.status_code == 200:
                     result = poll_resp.json()
