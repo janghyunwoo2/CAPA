@@ -181,8 +181,8 @@ services:
       # 멀티턴 대화
       - MULTI_TURN_ENABLED=true        # true: 이전 대화 이력 참조하여 맥락 유지 / false: 매 질문 독립 처리
 
-      # SchemaMapper — 테이블 자동 선택
-      - SCHEMA_MAPPER_ENABLED=true     # true: 키워드로 테이블(log/summary) 자동 확정 / false: LLM이 직접 판단
+      # SchemaMapper 제거 (Dynamic DDL Injection으로 대체 — Design §3.2)
+      # SCHEMA_MAPPER_ENABLED 환경변수 제거됨
 
       # Self-Correction — SQL 검증 실패 시 에러 피드백 재주입 후 재생성
       - SELF_CORRECTION_ENABLED=true   # true: 검증 실패 SQL을 LLM에 재주입하여 재생성 / false: 1회 생성 후 종료
@@ -231,6 +231,7 @@ services:
       context: ../slack-bot
       dockerfile: Dockerfile
     container_name: capa-slack-bot-e2e
+    command: watchmedo auto-restart --patterns="*.py" --recursive -- python app.py
     environment:
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
       - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}

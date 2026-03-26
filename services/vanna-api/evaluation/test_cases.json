@@ -6,7 +6,7 @@
     "date_type": "relative",
     "target_user": "performance_marketer",
     "question": "어제 캠페인별 클릭률(CTR)을 내림차순으로 보여줘",
-    "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY campaign_id ORDER BY ctr DESC"
+    "ground_truth_sql": "SELECT campaign_id, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY campaign_id ORDER BY ctr_percent DESC"
   },
   {
     "id": "T004",
@@ -15,7 +15,7 @@
     "date_type": "relative",
     "target_user": "performance_marketer",
     "question": "어제 캠페인별 전환율(CVR) 상위 5개를 보여줘",
-    "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_conversion=true THEN 1 END) * 1.0 / NULLIF(COUNT(CASE WHEN is_click=true THEN 1 END), 0) AS cvr FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY campaign_id ORDER BY cvr DESC LIMIT 5"
+    "ground_truth_sql": "SELECT campaign_id, ROUND(SUM(CAST(is_conversion AS INT)) * 100.0 / NULLIF(SUM(CAST(is_click AS INT)), 0), 2) AS cvr_percent FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY campaign_id ORDER BY cvr_percent DESC LIMIT 5"
   },
   {
     "id": "T007",
@@ -87,7 +87,7 @@
     "date_type": "relative",
     "target_user": "ad_ops",
     "question": "어제 전체 광고 노출수, 클릭수, 전환수, 클릭률(CTR)을 보여줘",
-    "ground_truth_sql": "SELECT COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'"
+    "ground_truth_sql": "SELECT COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'"
   },
   {
     "id": "T022",
@@ -96,7 +96,7 @@
     "date_type": "relative",
     "target_user": "pm",
     "question": "오늘 각 캠페인별로 노출, 클릭, 전환, 전환율(CVR)을 상세 비교해줘",
-    "ground_truth_sql": "SELECT campaign_id, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr, COUNT(CASE WHEN is_conversion=true THEN 1 END) * 1.0 / NULLIF(COUNT(CASE WHEN is_click=true THEN 1 END), 0) AS cvr FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY campaign_id ORDER BY impressions DESC"
+    "ground_truth_sql": "SELECT campaign_id, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent, ROUND(SUM(CAST(is_conversion AS INT)) * 100.0 / NULLIF(SUM(CAST(is_click AS INT)), 0), 2) AS cvr_percent FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY campaign_id ORDER BY impressions DESC"
   },
   {
     "id": "T023",
@@ -105,7 +105,7 @@
     "date_type": "relative",
     "target_user": "performance_marketer",
     "question": "어제 음식 카테고리별 클릭률(CTR) 상위 10개를 보여줘",
-    "ground_truth_sql": "SELECT food_category, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY food_category ORDER BY ctr DESC LIMIT 10"
+    "ground_truth_sql": "SELECT food_category, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY food_category ORDER BY ctr_percent DESC LIMIT 10"
   },
   {
     "id": "T027",
@@ -123,7 +123,7 @@
     "date_type": "relative",
     "target_user": "pm",
     "question": "오늘 지역별 노출수, CTR, 전환수를 한 번에 보여줘",
-    "ground_truth_sql": "SELECT delivery_region, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY delivery_region ORDER BY impressions DESC"
+    "ground_truth_sql": "SELECT delivery_region, COUNT(*) AS impressions, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' GROUP BY delivery_region ORDER BY impressions DESC"
   },
   {
     "id": "T035",
@@ -222,7 +222,7 @@
     "date_type": "explicit",
     "target_user": "performance_marketer",
     "question": "2026년 3월 8일부터 14일까지 7일간 캠페인별 일별 평균 CTR",
-    "ground_truth_sql": "SELECT campaign_id, AVG(daily_ctr) AS avg_ctr FROM (SELECT day, campaign_id, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS daily_ctr FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY day, campaign_id) sub GROUP BY campaign_id ORDER BY avg_ctr DESC"
+    "ground_truth_sql": "SELECT campaign_id, AVG(daily_ctr_percent) AS avg_ctr_percent FROM (SELECT day, campaign_id, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS daily_ctr_percent FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY day, campaign_id) sub GROUP BY campaign_id ORDER BY avg_ctr_percent DESC"
   },
   {
     "id": "T046",
@@ -231,7 +231,7 @@
     "date_type": "explicit",
     "target_user": "pm",
     "question": "2026년 3월 전체 광고 노출수, 클릭수, 전환수, CTR 요약",
-    "ground_truth_sql": "SELECT COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='2026' AND month='03'"
+    "ground_truth_sql": "SELECT COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent FROM ad_combined_log_summary WHERE year='2026' AND month='03'"
   },
   {
     "id": "T048",
@@ -267,7 +267,7 @@
     "date_type": "explicit",
     "target_user": "performance_marketer",
     "question": "2026년 3월 광고 위치별 전환율(CVR)",
-    "ground_truth_sql": "SELECT ad_position, COUNT(CASE WHEN is_conversion=true THEN 1 END) * 1.0 / NULLIF(COUNT(CASE WHEN is_click=true THEN 1 END), 0) AS cvr FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY ad_position ORDER BY cvr DESC"
+    "ground_truth_sql": "SELECT ad_position, ROUND(SUM(CAST(is_conversion AS INT)) * 100.0 / NULLIF(SUM(CAST(is_click AS INT)), 0), 2) AS cvr_percent FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY ad_position ORDER BY cvr_percent DESC"
   },
   {
     "id": "T061",
@@ -285,7 +285,7 @@
     "date_type": "relative",
     "target_user": "performance_marketer",
     "question": "어제 CTR은 높은데 전환이 없는 캠페인을 찾아줘",
-    "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY campaign_id HAVING COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) > 0.05 AND COUNT(CASE WHEN is_conversion=true THEN 1 END) = 0 ORDER BY ctr DESC"
+    "ground_truth_sql": "SELECT campaign_id, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent FROM ad_combined_log_summary WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}' GROUP BY campaign_id HAVING ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) > 5.0 AND COUNT(CASE WHEN is_conversion=true THEN 1 END) = 0 ORDER BY ctr_percent DESC"
   },
   {
     "id": "T063",
@@ -312,7 +312,7 @@
     "date_type": "relative",
     "target_user": "performance_marketer",
     "question": "오늘 모바일에서 CTR이 가장 높은 캠페인 TOP 5",
-    "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_click=true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' AND device_type='mobile' GROUP BY campaign_id ORDER BY ctr DESC LIMIT 5"
+    "ground_truth_sql": "SELECT campaign_id, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent FROM ad_combined_log_summary WHERE year='{{ year }}' AND month='{{ month }}' AND day='{{ day }}' AND device_type='mobile' GROUP BY campaign_id ORDER BY ctr_percent DESC LIMIT 5"
   },
   {
     "id": "T066",
