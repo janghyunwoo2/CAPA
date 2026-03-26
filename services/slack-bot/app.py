@@ -273,10 +273,10 @@ def handle_mention(event, say, client):
     # 3. 기본: Vanna AI 자연어 질의
 
     # [FR-24-01] Feature Flag: 스레드 답글 또는 채널 메시지
-    # [BUG-03] event["ts"](사용자 원본 메시지 ts)를 thread_ts로 사용 → 사용자 메시지에 스레드 열림
+    # [FR-20] thread_ts: 스레드 답글이면 부모 ts(session_id 연속성), 신규면 현재 ts(새 세션)
     thread_ts = None
     if SLACK_THREAD_ENABLED:
-        thread_ts = event.get("ts")
+        thread_ts = event.get("thread_ts") or event.get("ts")
     else:
         say(f"🔍 <@{user}>님의 질문을 분석 중입니다...")
 
