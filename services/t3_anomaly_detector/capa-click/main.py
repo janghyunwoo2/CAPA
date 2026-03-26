@@ -388,6 +388,9 @@ def main():
                 else:
                     msg += f"✅ **{start_str} ~ {end_str}** 사이는 정상 패턴을 보이고 있습니다. (테스트 알림)"
                 
+                if config.KINESIS_MONITORING_URL:
+                    msg += f"\n\n🔗 *Kinesis 모니터링*: <{config.KINESIS_MONITORING_URL}|클릭하여 이동>"
+                
                 png_path = os.path.join(config.OUTPUT_DIR, "anomaly_result.png")
                 logger.info(f"슬랙 알림 전송 중... (사유: {'최신 이상 탐지' if is_latest_anomaly else '테스트 모드'})")
                 notifier.send_file(

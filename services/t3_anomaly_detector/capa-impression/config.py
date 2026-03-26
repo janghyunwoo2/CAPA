@@ -63,6 +63,7 @@ PROPHET_SEASONALITY_MODE = os.getenv("PROPHET_SEASONALITY_MODE", "additive")  # 
 
 # ============ Kinesis 스트림 설정 ============
 KINESIS_STREAM_NAME = os.getenv("KINESIS_STREAM_NAME", "capa-knss-imp-00")
+KINESIS_MONITORING_URL = os.getenv("KINESIS_MONITORING_URL", "").strip('"').strip("'")
 
 # ============ Isolation Forest 파라미터 ============
 ISOLATION_FOREST_CONTAMINATION = _parse_float(
