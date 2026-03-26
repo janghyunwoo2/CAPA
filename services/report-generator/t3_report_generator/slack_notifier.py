@@ -54,17 +54,23 @@ def send_report_to_slack(pdf_path: str, report_date: str = None, report_type: st
             title = f"PDF - {label} ({report_date if report_date else ''})"
             comment = None
         elif report_date:
-            dashboard_url = os.getenv("FIXED_DASHBOARD_URL", "")
+            dashboard_url = os.getenv("DAILY_DASHBOARD_URL", "")
+            sub_url = os.getenv("PERIOD_DASHBOARD_URL", "")
             title = f"CAPA 광고 성과 보고서 - [{label}] ({report_date})"
             comment = f"{emoji} [{label}] {report_date} 보고서 생성 완료"
             if dashboard_url:
-                comment += f"\n🔗 *대시보드*: <{dashboard_url}|클릭하여이동>"
+                comment += f"\n🔗 *일간 대시보드*: <{dashboard_url}|클릭하여이동>"
+            if sub_url:
+                comment += f"\n🔗 *기간 대시보드*: <{sub_url}|클릭하여이동>"
         else:
-            dashboard_url = os.getenv("FIXED_DASHBOARD_URL", "")
+            dashboard_url = os.getenv("DAILY_DASHBOARD_URL", "")
+            sub_url = os.getenv("PERIOD_DASHBOARD_URL", "")
             title = f"CAPA 광고 성과 보고서 - [{label}]"
             comment = f"{emoji} [{label}] 보고서 생성 완료"
             if dashboard_url:
-                comment += f"\n🔗 *대시보드*: <{dashboard_url}|클릭하여이동>"
+                comment += f"\n🔗 *일간 대시보드*: <{dashboard_url}|클릭하여이동>"
+            if sub_url:
+                comment += f"\n🔗 *기간 대시보드*: <{sub_url}|클릭하여이동>"
 
         # PDF 파일 업로드
         slack_app.client.files_upload_v2(
@@ -108,7 +114,13 @@ def send_combined_notification(report_types: list[str], report_date: str) -> boo
 
         message = (
             f"🚀 *CAPA 광고 성과 보고서 생성 완료* ({report_date})\n\n"
-            f"🔗 *대시보드*: <{dashboard_url}|클릭하여이동>\n"
+            f"🔗 *일간 대시보드*: <{dashboard_url}|클릭하여이동>\n"
+        )
+        sub_url = os.getenv("PERIOD_DASHBOARD_URL", "")
+        if sub_url:
+            message += f"🔗 *기간 대시보드*: <{sub_url}|클릭하여이동>\n"
+        
+        message += (
             f"✅ *포함된 보고서*: {labels_str}\n\n"
             f"_상단에 업로드된 PDF 파일들을 확인해 주세요._"
         )
