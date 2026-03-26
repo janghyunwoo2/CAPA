@@ -61,14 +61,14 @@ class TestRerankerDeactivation:
 
         assert qp.RERANKER_ENABLED is False
 
-    def test_reranker_enabled_default_is_true(self, monkeypatch):
-        """TC-RD-02: RERANKER_ENABLED 미설정 → 기본값 True (하위 호환)"""
+    def test_reranker_enabled_default_is_false(self, monkeypatch):
+        """TC-RD-02: RERANKER_ENABLED 미설정 → 기본값 False (pipeline-rag-optimization 변경)"""
         monkeypatch.delenv("RERANKER_ENABLED", raising=False)
         monkeypatch.setenv("PHASE2_RAG_ENABLED", "false")
 
         qp = _reload_pipeline()
 
-        assert qp.RERANKER_ENABLED is True
+        assert qp.RERANKER_ENABLED is False
 
     def test_crossencoder_not_called_when_reranker_disabled(self, monkeypatch):
         """TC-RD-03: PHASE2=true + RERANKER=false → CrossEncoderReranker 미호출"""

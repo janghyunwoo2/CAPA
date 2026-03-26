@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 PHASE2_RAG_ENABLED = os.getenv("PHASE2_RAG_ENABLED", "false").lower() == "true"
 RERANKER_ENABLED = os.getenv("RERANKER_ENABLED", "false").lower() == "true"
 MULTI_TURN_ENABLED = os.getenv("MULTI_TURN_ENABLED", "false").lower() == "true"
-SCHEMA_MAPPER_ENABLED = os.getenv("SCHEMA_MAPPER_ENABLED", "false").lower() == "true"
+# SCHEMA_MAPPER_ENABLED 제거 — SchemaMapper 삭제 (Design §3.2)
 SELF_CORRECTION_ENABLED = os.getenv("SELF_CORRECTION_ENABLED", "false").lower() == "true"
 MAX_CORRECTION_ATTEMPTS = int(os.getenv("MAX_CORRECTION_ATTEMPTS", "3"))
 
@@ -82,29 +82,69 @@ class _VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
     def __init__(self, config=None):
         ChromaDB_VectorStore.__init__(self, config=config)
         Anthropic_Chat.__init__(self, config=config)
+        self._ensure_cosine_collections()
 
-    def add_question_sql(self, question: str, sql: str, **kwargs) -> str:
-        """question만 document로 저장, SQL은 metadata로 분리."""
+    def _ensure_cosine_collections(self) -> None:
+        """sql-collection, documentation-collection의 hnsw:space=cosine 보장.
+
+        ChromaDB_VectorStore 초기화 후 L2로 생성된 컬렉션을 cosine으로 교체.
+        seed_chromadb.py에서 reset_collections() 선행 후 호출되므로,
+        통상 이미 삭제된 상태 → 신규 생성 시 cosine 적용됨.
+        Design §2.1 FR-PRO-01 기준.
+        """
+        client = getattr(self, "chroma_client", None)
+        if client is None:
+            return
+        for col_attr in ["sql_collection", "documentation_collection"]:
+            col = getattr(self, col_attr, None)
+            if col is None:
+                continue
+            if col.metadata and col.metadata.get("hnsw:space") == "cosine":
+                continue  # 이미 cosine
+            try:
+                name = col.name
+                client.delete_collection(name)
+                new_col = client.create_collection(
+                    name=name,
+                    metadata={"hnsw:space": "cosine"},
+                    embedding_function=_KO_EMBEDDING_FUNCTION,
+                )
+                setattr(self, col_attr, new_col)
+                logger.info(f"{name}: cosine 메트릭으로 재생성 완료")
+            except Exception as e:
+                logger.warning(f"{col_attr} cosine 재생성 실패 (무시): {e}")
+
+    def add_question_sql(self, question: str, sql: str, tables: list[str] | None = None, **kwargs) -> str:
+        """question만 document로 저장, SQL과 tables는 metadata로 분리.
+
+        tables: 해당 QA 예제가 참조하는 테이블 목록 — DDL 역추적에 사용.
+        ChromaDB metadata는 str만 허용하므로 str(list)로 직렬화.
+        Design §3.2 기준.
+        """
         id = deterministic_uuid(question + sql) + "-sql"
+        metadata: dict = {"sql": sql}
+        if tables:
+            metadata["tables"] = str(tables)
         self.sql_collection.add(
             documents=question,
-            metadatas=[{"sql": sql}],
+            metadatas=[metadata],
             ids=[id],
         )
         return id
 
     def get_similar_question_sql(self, question: str, **kwargs) -> list:
-        """metadata에서 SQL을 꺼내 {question, sql, score} dict 리스트로 반환.
+        """metadata에서 SQL을 꺼내 {question, sql, score, tables} dict 리스트로 반환.
 
-        distance 값을 score로 변환하여 반환:
-        - ChromaDB distance: 작을수록 유사 (L2 기준 0~∞)
-        - score = 1 / (1 + distance) → 클수록 유사 (0~1 범위)
+        distance 값을 score로 변환:
+        - cosine distance: 0=동일, 1=직교 (정규화 벡터 기준)
+        - score = max(0.0, 1.0 - distance)  — cosine similarity 직접 반환
+        Design §2.2 FR-PRO-02 기준.
         """
-        # Phase2 활성화 시 reranker 후보 풀을 위해 n_results 확대
-        # CPU 환경 성능 최적화: 20 → 10 (reranker 처리 시간 단축)
+        # Phase2 활성화 시 n_results 확대 (DDL 역추적 후보 풀 + Few-shot 증가)
+        # Design §5.1 FR-PRO-07 기준
         n_results = self.n_results_sql
         if PHASE2_RAG_ENABLED:
-            n_results = max(n_results, 10)
+            n_results = max(n_results, 20)
 
         results = self.sql_collection.query(
             query_texts=[question],
@@ -122,7 +162,8 @@ class _VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
             {
                 "question": doc,
                 "sql": meta.get("sql", ""),
-                "score": 1.0 / (1.0 + dist),  # distance → similarity score
+                "tables": meta.get("tables", ""),   # DDL 역추적용
+                "score": max(0.0, 1.0 - dist),      # cosine similarity
             }
             for doc, meta, dist in zip(docs, metas, distances)
             if meta.get("sql")
@@ -154,10 +195,11 @@ class _VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
             return [{"text": doc, "score": 1.0} for doc in (fallback or [])]
 
     def get_related_documentation_with_score(self, question: str, **kwargs) -> list[dict]:
-        """Documentation을 ChromaDB distance 기반 score와 함께 반환.
+        """Documentation을 ChromaDB cosine distance 기반 score와 함께 반환.
 
         Returns:
-            list of {"text": str, "score": float}  (score = 1/(1+distance))
+            list of {"text": str, "score": float}  (score = max(0.0, 1.0 - distance))
+        Design §2.2 FR-PRO-02 기준.
         """
         try:
             n_results = getattr(self, "n_results_documentation", 10)
@@ -171,7 +213,7 @@ class _VannaAthena(ChromaDB_VectorStore, Anthropic_Chat):
             docs = results["documents"][0] if results["documents"] else []
             distances = results.get("distances", [[]])[0]
             return [
-                {"text": doc, "score": 1.0 / (1.0 + dist)}
+                {"text": doc, "score": max(0.0, 1.0 - dist)}  # cosine similarity
                 for doc, dist in zip(docs, distances)
             ]
         except Exception:
@@ -243,15 +285,18 @@ class QueryPipeline:
         self._keyword_extractor = KeywordExtractor(
             api_key=anthropic_api_key, model=llm_model
         )
-        # Phase 2: PHASE2_RAG_ENABLED=true 시 CrossEncoderReranker 활성화
+        # Phase 2: PHASE2_RAG_ENABLED=true 시 retrieve_v2 사용 (Reranker 영구 비활성화)
+        # Design §3.2: Reranker 주석처리, _reranker=None 고정
         if PHASE2_RAG_ENABLED:
-            _phase2_client = _anthropic_client   # Phase 2: LLM 필터/SQL 생성에 전달
-            if RERANKER_ENABLED:
-                from .pipeline.reranker import CrossEncoderReranker
-                _reranker = CrossEncoderReranker()
-            else:
-                _reranker = None
-                logger.info("Reranker 비활성화 (RERANKER_ENABLED=false)")
+            _phase2_client = _anthropic_client
+            # 주석처리: Reranker 영구 비활성화 (Design §3.2)
+            # if RERANKER_ENABLED:
+            #     from .pipeline.reranker import CrossEncoderReranker
+            #     _reranker = CrossEncoderReranker()
+            # else:
+            #     _reranker = None
+            _reranker = None
+            logger.info("Reranker 영구 비활성화 (Design §3.2)")
         else:
             _reranker = None
             _phase2_client = None                # Phase 1: Vanna 경로 유지
@@ -262,12 +307,12 @@ class QueryPipeline:
             anthropic_client=_phase2_client,
         )
 
-        # Step 3.5: SchemaMapper (SCHEMA_MAPPER_ENABLED=true 시 활성화)
-        if SCHEMA_MAPPER_ENABLED:
-            from .pipeline.schema_mapper import SchemaMapper
-            self._schema_mapper: Optional[Any] = SchemaMapper()
-        else:
-            self._schema_mapper = None
+        # Step 3.5 제거: SchemaMapper 삭제 (Design §3.2)
+        # if SCHEMA_MAPPER_ENABLED:
+        #     from .pipeline.schema_mapper import SchemaMapper
+        #     self._schema_mapper: Optional[Any] = SchemaMapper()
+        # else:
+        #     self._schema_mapper = None
         self._sql_generator = SQLGenerator(
             vanna_instance=vanna_instance,
             anthropic_client=_phase2_client,   # Phase 1: None(Vanna 경로), Phase 2: client
@@ -406,24 +451,15 @@ class QueryPipeline:
         )
         logger.info(f"Step 3 키워드: {ctx.keywords}")
 
-        # Step 3.5: SchemaMapper — 키워드 → 테이블 힌트 (SCHEMA_MAPPER_ENABLED=true 시)
-        if SCHEMA_MAPPER_ENABLED and self._schema_mapper is not None:
-            try:
-                ctx.schema_hint = self._schema_mapper.map(ctx.keywords)
-                logger.info(
-                    f"Step 3.5 SchemaHint: tables={ctx.schema_hint.tables}, "
-                    f"is_definitive={ctx.schema_hint.is_definitive}, "
-                    f"confidence={ctx.schema_hint.confidence}"
-                )
-            except Exception as e:
-                logger.warning(f"Step 3.5 SchemaMapper 실패: {e}, schema_hint=None 유지")
+        # Step 3.5 제거: SchemaMapper 삭제 (Design §3.2)
+        # if SCHEMA_MAPPER_ENABLED and self._schema_mapper is not None:
+        #     ctx.schema_hint = self._schema_mapper.map(ctx.keywords)
 
         # Step 4: RAG 검색 (Phase 2: PHASE2_RAG_ENABLED=true 시 3단계 RAG 사용)
         if PHASE2_RAG_ENABLED:
             ctx.rag_context = await self._rag_retriever.retrieve_v2(
                 question=ctx.refined_question,
                 keywords=ctx.keywords,
-                schema_hint=ctx.schema_hint,
             )
         else:
             ctx.rag_context = self._rag_retriever.retrieve(

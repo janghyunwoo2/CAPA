@@ -140,23 +140,15 @@ COMMENT '광고 성과 일일 요약 (노출+클릭+전환 데이터)'
 # ========================= Documentation 정의 (list[str]) =========================
 
 DOCS_BUSINESS_METRICS: list[str] = [
-    """CTR (Click-Through Rate) — 클릭률 (0~1 비율)
-정의: (클릭 수) / (노출 수) → 결과는 0~1 비율로 반환
-의미: 사용자가 광고를 본 후 클릭할 확률
-⚠️ SQL 출력 규칙: * 1.0 비율(0~1) 그대로 반환. * 100 퍼센트 변환·ROUND·_percent suffix 절대 금지
-올바른 Athena 계산식: COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr
-잘못된 예(금지): ROUND(SUM(is_click)*100.0/COUNT(*), 2) AS ctr_percent""",
-    """CVR (Conversion Rate) — 전환율 (0~1 비율)
-정의: (전환 수) / (클릭 수) → 결과는 0~1 비율로 반환. 분모는 반드시 클릭수
-의미: 광고를 클릭한 사용자 중 전환까지 이른 비율
-⚠️ SQL 출력 규칙:
-  - 분모는 반드시 클릭수: NULLIF(COUNT(CASE WHEN is_click = true THEN 1 END), 0)
-  - COUNT(*) 전체 노출수를 분모로 사용하는 것은 절대 금지 (CTR과 혼동 주의)
-  - * 1.0 비율(0~1) 반환. * 100 퍼센트 변환·_percent suffix 절대 금지
-올바른 Athena 계산식:
-  COUNT(CASE WHEN is_conversion = true THEN 1 END) * 1.0
-  / NULLIF(COUNT(CASE WHEN is_click = true THEN 1 END), 0) AS cvr
-주의: ad_combined_log_summary 테이블 필수 (conversion 데이터가 여기에만 있음)""",
+    """CTR(클릭률)은 사용자가 광고를 본 후 실제로 클릭할 확률을 나타내는 지표로,
+클릭 수를 노출 수로 나눈 후 100을 곱한 퍼센트(%) 값으로 반환합니다.
+올바른 Athena 계산식: ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent
+주의: NULLIF로 노출수 0인 경우 Division by Zero 방지 필수""",
+    """CVR(전환율)은 광고를 클릭한 사용자 중 전환까지 이른 비율을 나타내며,
+전환 수를 클릭 수로 나눈 후 100을 곱한 퍼센트(%) 값으로 반환합니다.
+분모는 반드시 클릭수여야 하며 전체 노출수(COUNT(*))를 분모로 사용하면 안 됩니다.
+올바른 Athena 계산식: ROUND(SUM(CAST(is_conversion AS INT)) * 100.0 / NULLIF(SUM(CAST(is_click AS INT)), 0), 2) AS cvr_percent
+주의: ad_combined_log_summary 테이블 필수 (is_conversion 컬럼이 여기에만 존재)""",
     """ROAS (Return On Ad Spend) — 광고 수익률 (비율)
 정의: (전환 매출액) / (광고비 총액)
 의미: 광고비 대비 매출 비율
@@ -187,7 +179,7 @@ Athena 계산식: SUM(cost_per_click) / NULLIF(COUNT(CASE WHEN is_click = true T
 - CVR, ROAS, CPA는 반드시 ad_combined_log_summary 테이블 사용 (conversion 데이터 필요)
 - CTR, CPC는 ad_combined_log 또는 ad_combined_log_summary 모두 사용 가능
 - 시간대별(hour) 분석은 ad_combined_log 테이블 사용 (hour 파티션 존재)
-- CTR/CVR은 0~1 비율로 반환. *100 퍼센트 변환 금지""",
+- CTR/CVR은 퍼센트(%) 형식으로 반환 (ROUND(...* 100.0 / NULLIF(...), 2) AS ctr_percent/cvr_percent)""",
 ]
 
 DOCS_ATHENA_RULES: list[str] = [
@@ -366,29 +358,64 @@ DOCS_GLOSSARY: list[str] = [
 플랫폼(Platform): 광고가 노출되는 환경 (web/app_ios/app_android)""",
 ]
 
-DOCS_SCHEMA_MAPPER: list[str] = [
-    """[테이블 확정 선택 키워드 — ad_combined_log_summary 전용 (SUMMARY_EXCLUSIVE)]
-다음 키워드가 질문에 포함되면 반드시 ad_combined_log_summary 테이블 사용:
-  CVR, ROAS, CPA, 전환, 전환율, 전환수, 전환매출, 전환금액, 수익률,
-  is_conversion, conversion, conversion_type, conversion_value,
-  conversion_id, attribution_window
-이유: conversion 관련 컬럼(is_conversion, conversion_value 등)은
-      ad_combined_log_summary에만 존재하며 ad_combined_log에는 없음""",
-    """[테이블 확정 선택 키워드 — ad_combined_log 전용 (LOG_EXCLUSIVE)]
-다음 키워드가 질문에 포함되면 반드시 ad_combined_log 테이블 사용:
-  시간대, 피크타임, 시간별, hour, hourly
-이유: hour 파티션이 ad_combined_log에만 존재
-      ad_combined_log_summary에는 day까지만 파티션됨 (hour 없음)
-예시: "어제 피크타임은?" → ad_combined_log + hour 파티션 필수""",
-    """[테이블 선호 키워드 — ad_combined_log_summary 선호 (NEUTRAL_SUMMARY_PREFER)]
-다음 키워드만 있으면 ad_combined_log_summary 선호 (두 테이블 모두 가능):
-  CTR, 클릭률, 클릭수, 노출수, CPC, CPM, impression, click, 노출, 클릭
-이유: 두 테이블 모두 공통 컬럼 보유, summary가 일별 집계에 최적화됨
-주의: 위 키워드와 시간대/피크타임/hour가 동시에 나오면 ad_combined_log 사용
-충돌: SUMMARY_EXCLUSIVE + LOG_EXCLUSIVE 동시 존재 시
-      → is_definitive=False(모호), JOIN 방식 고려
-      → JOIN 조건: ad_combined_log.impression_id = ad_combined_log_summary.impression_id""",
+DOCS_NEGATIVE_EXAMPLES: list[str] = [
+    """[오답 패턴 1] CTR/CVR 계산 시 NULLIF 누락 금지
+CTR이나 CVR을 계산할 때 분모에 NULLIF를 사용하지 않으면 노출수가 0인 경우 Division by Zero 오류가 발생합니다.
+잘못된 쿼리: SUM(CAST(is_click AS INT)) * 100.0 / COUNT(*) AS ctr_percent
+올바른 쿼리: ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent
+CVR도 동일하게 NULLIF(SUM(CAST(is_click AS INT)), 0)을 분모로 사용해야 합니다.""",
+
+    """[오답 패턴 2] 파티션 조건 날짜 하드코딩 금지
+Athena 쿼리에서 날짜를 직접 상수로 입력하면 시간이 지나면 틀린 쿼리가 됩니다.
+잘못된 쿼리: WHERE year='2026' AND month='03' AND day='25'
+올바른 쿼리 (어제): WHERE year=date_format(date_add('day',-1,current_date),'%Y')
+  AND month=date_format(date_add('day',-1,current_date),'%m')
+  AND day=date_format(date_add('day',-1,current_date),'%d')
+파티션 조건은 반드시 current_date 기반의 동적 날짜 표현을 사용해야 합니다.""",
+
+    """[오답 패턴 3] CVR 분모 혼동 (노출수 대신 클릭수 사용)
+CVR(전환율)의 분모는 반드시 클릭수여야 하며, 전체 노출수를 분모로 사용하면 안 됩니다.
+잘못된 쿼리: ROUND(SUM(CAST(is_conversion AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS cvr_percent
+올바른 쿼리: ROUND(SUM(CAST(is_conversion AS INT)) * 100.0 / NULLIF(SUM(CAST(is_click AS INT)), 0), 2) AS cvr_percent
+COUNT(*)는 전체 노출수이므로 CVR이 아닌 CTR의 분모가 됩니다.""",
+
+    """[오답 패턴 4] Athena 미지원 OFFSET 사용 금지
+Athena(Presto/Trino)는 OFFSET 구문을 지원하지 않으므로 N번째 순위 조회에 사용하면 안 됩니다.
+잘못된 쿼리: ORDER BY click_count DESC LIMIT 1 OFFSET 1
+올바른 쿼리: SELECT device_type FROM (
+  SELECT device_type, ROW_NUMBER() OVER (ORDER BY click_count DESC) AS rn FROM ...
+) WHERE rn = 2
+N번째로 높은 값을 구할 때는 반드시 ROW_NUMBER() 윈도우 함수를 사용해야 합니다.""",
+
+    """[오답 패턴 5] 존재하지 않는 컬럼 사용 금지
+아래 컬럼들은 스키마에 존재하지 않아 Athena 쿼리 실행 시 오류가 발생합니다.
+금지 컬럼: campaign_name, ad_name, advertiser_name, channel, gender, age
+대체 방법: campaign_id (campaign_01~05), ad_id (ad_0001~1000), advertiser_id (advertiser_01~30) 사용
+이름(name) 대신 ID 컬럼만 존재하므로 GROUP BY나 WHERE 조건에 name 계열 컬럼을 절대 쓰면 안 됩니다.""",
+
+    """[오답 패턴 6] conversion 관련 컬럼을 ad_combined_log에서 조회 금지
+conversion_id, conversion_value, is_conversion, conversion_type, attribution_window 컬럼은
+ad_combined_log_summary 테이블에만 존재하며 ad_combined_log에는 없습니다.
+잘못된 쿼리: SELECT COUNT(CASE WHEN is_conversion=true THEN 1 END) FROM ad_combined_log
+올바른 쿼리: SELECT COUNT(CASE WHEN is_conversion=true THEN 1 END) FROM ad_combined_log_summary
+CVR, ROAS, CPA 등 전환 관련 지표는 반드시 ad_combined_log_summary 테이블을 사용해야 합니다.""",
+
+    """[오답 패턴 7] 질문에서 요청하지 않은 컬럼을 SELECT에 추가 금지
+사용자가 특정 지표만 요청하면 그 지표만 SELECT에 포함해야 합니다.
+잘못된 예: '음식 카테고리별 CTR 상위 10개'를 요청했는데 impressions, clicks를 추가로 SELECT
+올바른 쿼리: SELECT food_category, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent
+잘못된 쿼리: SELECT food_category, COUNT(*) AS impressions, SUM(CAST(is_click AS INT)) AS clicks, ROUND(...) AS ctr_percent
+요청한 컬럼과 집계 기준(GROUP BY 대상)만 SELECT에 포함하세요.""",
+
+    """[오답 패턴 8] 전환 매출 집계 시 CASE WHEN...ELSE 0 대신 WHERE is_conversion=true 사용
+전환이 발생한 행의 conversion_value를 합산할 때 CASE WHEN으로 우회하면 안 됩니다.
+잘못된 쿼리: SUM(CASE WHEN is_conversion=true THEN conversion_value ELSE 0 END) AS total_revenue
+올바른 쿼리: SUM(conversion_value) AS total_revenue ... WHERE is_conversion=true
+전환 데이터만 조회할 때는 반드시 WHERE 절에 AND is_conversion=true를 추가하세요.""",
 ]
+
+# DOCS_SCHEMA_MAPPER 삭제 — SchemaMapper 제거로 불필요 (Design §4.2)
+# DDL 선택은 QA metadata 역추적(_extract_tables_from_qa_results)으로 대체됨
 
 
 # ========================= QA 예제 (70개) =========================
@@ -1359,17 +1386,18 @@ ORDER BY day, impressions DESC""",
     # ── GROUP BY 과잉 방지 패턴 — WHERE에 고정된 파티션은 GROUP BY 생략 ────
     {
         "question": "2026년 3월 8일부터 14일까지 7일간 캠페인별 일별 평균 CTR",
-        "sql": """SELECT campaign_id, AVG(daily_ctr) AS avg_ctr
+        "sql": """SELECT campaign_id, AVG(daily_ctr_percent) AS avg_ctr_percent
 FROM (
     SELECT day, campaign_id,
-        COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS daily_ctr
+        ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS daily_ctr_percent
     FROM ad_combined_log_summary
     WHERE year='2026' AND month='03'
       AND day IN ('08','09','10','11','12','13','14')
     GROUP BY day, campaign_id
 ) sub
 GROUP BY campaign_id
-ORDER BY avg_ctr DESC""",
+ORDER BY avg_ctr_percent DESC""",
+        "tables": ["ad_combined_log_summary"],
     },
     # ── CASE 레이블 단순 패턴 — 괄호·범위 설명 없이 ────────────────────────
     {
@@ -1386,13 +1414,14 @@ ORDER BY time_period""",
     {
         "question": "어제 CTR은 높은데 전환이 없는 캠페인을 찾아줘",
         "sql": """SELECT campaign_id,
-    COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr
+    ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent
 FROM ad_combined_log_summary
 WHERE year='{{ y_year }}' AND month='{{ y_month }}' AND day='{{ y_day }}'
 GROUP BY campaign_id
-HAVING COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) > 0.05
+HAVING ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) > 5.0
   AND COUNT(CASE WHEN is_conversion = true THEN 1 END) = 0
-ORDER BY ctr DESC""",
+ORDER BY ctr_percent DESC""",
+        "tables": ["ad_combined_log_summary"],
     },
     # ── WHERE is_conversion=true 직접 필터 패턴 ────────────────────────────
     {
@@ -1416,8 +1445,102 @@ WHERE year='2026' AND month='03'
   AND is_conversion = true
 GROUP BY advertiser_id
 ORDER BY total_revenue DESC""",
+        "tables": ["ad_combined_log_summary"],
+    },
+    # ── 멀티메트릭 CTR percent 요약 패턴 (T021/T046 보완) ──────────────────
+    {
+        "question": "어제 전체 광고 노출수, 클릭수, 전환수, 클릭률(CTR)을 보여줘",
+        "sql": """SELECT
+    COUNT(*) AS impressions,
+    SUM(CAST(is_click AS INT)) AS clicks,
+    SUM(CAST(is_conversion AS INT)) AS conversions,
+    ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent
+FROM ad_combined_log_summary
+WHERE year = date_format(date_add('day', -1, current_date), '%Y')
+  AND month = date_format(date_add('day', -1, current_date), '%m')
+  AND day   = date_format(date_add('day', -1, current_date), '%d')""",
+        "tables": ["ad_combined_log_summary"],
+    },
+    {
+        "question": "2026년 3월 전체 광고 노출수, 클릭수, 전환수, CTR 요약",
+        "sql": """SELECT
+    COUNT(*) AS impressions,
+    SUM(CAST(is_click AS INT)) AS clicks,
+    SUM(CAST(is_conversion AS INT)) AS conversions,
+    ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent
+FROM ad_combined_log_summary
+WHERE year='2026' AND month='03'""",
+        "tables": ["ad_combined_log_summary"],
+    },
+    # ── ORDER BY conversions 패턴 (T050 보완) ───────────────────────────────
+    {
+        "question": "2026년 3월 음식 카테고리별 노출수와 전환수 상위 10개",
+        "sql": """SELECT
+    food_category,
+    COUNT(*) AS impressions,
+    COUNT(CASE WHEN is_conversion = true THEN 1 END) AS conversions
+FROM ad_combined_log_summary
+WHERE year='2026' AND month='03'
+GROUP BY food_category
+ORDER BY conversions DESC
+LIMIT 10""",
+        "tables": ["ad_combined_log_summary"],
+    },
+    # ── WHERE is_conversion=true 직접 필터 (T009/T040 보완) ─────────────────
+    {
+        "question": "어제 총 전환 매출은 얼마야?",
+        "sql": """SELECT SUM(conversion_value) AS total_revenue
+FROM ad_combined_log_summary
+WHERE year = date_format(date_add('day', -1, current_date), '%Y')
+  AND month = date_format(date_add('day', -1, current_date), '%m')
+  AND day   = date_format(date_add('day', -1, current_date), '%d')
+  AND is_conversion = true""",
+        "tables": ["ad_combined_log_summary"],
+    },
+    # ── GROUP BY year, month 패턴 (T064 보완) ───────────────────────────────
+    {
+        "question": "2026년 2월과 3월의 월별 전체 노출수, 클릭수, 전환수를 비교해줘",
+        "sql": """SELECT
+    year,
+    month,
+    COUNT(*) AS impressions,
+    COUNT(CASE WHEN is_click = true THEN 1 END) AS clicks,
+    COUNT(CASE WHEN is_conversion = true THEN 1 END) AS conversions
+FROM ad_combined_log_summary
+WHERE (year='2026' AND month='02') OR (year='2026' AND month='03')
+GROUP BY year, month
+ORDER BY year, month""",
+        "tables": ["ad_combined_log_summary"],
     },
 ]
+
+
+def reset_collections() -> None:
+    """기존 ChromaDB 컬렉션 삭제 — cosine 메트릭으로 재생성 준비.
+
+    sql-collection, documentation-collection: 삭제 후 VannaAthena init 시 cosine으로 재생성.
+    ddl-collection: Phase 2 이후 미사용 — 삭제만 수행.
+    Design §2.1 FR-PRO-01 기준.
+    """
+    import chromadb as _chromadb
+
+    chroma_host = os.getenv("CHROMA_HOST", "chromadb.chromadb.svc.cluster.local")
+    chroma_port = int(os.getenv("CHROMA_PORT", "8000"))
+    client = _chromadb.HttpClient(host=chroma_host, port=chroma_port)
+
+    for name in ["sql-collection", "documentation-collection"]:
+        try:
+            client.delete_collection(name)
+            logger.info(f"컬렉션 삭제 완료: {name}")
+        except Exception:
+            logger.info(f"컬렉션 미존재 (무시): {name}")
+
+    # ddl-collection: Phase 2 이후 미사용 — 정리 목적으로만 삭제
+    try:
+        client.delete_collection("ddl-collection")
+        logger.info("ddl-collection 삭제 완료 (Phase 2 이후 미사용)")
+    except Exception:
+        pass
 
 
 def initialize_vanna():
@@ -1442,30 +1565,8 @@ def initialize_vanna():
         raise
 
 
-def train_ddl(vanna_instance) -> None:
-    """DDL 학습."""
-    logger.info("DDL 학습 시작...")
-
-    try:
-        # Vanna train()은 ddl과 documentation을 동시에 전달하면 documentation만 저장됨 (early return 버그)
-        # → 반드시 분리 호출
-        vanna_instance.train(ddl=DDL_AD_COMBINED_LOG)
-        logger.info("✓ ad_combined_log DDL 학습 완료")
-        vanna_instance.train(
-            documentation="테이블: ad_combined_log - 광고 노출 및 클릭 이벤트 (시간 단위, hour 파티션)"
-        )
-        logger.info("✓ ad_combined_log documentation 학습 완료")
-
-        vanna_instance.train(ddl=DDL_AD_COMBINED_LOG_SUMMARY)
-        logger.info("✓ ad_combined_log_summary DDL 학습 완료")
-        vanna_instance.train(
-            documentation="테이블: ad_combined_log_summary - 광고 성과 일일 요약 (전환 데이터 포함)"
-        )
-        logger.info("✓ ad_combined_log_summary documentation 학습 완료")
-
-    except Exception as e:
-        logger.error(f"DDL 학습 실패: {e}")
-        raise
+# train_ddl 제거 — DDL은 rag_retriever.py의 _TABLE_DDL dict에서 직접 주입 (Design §3.2)
+# def train_ddl(vanna_instance) -> None: ...
 
 
 def train_documentation(vanna_instance) -> None:
@@ -1479,7 +1580,8 @@ def train_documentation(vanna_instance) -> None:
         ("DOCS_NONEXISTENT_COLUMNS", DOCS_NONEXISTENT_COLUMNS),
         ("DOCS_CATEGORICAL_VALUES", DOCS_CATEGORICAL_VALUES),
         ("DOCS_GLOSSARY", DOCS_GLOSSARY),
-        ("DOCS_SCHEMA_MAPPER", DOCS_SCHEMA_MAPPER),
+        # DOCS_SCHEMA_MAPPER 제거 — SchemaMapper 삭제로 불필요 (Design §4.2)
+        ("DOCS_NEGATIVE_EXAMPLES", DOCS_NEGATIVE_EXAMPLES),  # 신규 (Design §4.3)
     ]
 
     total = sum(len(docs) for _, docs in all_docs)
@@ -1496,14 +1598,39 @@ def train_documentation(vanna_instance) -> None:
         raise
 
 
+def _detect_tables_from_sql(sql: str) -> list[str]:
+    """SQL에서 참조하는 테이블 이름 자동 감지.
+
+    ad_combined_log_summary와 ad_combined_log(not summary)를 구분하여 반환.
+    Design §3.6 테이블 분류 기준.
+    """
+    import re as _re
+    tables: list[str] = []
+    if "ad_combined_log_summary" in sql:
+        tables.append("ad_combined_log_summary")
+    if _re.search(r"ad_combined_log(?!_summary)", sql):
+        tables.append("ad_combined_log")
+    return tables if tables else ["ad_combined_log_summary"]
+
+
 def train_qa_examples(vanna_instance) -> None:
-    """QA 예제 학습."""
+    """QA 예제 학습 — tables metadata 포함하여 DDL 역추적 지원.
+
+    Design §3.2 기준: add_question_sql(tables=...) 호출로
+    ChromaDB metadata에 참조 테이블 저장 → retrieve_v2()에서 DDL 역추적에 활용.
+    qa dict에 "tables" 명시 시 우선 사용, 없으면 SQL에서 자동 감지.
+    """
     logger.info(f"QA 예제 학습 시작 ({len(QA_EXAMPLES)}개)...")
 
     try:
         for idx, qa in enumerate(QA_EXAMPLES, 1):
-            vanna_instance.train(question=qa["question"], sql=qa["sql"])
-            logger.info(f"✓ QA 예제 {idx}/{len(QA_EXAMPLES)} 학습 완료")
+            tables = qa.get("tables") or _detect_tables_from_sql(qa["sql"])
+            vanna_instance.add_question_sql(
+                question=qa["question"],
+                sql=qa["sql"],
+                tables=tables,
+            )
+            logger.info(f"✓ QA 예제 {idx}/{len(QA_EXAMPLES)} 학습 완료 (tables={tables})")
     except Exception as e:
         logger.error(f"QA 예제 학습 실패: {e}")
         raise
@@ -1537,8 +1664,9 @@ def main() -> None:
     logger.info("=" * 80)
 
     try:
-        vanna = initialize_vanna()
-        train_ddl(vanna)
+        reset_collections()          # Step 1: 기존 컬렉션 삭제 (cosine 재생성 준비)
+        vanna = initialize_vanna()   # Step 2: VannaAthena init → _ensure_cosine_collections()
+        # train_ddl 제거 — DDL은 _TABLE_DDL dict 직접 주입 (Design §3.2)
         train_documentation(vanna)
         train_qa_examples(vanna)
         verify_training(vanna)
@@ -1549,7 +1677,7 @@ def main() -> None:
         logger.info("학습된 컨텐츠:")
         logger.info("  - DDL: 2개 테이블 (ad_combined_log, ad_combined_log_summary)")
         logger.info(
-            f"  - Documentation: {sum(len(d) for d in [DOCS_BUSINESS_METRICS, DOCS_ATHENA_RULES, DOCS_POLICIES, DOCS_NONEXISTENT_COLUMNS, DOCS_CATEGORICAL_VALUES, DOCS_GLOSSARY, DOCS_SCHEMA_MAPPER])}개 항목 (7개 카테고리)"
+            f"  - Documentation: {sum(len(d) for d in [DOCS_BUSINESS_METRICS, DOCS_ATHENA_RULES, DOCS_POLICIES, DOCS_NONEXISTENT_COLUMNS, DOCS_CATEGORICAL_VALUES, DOCS_GLOSSARY, DOCS_NEGATIVE_EXAMPLES])}개 항목 (7개 카테고리)"
         )
         logger.info(
             f"  - QA 예제: {len(QA_EXAMPLES)}개 (CTR/CVR/TOP-N/기간비교/지역기기 패러프레이징 포함)"

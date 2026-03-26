@@ -123,7 +123,7 @@ class TestPhaseADDLScore:
         assert result[0]["score"] == 1.0  # fallback은 score=1.0 고정
 
     def test_tc_a_04_documentation_with_score_returns_correct_format(self):
-        """TC-A-04: get_related_documentation_with_score() score=0.5 (distance=1.0)"""
+        """TC-A-04: get_related_documentation_with_score() cosine score (distance=1.0 → score=0.0)"""
         from src.query_pipeline import _VannaAthena
 
         mock_vanna = self._make_vanna_with_doc_collection(
@@ -133,15 +133,17 @@ class TestPhaseADDLScore:
         result = _VannaAthena.get_related_documentation_with_score(mock_vanna, question="CTR 정의")
 
         assert len(result) == 1
-        assert result[0]["score"] == pytest.approx(0.5)
+        # cosine: score = max(0.0, 1.0 - 1.0) = 0.0
+        assert result[0]["score"] == pytest.approx(0.0)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Phase B: SchemaMapper 테스트
 # ──────────────────────────────────────────────────────────────────────────────
 
+@pytest.mark.skip(reason="SchemaMapper 파일 삭제됨 (pipeline-rag-optimization Phase 2)")
 class TestPhaseBSchemaMapper:
-    """TC-B-01~08: SchemaMapper 키워드→테이블 매핑"""
+    """TC-B-01~08: SchemaMapper 키워드→테이블 매핑 — SchemaMapper 제거로 obsolete"""
 
     def test_tc_b_01_cvr_maps_to_summary_definitive(self):
         """TC-B-01: CVR → ad_combined_log_summary 확정"""
@@ -231,8 +233,9 @@ class TestPhaseBSchemaMapper:
 # Phase C: DDL 검색 최적화 테스트
 # ──────────────────────────────────────────────────────────────────────────────
 
+@pytest.mark.skip(reason="SchemaHint/SchemaMapper 제거됨 (pipeline-rag-optimization Phase 2)")
 class TestPhaseCDDLOptimization:
-    """TC-C-01~02: Schema Hint 기반 DDL 직접 주입"""
+    """TC-C-01~02: Schema Hint 기반 DDL 직접 주입 — SchemaMapper 제거로 obsolete"""
 
     def _make_retriever(self, mock_vanna, mock_reranker=None, mock_anthropic=None):
         from src.pipeline.rag_retriever import RAGRetriever
@@ -304,8 +307,9 @@ class TestPhaseCDDLOptimization:
 # Phase D: LLM 선별 조건부 테스트
 # ──────────────────────────────────────────────────────────────────────────────
 
+@pytest.mark.skip(reason="SchemaHint/LLM필터 제거됨 (pipeline-rag-optimization Phase 2)")
 class TestPhaseDLLMFilterConditional:
-    """TC-D-01~04: is_definitive 여부에 따른 LLM 선별 + Reranker top_k 분기"""
+    """TC-D-01~04: is_definitive LLM 선별 분기 — SchemaMapper 제거로 obsolete"""
 
     def _make_candidates(self, n=3):
         from src.models.rag import CandidateDocument

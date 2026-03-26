@@ -43,8 +43,8 @@ class DynamoDBHistoryRecorder(HistoryRecorder):
         item: dict[str, Any] = {
             "history_id": history_id,
             "timestamp": now.isoformat(),
-            "slack_user_id": _hash_user_id(ctx.slack_user_id),
-            "slack_channel_id": ctx.slack_channel_id,
+            "slack_user_id": _hash_user_id(ctx.slack_user_id) or None,  # 빈 문자열 → None
+            "slack_channel_id": ctx.slack_channel_id or None,  # 빈 문자열 → None (GSI 키 빈값 허용 불가)
             "original_question": ctx.original_question,
             "refined_question": ctx.refined_question or "",
             "intent": ctx.intent.value if ctx.intent else "unknown",

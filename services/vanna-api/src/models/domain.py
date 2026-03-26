@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Optional
 from pydantic import BaseModel, Field
 
-from .rag import SchemaHint
+# from .rag import SchemaHint  # 제거: SchemaMapper 삭제에 따라 — Design §3.4
 
 
 # ---------------------------------------------------------------------------
@@ -117,8 +117,8 @@ class PipelineContext(BaseModel):
     # Step 3
     keywords: list[str] = Field(default_factory=list)
 
-    # Step 3.5 (rag-retrieval-optimization)
-    schema_hint: Optional[SchemaHint] = None
+    # Step 3.5 제거: SchemaMapper 삭제에 따라 — Design §3.4
+    # schema_hint: Optional[SchemaHint] = None
 
     # Step 4
     rag_context: Optional[RAGContext] = None

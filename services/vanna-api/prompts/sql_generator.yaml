@@ -54,12 +54,11 @@ cot_template: |
             예) 일별 집계: GROUP BY day  (year/month는 WHERE에 있으므로 생략)
             예) 플랫폼+일별: GROUP BY day, platform
   Step 4. 집계·필터·정렬 로직을 설계한다.
-          ⚠️ 지표 계산은 반드시 아래 공식만 사용 — 임의 변형·퍼센트 변환 절대 금지
-          - CTR = COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0)
-            → 비율(0~1) 그대로 반환. * 100 퍼센트 변환·ROUND·_percent suffix 절대 금지
-          - CVR = COUNT(CASE WHEN is_conversion = true THEN 1 END) * 1.0
-                  / NULLIF(COUNT(CASE WHEN is_click = true THEN 1 END), 0)
-            → 분모는 반드시 클릭수. COUNT(*) 전체 노출수 사용 절대 금지
+          ⚠️ 지표 계산은 반드시 아래 공식만 사용
+          - CTR = ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent
+            퍼센트(%) 형식으로 반환. NULLIF로 0 나눗셈 방지 필수
+          - CVR = ROUND(SUM(CAST(is_conversion AS INT)) * 100.0 / NULLIF(SUM(CAST(is_click AS INT)), 0), 2) AS cvr_percent
+            분모는 반드시 클릭수. COUNT(*) 전체 노출수 사용 절대 금지
           - ROAS = SUM(CASE WHEN is_conversion = true THEN conversion_value ELSE 0 END)
                    / NULLIF(SUM(cost_per_impression + cost_per_click), 0)
             → 분모는 cost_per_impression + cost_per_click 합산. 단일 컬럼 사용 금지
@@ -87,7 +86,8 @@ negative_rules: |
     6. 존재하지 않는 테이블 참조 금지 — ad_combined_log, ad_combined_log_summary 두 개만 존재
     7. 비율 계산 시 NULLIF 없이 나눗셈 금지 (ZeroDivisionError 방지)
     8. CAST(hour AS INT) 없이 hour 컬럼 숫자 비교 금지 (hour는 STRING 타입)
-    9. CTR/CVR/ROAS 결과에 * 100 퍼센트 변환 금지 — 반드시 0~1 비율로 반환
+    9. CTR/CVR는 반드시 퍼센트 형식으로 반환 — ctr_percent, cvr_percent suffix 사용
+       0~1 비율 반환 금지. 예: ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent
    10. WHERE 조건에 고정된 year/month/day를 SELECT·GROUP BY에 중복 추가 금지
        (예: WHERE year='2026' AND month='03' 이면 GROUP BY에 year, month 추가 금지)
    11. 날짜 범위 day BETWEEN '08' AND '14' 금지

@@ -62,7 +62,6 @@ def _build_pipeline(phase2_enabled: bool):
 
     with patch.object(qp_module, "PHASE2_RAG_ENABLED", phase2_enabled), \
          patch.object(qp_module, "MULTI_TURN_ENABLED", False), \
-         patch.object(qp_module, "SCHEMA_MAPPER_ENABLED", False), \
          patch("anthropic.Anthropic", return_value=mock_anthropic_instance), \
          patch.object(qp_module, "IntentClassifier", MagicMock()), \
          patch.object(qp_module, "QuestionRefiner", MagicMock()) as mock_qr_cls, \
