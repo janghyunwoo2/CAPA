@@ -34,14 +34,10 @@ scheduler:
 dags:
   persistence:
     enabled: true
-<<<<<<< HEAD
     repo: https://github.com/janghyunwoo2/CAPA.git
     branch: develop
     subPath: services/airflow-dags
     wait: 60
-=======
-    size: 1Gi
->>>>>>> 5f573b1 (feat: 광고 로그 생성 로직 최종 복구 및 반영 (048df20 기반))
 
 # 환경 변수
 env:
