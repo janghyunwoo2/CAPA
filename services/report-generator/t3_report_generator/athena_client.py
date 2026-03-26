@@ -253,6 +253,16 @@ def get_daily_kpi(start_date: str, end_date: str) -> dict[str, Any]:
             2
         ) AS ctr,
         ROUND(
+            CAST(COUNT(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN 1 END) AS DOUBLE)
+            / NULLIF(SUM(CAST(is_click AS INT)), 0) * 100,
+            2
+        ) AS cvr,
+        ROUND(
+            SUM(CAST(cost_per_click AS DOUBLE))
+            / NULLIF(SUM(CAST(is_click AS INT)), 0),
+            2
+        ) AS cpc,
+        ROUND(
             SUM(CASE WHEN conversion_type = 'purchase' AND is_click = TRUE THEN conversion_value ELSE 0 END) / NULLIF(SUM(COALESCE(cost_per_click, 0)), 0) * 100,
             2
         ) AS roas
