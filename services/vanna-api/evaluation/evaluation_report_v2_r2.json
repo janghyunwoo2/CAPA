@@ -1,0 +1,335 @@
+{
+  "timestamp": "2026-03-26T10:35:13.137803+09:00",
+  "api_url": "http://vanna-api:8000",
+  "total_cases": 36,
+  "exec": {
+    "passed": 18,
+    "accuracy": 0.5
+  },
+  "details": [
+    {
+      "test_id": "T001",
+      "question": "어제 캠페인별 클릭률(CTR)을 내림차순으로 보여줘",
+      "ground_truth_sql": "SELECT campaign_id, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='25' GROUP BY campaign_id ORDER BY ctr_percent DESC",
+      "generated_sql": "SELECT\n    campaign_id,\n    ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day='25'\nGROUP BY campaign_id\nORDER BY ctr_percent DESC LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": null,
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T004",
+      "question": "어제 캠페인별 전환율(CVR) 상위 5개를 보여줘",
+      "ground_truth_sql": "SELECT campaign_id, ROUND(SUM(CAST(is_conversion AS INT)) * 100.0 / NULLIF(SUM(CAST(is_click AS INT)), 0), 2) AS cvr_percent FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='25' GROUP BY campaign_id ORDER BY cvr_percent DESC LIMIT 5",
+      "generated_sql": "SELECT\n    campaign_id,\n    ROUND(SUM(CAST(is_conversion AS INT)) * 100.0 / NULLIF(SUM(CAST(is_click AS INT)), 0), 2) AS cvr_percent\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day='25'\nGROUP BY campaign_id\nHAVING SUM(CAST(is_click AS INT)) > 0\nORDER BY cvr_percent DESC\nLIMIT 5",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 5행 vs GT 5행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T007",
+      "question": "어제 지역별 노출 수를 순위대로 보여줘",
+      "ground_truth_sql": "SELECT delivery_region, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='25' GROUP BY delivery_region ORDER BY impressions DESC",
+      "generated_sql": "SELECT\n  delivery_region,\n  COUNT(*) AS impressions\nFROM ad_combined_log_summary\nWHERE year = date_format(date_add('day', -1, current_date), '%Y')\n  AND month = date_format(date_add('day', -1, current_date), '%m')\n  AND day = date_format(date_add('day', -1, current_date), '%d')\nGROUP BY delivery_region\nORDER BY impressions DESC LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": null,
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T008",
+      "question": "오늘 데스크톱/모바일/태블릿 기기별 클릭 수를 비교해줘",
+      "ground_truth_sql": "SELECT device_type, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='26' GROUP BY device_type ORDER BY clicks DESC",
+      "generated_sql": "SELECT\n    device_type,\n    COUNT(CASE WHEN is_click = true THEN 1 END) AS click_count\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day='26'\nGROUP BY device_type\nORDER BY click_count DESC LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": "양쪽 빈 결과 (데이터 없는 날짜) → PASS",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T009",
+      "question": "어제 총 전환 매출은 얼마야?",
+      "ground_truth_sql": "SELECT SUM(conversion_value) AS total_revenue FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='25' AND is_conversion=true",
+      "generated_sql": "SELECT\n  SUM(conversion_value) AS total_conversion_revenue\nFROM ad_combined_log_summary\nWHERE year = date_format(date_add('day', -1, current_date), '%Y')\n  AND month = date_format(date_add('day', -1, current_date), '%m')\n  AND day = date_format(date_add('day', -1, current_date), '%d')\n  AND is_conversion = true LIMIT 1000",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 1행 vs GT 1행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T010",
+      "question": "오늘 시간대별 노출 수를 보여줘",
+      "ground_truth_sql": "SELECT hour, COUNT(*) AS impressions FROM ad_combined_log WHERE year='2026' AND month='03' AND day='26' GROUP BY hour ORDER BY hour",
+      "generated_sql": "SELECT\n    hour,\n    COUNT(*) AS impressions\nFROM ad_combined_log\nWHERE year = '2026'\n    AND month = '03'\n    AND day = '26'\nGROUP BY hour\nORDER BY hour ASC LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": null,
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T015",
+      "question": "이번 달 전체 캠페인별 총 노출 수를 보여줘",
+      "ground_truth_sql": "SELECT campaign_id, COUNT(*) AS total_impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY campaign_id ORDER BY total_impressions DESC",
+      "generated_sql": "SELECT\n    campaign_id,\n    COUNT(*) AS total_impressions\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03'\nGROUP BY campaign_id\nORDER BY total_impressions DESC LIMIT 1000",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 5행 vs GT 5행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T016",
+      "question": "어제 강남구 지역 클릭 수는?",
+      "ground_truth_sql": "SELECT COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='25' AND delivery_region='강남구'",
+      "generated_sql": "SELECT\n  SUM(CAST(is_click AS INT)) AS click_count\nFROM ad_combined_log_summary\nWHERE year = date_format(date_add('day', -1, current_date), '%Y')\n  AND month = date_format(date_add('day', -1, current_date), '%m')\n  AND day = date_format(date_add('day', -1, current_date), '%d')\n  AND delivery_region = '강남구' LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": null,
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T019",
+      "question": "오늘 시간대별 클릭 수 추이를 보여줘",
+      "ground_truth_sql": "SELECT hour, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log WHERE year='2026' AND month='03' AND day='26' GROUP BY hour ORDER BY hour",
+      "generated_sql": "SELECT\n    hour,\n    COUNT(CASE WHEN is_click = true THEN 1 END) AS click_count\nFROM ad_combined_log\nWHERE year = '2026' AND month = '03' AND day = '26'\nGROUP BY hour\nORDER BY hour ASC LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": null,
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T021",
+      "question": "어제 전체 광고 노출수, 클릭수, 전환수, 클릭률(CTR)을 보여줘",
+      "ground_truth_sql": "SELECT COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='25'",
+      "generated_sql": "SELECT\n  COUNT(*) AS impressions,\n  SUM(CAST(is_click AS INT)) AS clicks,\n  SUM(CAST(is_conversion AS INT)) AS conversions,\n  SUM(CAST(is_click AS INT)) * 1.0 / NULLIF(COUNT(*), 0) AS ctr\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day='25' LIMIT 1000",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 1행 vs GT 1행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T022",
+      "question": "오늘 각 캠페인별로 노출, 클릭, 전환, 전환율(CVR)을 상세 비교해줘",
+      "ground_truth_sql": "SELECT campaign_id, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent, ROUND(SUM(CAST(is_conversion AS INT)) * 100.0 / NULLIF(SUM(CAST(is_click AS INT)), 0), 2) AS cvr_percent FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='26' GROUP BY campaign_id ORDER BY impressions DESC",
+      "generated_sql": "SELECT\n    campaign_id,\n    COUNT(*) AS impressions,\n    SUM(CAST(is_click AS INT)) AS clicks,\n    SUM(CAST(is_conversion AS INT)) AS conversions,\n    ROUND(SUM(CAST(is_conversion AS INT)) * 1.0 / NULLIF(SUM(CAST(is_click AS INT)), 0), 4) AS cvr\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day='26'\nGROUP BY campaign_id\nORDER BY campaign_id LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": "양쪽 빈 결과 (데이터 없는 날짜) → PASS",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T023",
+      "question": "어제 음식 카테고리별 클릭률(CTR) 상위 10개를 보여줘",
+      "ground_truth_sql": "SELECT food_category, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='25' GROUP BY food_category ORDER BY ctr_percent DESC LIMIT 10",
+      "generated_sql": "SELECT\n  food_category,\n  ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day='25'\nGROUP BY food_category\nORDER BY ctr_percent DESC\nLIMIT 10",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 10행 vs GT 10행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T027",
+      "question": "오늘 광고주별 노출수, 총 광고비, 전환 매출, ROAS를 한 번에 보여줘",
+      "ground_truth_sql": "SELECT advertiser_id, COUNT(*) AS impressions, SUM(cost_per_impression + cost_per_click) AS total_cost, SUM(CASE WHEN is_conversion=true THEN conversion_value ELSE 0 END) AS revenue, SUM(CASE WHEN is_conversion=true THEN conversion_value ELSE 0 END) / NULLIF(SUM(cost_per_impression + cost_per_click), 0) AS roas FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='26' GROUP BY advertiser_id ORDER BY roas DESC",
+      "generated_sql": "SELECT\n    advertiser_id,\n    COUNT(*) AS impressions,\n    SUM(cost_per_impression + cost_per_click) AS total_cost,\n    SUM(CASE WHEN is_conversion = true THEN conversion_value ELSE 0 END) AS conversion_revenue,\n    SUM(CASE WHEN is_conversion = true THEN conversion_value ELSE 0 END) / NULLIF(SUM(cost_per_impression + cost_per_click), 0) AS roas\nFROM ad_combined_log_summary\nWHERE year = '2026' AND month = '03' AND day = '26'\nGROUP BY advertiser_id\nORDER BY total_cost DESC LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": "양쪽 빈 결과 (데이터 없는 날짜) → PASS",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T033",
+      "question": "오늘 지역별 노출수, CTR, 전환수를 한 번에 보여줘",
+      "ground_truth_sql": "SELECT delivery_region, COUNT(*) AS impressions, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='26' GROUP BY delivery_region ORDER BY impressions DESC",
+      "generated_sql": "SELECT\n  delivery_region,\n  COUNT(*) AS impressions,\n  ROUND(SUM(CAST(is_click AS INT)) * 1.0 / NULLIF(COUNT(*), 0), 4) AS ctr,\n  SUM(CAST(is_conversion AS INT)) AS conversions\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day='26'\nGROUP BY delivery_region\nORDER BY impressions DESC LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": "양쪽 빈 결과 (데이터 없는 날짜) → PASS",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T035",
+      "question": "오늘 시간대별 노출 수와 클릭수 추이를 보여줘",
+      "ground_truth_sql": "SELECT hour, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log WHERE year='2026' AND month='03' AND day='26' GROUP BY hour ORDER BY hour",
+      "generated_sql": "SELECT\n    hour,\n    COUNT(*) AS impressions,\n    SUM(CAST(is_click AS INT)) AS clicks\nFROM ad_combined_log\nWHERE year='2026' AND month='03' AND day='26'\nGROUP BY hour\nORDER BY hour ASC LIMIT 1000",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 10행 vs GT 10행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T026",
+      "question": "2026년 3월 14일 클릭은 있지만 전환이 없는 캠페인 목록",
+      "ground_truth_sql": "SELECT campaign_id, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY campaign_id HAVING COUNT(CASE WHEN is_click=true THEN 1 END) > 0 AND COUNT(CASE WHEN is_conversion=true THEN 1 END) = 0 ORDER BY clicks DESC",
+      "generated_sql": "SELECT\n    campaign_id,\n    COUNT(CASE WHEN is_click = true THEN 1 END) AS click_count,\n    COUNT(CASE WHEN is_conversion = true THEN 1 END) AS conversion_count\nFROM ad_combined_log_summary\nWHERE year = '2026' AND month = '03' AND day = '14'\nGROUP BY campaign_id\nHAVING COUNT(CASE WHEN is_click = true THEN 1 END) > 0\n    AND COUNT(CASE WHEN is_conversion = true THEN 1 END) = 0\nORDER BY click_count DESC LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": "양쪽 빈 결과 (데이터 없는 날짜) → PASS",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T029",
+      "question": "2026년 3월 14일 오전(00~11시)과 오후(12~23시) 클릭 수 비교",
+      "ground_truth_sql": "SELECT CASE WHEN CAST(hour AS INT) < 12 THEN '오전' ELSE '오후' END AS time_period, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log WHERE year='2026' AND month='03' AND day='14' GROUP BY CASE WHEN CAST(hour AS INT) < 12 THEN '오전' ELSE '오후' END ORDER BY time_period",
+      "generated_sql": "SELECT\n  CASE WHEN CAST(hour AS INT) < 12 THEN '오전' ELSE '오후' END AS time_period,\n  SUM(CAST(is_click AS INT)) AS click_count\nFROM ad_combined_log\nWHERE year='2026' AND month='03' AND day='14'\nGROUP BY CASE WHEN CAST(hour AS INT) < 12 THEN '오전' ELSE '오후' END\nORDER BY time_period LIMIT 1000",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 2행 vs GT 2행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T030",
+      "question": "2026년 3월 14일 전환 타입별 총 매출과 평균 전환 가치",
+      "ground_truth_sql": "SELECT conversion_type, COUNT(*) AS conversions, SUM(conversion_value) AS total_revenue, AVG(conversion_value) AS avg_value FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND is_conversion=true GROUP BY conversion_type ORDER BY total_revenue DESC",
+      "generated_sql": "SELECT\n    conversion_type,\n    SUM(conversion_value) AS total_revenue,\n    ROUND(AVG(conversion_value), 2) AS avg_conversion_value\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day='14' AND is_conversion=true\nGROUP BY conversion_type\nORDER BY total_revenue DESC LIMIT 1000",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 5행 vs GT 5행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T031",
+      "question": "2026년 3월 14일 검색 키워드별 클릭수 상위 10개",
+      "ground_truth_sql": "SELECT keyword, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND keyword IS NOT NULL GROUP BY keyword ORDER BY clicks DESC LIMIT 10",
+      "generated_sql": "SELECT\n    keyword,\n    COUNT(CASE WHEN is_click = true THEN 1 END) AS clicks\nFROM ad_combined_log_summary\nWHERE year = '2026' AND month = '03' AND day = '14'\nGROUP BY keyword\nORDER BY clicks DESC\nLIMIT 10",
+      "exec_score": 1.0,
+      "exec_error": null,
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T032",
+      "question": "2026년 3월 14일 가게별 전환 매출 상위 5개",
+      "ground_truth_sql": "SELECT store_id, SUM(conversion_value) AS total_revenue FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' AND is_conversion=true GROUP BY store_id ORDER BY total_revenue DESC LIMIT 5",
+      "generated_sql": "SELECT\n    store_id,\n    SUM(conversion_value) AS total_conversion_value\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day='14' AND is_conversion=true\nGROUP BY store_id\nORDER BY total_conversion_value DESC\nLIMIT 5",
+      "exec_score": 1.0,
+      "exec_error": null,
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T036",
+      "question": "2026년 3월 8일부터 14일까지 7일간 일별 impression 수 추이",
+      "ground_truth_sql": "SELECT day, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY day ORDER BY day",
+      "generated_sql": "SELECT\n  day,\n  COUNT(*) AS impression\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day >= '08' AND day <= '14'\nGROUP BY day\nORDER BY day ASC LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": null,
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T038",
+      "question": "2026년 3월 8일부터 14일까지 7일간 캠페인별 총 impression 합계",
+      "ground_truth_sql": "SELECT campaign_id, COUNT(*) AS total_impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY campaign_id ORDER BY total_impressions DESC",
+      "generated_sql": "SELECT\n    campaign_id,\n    COUNT(*) AS total_impressions\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14')\nGROUP BY campaign_id\nORDER BY total_impressions DESC LIMIT 1000",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 5행 vs GT 5행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T040",
+      "question": "2026년 3월 8일부터 14일까지 7일간 광고주별 총 전환 매출",
+      "ground_truth_sql": "SELECT advertiser_id, SUM(conversion_value) AS total_revenue FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') AND is_conversion=true GROUP BY advertiser_id ORDER BY total_revenue DESC",
+      "generated_sql": "SELECT\n    advertiser_id,\n    SUM(conversion_value) AS total_conversion_value\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14')\n    AND is_conversion = true\nGROUP BY advertiser_id\nORDER BY total_conversion_value DESC LIMIT 1000",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 10행 vs GT 10행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T042",
+      "question": "2026년 3월 8일부터 14일까지 7일간 광고 형식별 클릭수 합계",
+      "ground_truth_sql": "SELECT ad_format, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY ad_format ORDER BY clicks DESC",
+      "generated_sql": "SELECT\n    ad_format,\n    COUNT(CASE WHEN is_click = true THEN 1 END) AS click_count\nFROM ad_combined_log_summary\nWHERE year = '2026'\n    AND month = '03'\n    AND day IN ('08', '09', '10', '11', '12', '13', '14')\nGROUP BY ad_format\nORDER BY click_count DESC LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": null,
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T044",
+      "question": "2026년 3월 8일부터 14일까지 7일간 캠페인별 일별 평균 CTR",
+      "ground_truth_sql": "SELECT campaign_id, AVG(daily_ctr_percent) AS avg_ctr_percent FROM (SELECT day, campaign_id, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS daily_ctr_percent FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day IN ('08','09','10','11','12','13','14') GROUP BY day, campaign_id) sub GROUP BY campaign_id ORDER BY avg_ctr_percent DESC",
+      "generated_sql": "SELECT\n  day,\n  campaign_id,\n  ROUND(SUM(CAST(is_click AS INT)) * 1.0 / NULLIF(COUNT(*), 0), 4) AS ctr\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day >= '08' AND day <= '14'\nGROUP BY day, campaign_id\nORDER BY day, campaign_id LIMIT 1000",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 10행 vs GT 5행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T046",
+      "question": "2026년 3월 전체 광고 노출수, 클릭수, 전환수, CTR 요약",
+      "ground_truth_sql": "SELECT COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent FROM ad_combined_log_summary WHERE year='2026' AND month='03'",
+      "generated_sql": "SELECT\n  SUM(CAST(1 AS BIGINT)) AS impressions,\n  SUM(CAST(is_click AS INT)) AS clicks,\n  SUM(CAST(is_conversion AS INT)) AS conversions,\n  SUM(CAST(is_click AS INT)) * 1.0 / NULLIF(SUM(CAST(1 AS BIGINT)), 0) AS ctr\nFROM ad_combined_log_summary\nWHERE year = '2026' AND month = '03' LIMIT 1000",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 1행 vs GT 1행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T048",
+      "question": "2026년 3월 기기 타입별 노출수, 클릭수, 전환수 비교",
+      "ground_truth_sql": "SELECT device_type, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY device_type ORDER BY impressions DESC",
+      "generated_sql": "SELECT\n    device_type,\n    COUNT(*) AS impressions,\n    SUM(CAST(is_click AS INT)) AS clicks,\n    SUM(CAST(is_conversion AS INT)) AS conversions\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03'\nGROUP BY device_type\nORDER BY impressions DESC LIMIT 1000",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 4행 vs GT 4행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T050",
+      "question": "2026년 3월 음식 카테고리별 노출수와 전환수 상위 10개",
+      "ground_truth_sql": "SELECT food_category, COUNT(*) AS impressions, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY food_category ORDER BY conversions DESC LIMIT 10",
+      "generated_sql": "SELECT\n    food_category,\n    COUNT(*) AS impressions,\n    COUNT(CASE WHEN is_conversion = true THEN 1 END) AS conversions\nFROM ad_combined_log_summary\nWHERE year = '2026' AND month = '03'\nGROUP BY food_category\nORDER BY conversions DESC, impressions DESC\nLIMIT 10",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 10행 vs GT 10행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T052",
+      "question": "2026년 3월 플랫폼별 일별 impression 추이",
+      "ground_truth_sql": "SELECT day, platform, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY day, platform ORDER BY day, impressions DESC",
+      "generated_sql": "SELECT\n    day,\n    platform,\n    COUNT(*) AS impressions\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03'\nGROUP BY day, platform\nORDER BY day ASC, platform ASC LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": null,
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T054",
+      "question": "2026년 3월 광고 위치별 전환율(CVR)",
+      "ground_truth_sql": "SELECT ad_position, ROUND(SUM(CAST(is_conversion AS INT)) * 100.0 / NULLIF(SUM(CAST(is_click AS INT)), 0), 2) AS cvr_percent FROM ad_combined_log_summary WHERE year='2026' AND month='03' GROUP BY ad_position ORDER BY cvr_percent DESC",
+      "generated_sql": "SELECT\n    ad_position,\n    ROUND(SUM(CAST(is_conversion AS INT)) * 100.0 / NULLIF(SUM(CAST(is_click AS INT)), 0), 2) AS cvr_percent\nFROM ad_combined_log_summary\nWHERE year = '2026' AND month = '03'\nGROUP BY ad_position\nORDER BY cvr_percent DESC LIMIT 1000",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 4행 vs GT 4행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T061",
+      "question": "어제 클릭이 한 건도 없었던 캠페인 목록을 보여줘",
+      "ground_truth_sql": "SELECT campaign_id, COUNT(*) AS impressions FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='25' GROUP BY campaign_id HAVING COUNT(CASE WHEN is_click=true THEN 1 END) = 0 ORDER BY impressions DESC",
+      "generated_sql": "SELECT\n    campaign_id,\n    SUM(CAST(is_click AS INT)) AS click_count\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day='25'\nGROUP BY campaign_id\nHAVING SUM(CAST(is_click AS INT)) = 0\nORDER BY campaign_id LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": "양쪽 빈 결과 (데이터 없는 날짜) → PASS",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T062",
+      "question": "어제 CTR은 높은데 전환이 없는 캠페인을 찾아줘",
+      "ground_truth_sql": "SELECT campaign_id, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='25' GROUP BY campaign_id HAVING ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) > 5.0 AND COUNT(CASE WHEN is_conversion=true THEN 1 END) = 0 ORDER BY ctr_percent DESC",
+      "generated_sql": "SELECT\n  campaign_id,\n  COUNT(*) AS impressions,\n  SUM(CAST(is_click AS INT)) AS clicks,\n  COUNT(CASE WHEN is_click = true THEN 1 END) * 1.0 / NULLIF(COUNT(*), 0) AS ctr,\n  COUNT(CASE WHEN is_conversion = true THEN 1 END) AS conversions\nFROM ad_combined_log_summary\nWHERE year = '2026' AND month = '03' AND day = '25'\nGROUP BY campaign_id\nHAVING COUNT(CASE WHEN is_click = true THEN 1 END) > 0\n  AND COUNT(CASE WHEN is_conversion = true THEN 1 END) = 0\nORDER BY ctr DESC LIMIT 1000",
+      "exec_score": 1.0,
+      "exec_error": "양쪽 빈 결과 (데이터 없는 날짜) → PASS",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T063",
+      "question": "2026년 3월 14일 ROAS가 가장 높은 광고주 TOP 5와 매출 금액",
+      "ground_truth_sql": "SELECT advertiser_id, SUM(CASE WHEN is_conversion=true THEN conversion_value ELSE 0 END) / NULLIF(SUM(cost_per_impression + cost_per_click), 0) AS roas, SUM(CASE WHEN is_conversion=true THEN conversion_value ELSE 0 END) AS revenue FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='14' GROUP BY advertiser_id ORDER BY roas DESC LIMIT 5",
+      "generated_sql": "SELECT\n    advertiser_id,\n    SUM(CASE WHEN is_conversion = true THEN conversion_value ELSE 0 END) AS revenue,\n    SUM(CASE WHEN is_conversion = true THEN conversion_value ELSE 0 END) / NULLIF(SUM(cost_per_impression + cost_per_click), 0) AS roas\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day='14'\nGROUP BY advertiser_id\nORDER BY roas DESC\nLIMIT 5",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 5행 vs GT 5행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T064",
+      "question": "2026년 2월과 3월의 월별 전체 노출수, 클릭수, 전환수를 비교해줘",
+      "ground_truth_sql": "SELECT year, month, COUNT(*) AS impressions, COUNT(CASE WHEN is_click=true THEN 1 END) AS clicks, COUNT(CASE WHEN is_conversion=true THEN 1 END) AS conversions FROM ad_combined_log_summary WHERE (year='2026' AND month='02') OR (year='2026' AND month='03') GROUP BY year, month ORDER BY year, month",
+      "generated_sql": "SELECT\n  month,\n  COUNT(*) AS impressions,\n  SUM(CAST(is_click AS INT)) AS clicks,\n  SUM(CAST(is_conversion AS INT)) AS conversions\nFROM ad_combined_log_summary\nWHERE year='2026' AND month IN ('02', '03')\nGROUP BY month\nORDER BY month LIMIT 1000",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 2행 vs GT 2행",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T065",
+      "question": "오늘 모바일에서 CTR이 가장 높은 캠페인 TOP 5",
+      "ground_truth_sql": "SELECT campaign_id, ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='26' AND device_type='mobile' GROUP BY campaign_id ORDER BY ctr_percent DESC LIMIT 5",
+      "generated_sql": "SELECT\n    campaign_id,\n    ROUND(SUM(CAST(is_click AS INT)) * 100.0 / NULLIF(COUNT(*), 0), 2) AS ctr_percent,\n    COUNT(*) AS impressions,\n    SUM(CAST(is_click AS INT)) AS clicks\nFROM ad_combined_log_summary\nWHERE year='2026' AND month='03' AND day='26'\n    AND device_type='mobile'\nGROUP BY campaign_id\nORDER BY ctr_percent DESC\nLIMIT 5",
+      "exec_score": 1.0,
+      "exec_error": "양쪽 빈 결과 (데이터 없는 날짜) → PASS",
+      "pass_reason": ""
+    },
+    {
+      "test_id": "T066",
+      "question": "어제 전환당 비용(CPA)이 가장 낮은 캠페인 TOP 5",
+      "ground_truth_sql": "SELECT campaign_id, SUM(cost_per_impression + cost_per_click) / NULLIF(COUNT(CASE WHEN is_conversion=true THEN 1 END), 0) AS cpa FROM ad_combined_log_summary WHERE year='2026' AND month='03' AND day='25' GROUP BY campaign_id HAVING COUNT(CASE WHEN is_conversion=true THEN 1 END) > 0 ORDER BY cpa ASC LIMIT 5",
+      "generated_sql": "SELECT\n    campaign_id,\n    SUM(cost_per_impression + cost_per_click) / NULLIF(COUNT(CASE WHEN is_conversion = true THEN 1 END), 0) AS cpa\nFROM ad_combined_log_summary\nWHERE year = date_format(date_add('day', -1, current_date), '%Y')\n    AND month = date_format(date_add('day', -1, current_date), '%m')\n    AND day = date_format(date_add('day', -1, current_date), '%d')\nGROUP BY campaign_id\nHAVING COUNT(CASE WHEN is_conversion = true THEN 1 END) > 0\nORDER BY cpa ASC\nLIMIT 5",
+      "exec_score": 0.0,
+      "exec_error": "결과 불일치 — 생성 5행 vs GT 5행",
+      "pass_reason": ""
+    }
+  ]
+}
