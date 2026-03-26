@@ -12,7 +12,7 @@ report-generator/
 ├── src/
 │   ├── main.py (FastAPI)
 │   ├── athena_client.py
-│   └── report_builder.py
+│   └── report_builder.py 
 └── README.md
 ```
 
