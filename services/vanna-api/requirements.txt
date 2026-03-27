@@ -13,14 +13,17 @@ pyarrow
 sqlglot
 sqlparse
 httpx
-respx
+#respx
 vanna[anthropic]==0.7.9
 matplotlib
 pandas
 
-# Phase 2: Cross-Encoder Reranker (§3.3)
+# Phase 2: 한국어 임베딩 모델 (ko-sroberta-multitask)
+# CPU 전용 torch — EKS GPU 없음, CUDA 불필요 (~400MB vs CUDA ~2.5GB)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
 sentence-transformers>=2.6.1
-einops>=0.7.0
+#einops>=0.7.0
 transformers>=4.31.0,<4.44.0
 
 # FR-PE: 프롬프트 YAML 외부화
