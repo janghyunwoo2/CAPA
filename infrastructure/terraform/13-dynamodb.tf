@@ -135,11 +135,38 @@ resource "aws_dynamodb_table" "pending_feedbacks" {
 }
 
 # ------------------------------------------------------------------------------
+# AsyncQueryManager용 DynamoDB 테이블 (ASYNC_QUERY_ENABLED=true 시 사용)
+# terraform import aws_dynamodb_table.async_tasks capa-dev-async-tasks 로 기존 테이블 가져옴
+# ------------------------------------------------------------------------------
+resource "aws_dynamodb_table" "async_tasks" {
+  name         = "${var.project_name}-${var.environment}-async-tasks"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "task_id"
+
+  attribute {
+    name = "task_id"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
+  tags = {
+    Project     = "CAPA"
+    Environment = var.environment
+    ManagedBy   = "Terraform"
+    Feature     = "text-to-sql-phase2"
+  }
+}
+
+# ------------------------------------------------------------------------------
 # IAM Policy: vanna-api → DynamoDB 접근 권한
 # ------------------------------------------------------------------------------
 resource "aws_iam_policy" "vanna_dynamodb" {
   name        = "${var.project_name}-${var.environment}-vanna-dynamodb"
-  description = "vanna-api DynamoDB query_history + pending_feedbacks 읽기/쓰기 권한"
+  description = "vanna-api DynamoDB query_history + pending_feedbacks + async_tasks 읽기/쓰기 권한"
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -159,6 +186,8 @@ resource "aws_iam_policy" "vanna_dynamodb" {
           "${aws_dynamodb_table.query_history.arn}/index/*",
           aws_dynamodb_table.pending_feedbacks.arn,
           "${aws_dynamodb_table.pending_feedbacks.arn}/index/*",
+          aws_dynamodb_table.async_tasks.arn,
+          "${aws_dynamodb_table.async_tasks.arn}/index/*",
         ]
       }
     ]

@@ -715,6 +715,36 @@ resource "kubernetes_deployment" "vanna_api" {
             value = tostring(var.reranker_top_k)
           }
 
+          # Phase 2: 신규 Feature Flags (EKS 이식)
+          env {
+            name  = "MULTI_TURN_ENABLED"
+            value = tostring(var.multi_turn_enabled)
+          }
+          env {
+            name  = "SELF_CORRECTION_ENABLED"
+            value = tostring(var.self_correction_enabled)
+          }
+          env {
+            name  = "MAX_CORRECTION_ATTEMPTS"
+            value = tostring(var.max_correction_attempts)
+          }
+          env {
+            name  = "RERANKER_ENABLED"
+            value = tostring(var.reranker_enabled)
+          }
+          env {
+            name  = "LLM_TIMEOUT_SECONDS"
+            value = tostring(var.llm_timeout_seconds)
+          }
+          env {
+            name  = "DEBUG"
+            value = tostring(var.debug)
+          }
+          env {
+            name  = "HISTORY_TABLE_NAME"
+            value = var.history_table_name
+          }
+
           # 히스토리 저장 경로 (history_recorder.py)
           # NFR-07: emptyDir 마운트 — Pod 재시작 시 이력 소실. 운영환경은 EFS PVC로 교체 필요
           volume_mount {
@@ -969,6 +999,16 @@ resource "kubernetes_deployment" "slack_bot" {
                 key  = "internal-api-token"
               }
             }
+          }
+
+          # Phase 2: 신규 설정 (EKS 이식)
+          env {
+            name  = "VANNA_API_TIMEOUT"
+            value = tostring(var.vanna_api_timeout)
+          }
+          env {
+            name  = "SLACK_THREAD_ENABLED"
+            value = tostring(var.slack_thread_enabled)
           }
 
           # 리소스 제한

@@ -198,3 +198,59 @@ variable "reranker_top_k" {
   default     = 5
 }
 
+# ------------------------------------------------------------------------------
+# Phase 2: 신규 Feature Flags (EKS 이식)
+# ------------------------------------------------------------------------------
+variable "multi_turn_enabled" {
+  description = "멀티턴 대화 활성화 (이전 대화 이력 참조)"
+  type        = bool
+  default     = false
+}
+
+variable "self_correction_enabled" {
+  description = "SQL 자동교정 활성화 (검증 실패 시 LLM 재생성)"
+  type        = bool
+  default     = false
+}
+
+variable "max_correction_attempts" {
+  description = "Self-Correction 최대 재시도 횟수"
+  type        = number
+  default     = 3
+}
+
+variable "reranker_enabled" {
+  description = "Reranker 활성화 (현재 코드에서 영구 비활성화 상태 — _reranker=None 고정)"
+  type        = bool
+  default     = false
+}
+
+variable "llm_timeout_seconds" {
+  description = "LLM API 호출 타임아웃 (초)"
+  type        = number
+  default     = 60
+}
+
+variable "debug" {
+  description = "디버그 모드 (EKS 프로덕션은 false)"
+  type        = bool
+  default     = false
+}
+
+variable "history_table_name" {
+  description = "멀티턴 대화 이력 조회용 DynamoDB 테이블명 (conversation_history_retriever.py HISTORY_TABLE_NAME)"
+  type        = string
+  default     = "capa-dev-query-history"
+}
+
+variable "vanna_api_timeout" {
+  description = "slack-bot → vanna-api 호출 타임아웃 (초, Athena 쿼리 대기 포함)"
+  type        = number
+  default     = 310
+}
+
+variable "slack_thread_enabled" {
+  description = "Slack 스레드 답글 모드 활성화"
+  type        = bool
+  default     = true
+}
