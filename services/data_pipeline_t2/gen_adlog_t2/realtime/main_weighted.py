@@ -61,32 +61,36 @@ def get_traffic_multiplier(timestamp: datetime) -> float:
 
     if 0 <= hour < 1:
         hour_mult = random.uniform(0.2, 1.0)
-    elif 1 <= hour < 6:
-        hour_mult = random.uniform(0.2, 0.3)
+    elif 1 <= hour < 3:
+        hour_mult = random.uniform(0.3, 0.5) # <- 완충지대 추가
+    elif 3 <= hour < 5:
+        hour_mult = random.uniform(0.3, 0.4)    
+    elif 5 <= hour < 6:
+        hour_mult = random.uniform(0.4, 0.5) # <- 완충지대 추가        
     elif 6 <= hour < 7:
-        hour_mult = random.uniform(0.2, 0.5)
+        hour_mult = random.uniform(0.5, 0.7) # <- 0.2, 0.5
     elif 7 <= hour < 9:
         hour_mult = random.uniform(0.3, 0.6)
     elif 9 <= hour < 11:
-        hour_mult = random.uniform(0.5, 0.9)
+        hour_mult = random.uniform(0.7, 1.0) # <- 0.5, 0.9
     elif 11 <= hour < 12:
-        hour_mult = random.uniform(0.9, 1.3)
+        hour_mult = random.uniform(1.0, 1.6) # <- 0.9, 1.3
     elif 12 <= hour < 13:
         hour_mult = random.uniform(1.5, 2.0)
     elif 13 <= hour < 14:
-        hour_mult = random.uniform(0.7, 1.6)
+        hour_mult = random.uniform(0.9, 1.4) # <- 0.7, 1.6
     elif 14 <= hour < 17:
-        hour_mult = random.uniform(0.8, 0.9)
+        hour_mult = random.uniform(0.9, 1.0) # <- 0.8, 0.9
     elif 17 <= hour < 18:
-        hour_mult = random.uniform(0.8, 2.0)
+        hour_mult = random.uniform(1.0, 2.0) # <- 0.8, 2.0
     elif 18 <= hour < 21:
-        hour_mult = random.uniform(2.0, 3.0)
+        hour_mult = random.uniform(2.5, 3.2) # <- 2.0, 3.0
     elif 21 <= hour < 22:
         hour_mult = random.uniform(1.3, 2.2)
     elif 22 <= hour < 23:
         hour_mult = random.uniform(1.0, 1.5)
     else:
-        hour_mult = random.uniform(0.5, 1.0)
+        hour_mult = random.uniform(0.5, 1.2) # 0.5, 1.0
 
     if weekday < 4:      # 월~목
         day_mult = random.uniform(0.8, 1.0)
