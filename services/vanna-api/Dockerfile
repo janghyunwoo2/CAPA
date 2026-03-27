@@ -23,10 +23,11 @@ RUN pip install --upgrade pip && \
 RUN python -c "from sentence_transformers import SentenceTransformer; \
     SentenceTransformer('jhgan/ko-sroberta-multitask')"
 
-# Reranker 모델 사전 다운로드 (jinaai/jina-reranker-v2-base-multilingual)
+# Reranker 모델 사전 다운로드 (jinaai/jina-reranker-v2-base-multilingual) 로컬에서 테스트 했던 흔적
 # SQL-aware 다국어 Reranker — TableSearch recall@3: 93.31%
-RUN python -c "from sentence_transformers import CrossEncoder; \
-    CrossEncoder('jinaai/jina-reranker-v2-base-multilingual', trust_remote_code=True)"
+# RERANKER_ENABLED=false 운영 중 — 활성화 시 아래 주석 해제
+# RUN python -c "from sentence_transformers import CrossEncoder; \
+#     CrossEncoder('jinaai/jina-reranker-v2-base-multilingual', trust_remote_code=True)"
 
 
 
