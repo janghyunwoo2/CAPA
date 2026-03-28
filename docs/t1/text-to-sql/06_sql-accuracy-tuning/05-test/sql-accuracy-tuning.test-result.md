@@ -114,6 +114,43 @@ TestSQLNormalizerStripLimit::test_strip_limit_preserves_sql_without_limit      P
 ======================= 13 passed, 4 warnings in 1.29s ========================
 ```
 
+## E2E 동작 검증 (2026-03-27)
+
+> 배선 버그(2026-03-25) 수정 이후 실제 컨테이너 환경에서 Self-Correction이 end-to-end로 동작하는지 검증.
+> `capa-vanna-api-e2e` 컨테이너에서 Python 스크립트로 직접 실행.
+
+### 테스트 환경
+
+| 항목 | 값 |
+|------|----|
+| 컨테이너 | `capa-vanna-api-e2e` (Up 27h, healthy) |
+| 실행 방식 | `docker exec` → `python /app/test_self_correction.py` |
+| `SELF_CORRECTION_ENABLED` | `true` (docker-compose.local-e2e.yml) |
+| `MAX_CORRECTION_ATTEMPTS` | `3` |
+| LLM | Anthropic Claude (실제 API 호출) |
+| ChromaDB | `capa-chromadb-e2e` (실제 RAG) |
+| Athena | 실제 AWS Athena (EXPLAIN 검증 포함) |
+
+### 테스트 결과
+
+| TC | Step | 스텝 역할 | 인풋 | 아웃풋 (실제값) | assert 단언 | 판정 | 왜 이렇게 나왔나 |
+|----|------|-----------|------|----------------|-------------|------|-----------------|
+| TC-SAT-E2E-01 | C | Self-Correction 루프 E2E 실행 | `SQLValidator.validate()` 1번째 호출 강제 `SQL_PARSE_ERROR` 반환 → 2번째부터 실제 검증 / 질문: "어제 광고 클릭 수 알려줘" | `Self-Correction 시도 1/3` 로그 출력 → `generate_with_error_feedback()` 실제 Anthropic API 재호출 → 2번째 validate 통과 → `Self-Correction 1회 만에 성공` 로그 → 파이프라인 완료 (12.58초) | `Self-Correction 시도 1/3` 로그 존재, `generate_with_error_feedback` Anthropic HTTP 200, `Self-Correction 1회 만에 성공` 로그 존재 | ✅ PASS | `run()` 내 `_generate_and_validate_with_correction()` 정상 호출, `SELF_CORRECTION_ENABLED=true` 환경변수 적용, `SQL_PARSE_ERROR`가 `_RETRYABLE_CORRECTION_ERRORS`에 포함되어 재시도 수행 |
+
+### 핵심 로그 증거
+
+```
+src.query_pipeline:Self-Correction 시도 1/3: SQL 구문 분석에 실패했습니다 (테스트용 강제 실패)
+src.pipeline.sql_generator:Self-Correction 재생성: error=SQL 구문 분석에 실패했습니다 (테스트용 강제 실패)
+httpx:HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+src.pipeline.sql_generator:SQL 생성 완료: SELECT SUM(CAST(is_click AS INT)) AS total_clicks FROM ad_combined_log_summary ...
+src.pipeline.sql_validator:SQL 검증 통과 (3계층 + EXPLAIN 모두 성공)
+src.query_pipeline:Self-Correction 1회 만에 성공
+src.query_pipeline:파이프라인 완료: 12.58초
+```
+
+---
+
 ## pytest 실행 로그 — TC-YAML/TC-SEED 추가 (2026-03-24)
 
 ```
