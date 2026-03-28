@@ -62,7 +62,7 @@ def get_traffic_multiplier(timestamp: datetime) -> float:
     if 0 <= hour < 1:
         hour_mult = random.uniform(1.0, 1.2) # <- 0.2, 1.0 하락
     elif 1 <= hour < 2:
-        hour_mult = random.uniform(0.5, 1.0) # <- 0.3, 0.5 하락
+        hour_mult = random.uniform(0.7, 1.0) # <- 0.3, 0.5 하락
     elif 2 <= hour < 4:
         hour_mult = random.uniform(0.5, 0.8) # <- 0.3, 0.4 최저
     elif 4 <= hour < 6:
@@ -76,9 +76,9 @@ def get_traffic_multiplier(timestamp: datetime) -> float:
     elif 10 <= hour < 12:
         hour_mult = random.uniform(1.5, 2.1) # <- 1.0, 1.6 상승
     elif 12 <= hour < 13:
-        hour_mult = random.uniform(1.7, 2.3) # <- 1.5, 2.0 상승
+        hour_mult = random.uniform(1.7, 2.5) # <- 1.5, 2.0 상승
     elif 13 <= hour < 14:
-        hour_mult = random.uniform(1.1, 1.6) # <- 0.9, 1.4 하락
+        hour_mult = random.uniform(2.0, 2.3) # <- 0.9, 1.4 하락
     elif 14 <= hour < 16:
         hour_mult = random.uniform(0.9, 1.0) # <- 0.8, 0.9
     elif 16 <= hour < 17:
