@@ -6,20 +6,20 @@
 
 사용자의 자연어 질문이 입력되면 아래의 11단계 파이프라인을 거쳐 최종 분석 결과와 차트가 생성됩니다. 모든 상태 데이터는 `PipelineContext` 객체를 통해 관리됩니다.
 
-| 단계 | 컴포넌트명 | 주요 기능 및 특징 | 입력값 (Input) | 출력값 (Output) | 사용 파일 / 프롬프트 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Step 0** | **Conversation Retriever** | 멀티턴 대화 맥락을 위해 DynamoDB에서 이전 대화 내용을 호출 | `session_id`, `question` | `conversation_history` | `conversation_history_retriever.py` |
-| **Step 1** | **Intent Classifier** | 광고 데이터 분석/일반 질문/범위 외 질문 여부 분류 | `question` | `IntentType` (3종) | `intent_classifier.yaml` |
-| **Step 2** | **Question Refiner** | 인사말 제거 및 핵심 데이터 지표 추출(지표 키워드 보존) | `question`, `history` | `refined_question` | `question_refiner.yaml` |
-| **Step 3** | **Keyword Extractor** | SQL 생성 및 RAG 검색을 위한 도메인 핵심 키워드 추출 | `refined_question` | `keywords` (List) | `keyword_extractor.py` |
-| **Step 4** | **RAG Retriever** | ChromaDB에서 DDL, 문서, Few-shot SQL 예제를 검색 | `refined_q`, `keywords` | `rag_context` | `rag_retriever.py`, `seed_chromadb.py` |
-| **Step 5** | **SQL Generator** | Claude LLM과 CoT(Chain-of-Thought)로 Athena SQL 생성 | `refined_q`, `rag_context` | `generated_sql` | `sql_generator.yaml` |
-| **Step 6** | **SQL Validator** | AST 분석 및 `EXPLAIN`을 통한 문법/보안/정책 검증 | `generated_sql` | `validation_result` | `sql_validator.py` |
-| **Step 6.5**| **Self-Correction** | 검증 실패 시 에러 피드백을 기반으로 SQL 자동 재생성 | `sql`, `error_msg` | `fixed_sql` (Max 3회) | `query_pipeline.py` (Loop) |
-| **Step 7~9**| **Query Execution** | Redash API 경유(또는 Athena 직접) 실행 및 결과 수집 | `validated_sql` | `rows`, `columns` | `redash_client.py` |
-| **Step 10** | **AI Analyzer** | 결과 데이터 분석, 인사이트 도출 및 차트 유형 결정 | `question`, `results` | `answer`, `chart_type` | `ai_analyzer.yaml` |
-| **Step 10.5**| **Chart Renderer** | `matplotlib`을 이용해 차트 이미지 생성 및 Base64 변환 | `results`, `chart_type` | `chart_base64` | `chart_renderer.py` |
-| **Step 11** | **History Recorder** | 전체 트랜잭션을 DynamoDB/JSONL에 최종 기록 | `PipelineContext` | `history_id` | `dynamodb_history.py` |
+| 단계 | 컴포넌트명 | 주요 기능 및 특징 | 입력값 (Input) | **입력값 예시** | 출력값 (Output) | **출력값 예시** | 사용 파일 / 프롬프트 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Step 0** | **Conversation Retriever** | 멀티턴 대화 맥락을 위해 DynamoDB에서 이전 대화 내용을 호출 | `session_id`, `question` | `"user123", "비용이 가장 적은 건?"` | `conversation_history` | `[{"Q": "지난주 CTR 1위는?", "A": "캠페인 A입니다."}]` | `conversation_history_retriever.py` |
+| **Step 1** | **Intent Classifier** | 광고 데이터 분석/일반 질문/범위 외 질문 여부 분류 | `question` | `"어제 클릭수 알 수 있을까요?"` | `IntentType` (3종) | `DATA_QUERY` | `intent_classifier.yaml` |
+| **Step 2** | **Question Refiner** | 인사말 제거 및 핵심 데이터 지표 추출(지표 키워드 보존) | `question`, `history` | `"어제 클릭수 알 수 있을까요?"` | `refined_question` | `"어제 전체 클릭수"` | `question_refiner.yaml` |
+| **Step 3** | **Keyword Extractor** | SQL 생성 및 RAG 검색을 위한 도메인 핵심 키워드 추출 | `refined_question` | `"어제 전체 클릭수"` | `keywords` (List) | `["어제", "클릭수"]` | `keyword_extractor.py` |
+| **Step 4** | **RAG Retriever** | ChromaDB에서 DDL, 문서, Few-shot SQL 예제를 검색 | `refined_q`, `keywords` | `"어제 전체 클릭수"`, `["어제", "클릭수"]` | `rag_context` | (관련 DDL 및 과거 클릭수 SQL 목록) | `rag_retriever.py`, `seed_chromadb.py` |
+| **Step 5** | **SQL Generator** | Claude LLM과 CoT(Chain-of-Thought)로 Athena SQL 생성 | `refined_q`, `rag_context` | `"어제 전체 클릭수"` + `rag_context` | `generated_sql` | `SELECT count(click_id) FROM ad_log...` | `sql_generator.yaml` |
+| **Step 6** | **SQL Validator** | AST 분석 및 `EXPLAIN`을 통한 문법/보안/정책 검증 | `generated_sql` | `SELECT count(click_id)...` | `validation_result` | `is_valid: True` | `sql_validator.py` |
+| **Step 6.5**| **Self-Correction** | 검증 실패 시 에러 피드백을 기반으로 SQL 자동 재생성 | `sql`, `error_msg` | `오류난 SQL`, `"Syntax Error..."` | `fixed_sql` (Max 3회) | 문법 오류가 수정된 정상 `SQL` | `query_pipeline.py` (Loop) |
+| **Step 7~9**| **Query Execution** | Redash API 경유(또는 Athena 직접) 실행 및 결과 수집 | `validated_sql` | 정상 실행을 통과한 `SQL` | `rows`, `columns` | `rows: [{"clicks": 1500}]` | `redash_client.py` |
+| **Step 10** | **AI Analyzer** | 결과 데이터 분석, 인사이트 도출 및 차트 유형 결정 | `question`, `results` | `"어제 전체 클릭수"`, `rows` | `answer`, `chart_type` | `"총 1,500건입니다.", "none"` | `ai_analyzer.yaml` |
+| **Step 10.5**| **Chart Renderer** | `matplotlib`을 이용해 차트 이미지 생성 및 Base64 변환 | `results`, `chart_type` | `rows`, `"none"\|"bar"` | `chart_base64` | `base64_encoded_image_string` | `chart_renderer.py` |
+| **Step 11** | **History Recorder** | 전체 트랜잭션을 DynamoDB/JSONL에 최종 기록 | `PipelineContext` | 파이프라인 전체 컨텍스트 | `history_id` | `"uuid-1234"` | `dynamodb_history.py` |
 
 ---
 
