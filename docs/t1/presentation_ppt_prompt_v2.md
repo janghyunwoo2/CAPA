@@ -5,6 +5,45 @@
 
 ---
 
+## Slide 0 프롬프트 (목차)
+
+```
+[슬라이드 제목] 목차 (Contents)
+
+[레이아웃] 상단 중앙 원형 그래픽("Contents") + 하단 4열 세로 분할 구조 (세로줄 Divider로 각 열 구분)
+
+[01 프로젝트 개요]
+  1. 프로젝트 소개 (CAPA)
+  2. 팀 구성 및 역할 (R&R)
+  3. 기획 배경
+  4. 문제 원인
+  5. 솔루션 제안
+
+[02 시연 영상]
+  1. 실시간 자연어 데이터 조회
+  2. 자동화 리포트
+  3. 대시보드
+  4. 광고 이상 탐지 알림
+
+[03 전체 프로세스]
+  1. 시스템 전체 아키텍처 및 데이터 흐름
+  2. 데이터 수집 및 저장
+  3. 자연어 질의(Text-to-SQL) 파이프라인
+  4. 대시보드
+  5. 리포트 자동화
+  6. 이상 탐지 알림
+  7. 인프라 운영
+
+[04 결론 및 회고]
+  1. 도입 전후 성과 비교 (AS-IS vs TO-BE)
+  2. 프로젝트 시행착오 및 회고
+  3. 향후 발전 방향 및 Q&A
+
+
+```
+
+---
+
 ## 1. 도입 (Part 1)
 
 ## Slide 1 프롬프트
@@ -239,20 +278,26 @@
      • "Log Generator (Python)" 아이콘
      • **3개 로그 분기**: [노출(Impression)], [클릭(Click)], [전환/구매(Conversion)] 텍스트 박스가 각각 Kinesis로 유입되는 화살표
   2. ⚡ Streaming 레이어:
-     • "Kinesis Data Streams" → "Kinesis Firehose"
-  3. 💾 Storage 레이어:
-     • "Amazon S3 (Data Lake)" → Parquet 컬럼 기반 저장
-  4. ⚙️ Processing 레이어:
-     • "AWS Glue Catalog" ↕ "Amazon Athena"
-  5. 🐳 EKS Cluster / AI Layer (우측 중심):
-     • [AI/LLM]: Vanna AI + ChromaDB + Claude 3.1 Haiku
-     • **[Batch/ML]**: Apache Airflow + **Anomaly Detector (Prophet & Isolation Forest)**
-     • [Interface]: Slack Bot & Redash Dashboard
+     • **Kinesis Data Streams & Firehose**: (병렬 레이아웃) 데이터 수집 및 S3 적재의 통합 데이터 통로
+     • **Amazon CloudWatch**: Kinesis 지표 실시간 추적 및 이상 탐지 기반 데이터 소스
+  3. 💾 Storage & Processing 레이어:
+     • **Amazon S3 (Data Lake)**: Parquet 기반 컬럼형 데이터 저장소
+     • **AWS Glue & Athena**: 데이터 카탈로그 관리 및 서버리스 쿼리 실행 환경
+  4. 🐳 **Amazon EKS Cluster** (통합 운영 인프라):
+     • *이 거대한 박스 안에 모든 핵심 애플리케이션이 독립적인 파드(Pod)로 격리 및 구동됨*
+     • **Apache Airflow (The Brain)**: 
+       - ① [이상 탐지]: 5분 주기 CloudWatch 지표 체크 → 신뢰구간 이탈 시 즉시 알림
+       - ② [데이터 집계]: Raw 로그 3종 수합 → 주간/월간 요약 테이블(Summary Table) 생성
+       - ③ [자동화 리포트]: 광고 성과 보고서 자동 생성 및 전송
+     • **Vanna AI & ChromaDB(RAG)**: 자연어 → SQL 변환 및 광고 도메인 지식 베이스
+     • **Redash Dashboard**: Athena 연동 시각화 및 쿼리 실행 게이트웨이
+     • **Slack Bot Interface**: 사용자 자연어 조회 및 실시간 이상 탐지/리포트 알림 창구
 
 [핵심 연결선 강조]
-  • **Slack Bot ↔ Vanna AI ↔ Redash API ↔ Athena**: Redash를 게이트웨이로 활용한 쿼리 조회 흐름 (우측부 상세 연결)
-  • **Airflow → Anomaly Detector → Slack**: 5분 단위 이상 탐지 모니터링 및 실시간 알림 발송
-  • Airflow → Athena & Report Generator: 주기적 요약 테이블 생성 및 정기 리포트 트리거
+  • **Airflow → Athena (Aggregation)**: 3개 Raw 테이블 수합 → 요약 테이블 생성 (비용/속도 최적화)
+  • **Kinesis → CloudWatch → Airflow → Slack**: 5분 단위 실시간 모니터링 및 실시간 알리미
+  • **Slack Bot ↔ Vanna AI ↔ Redash API ↔ Athena**: Redash를 통로로 활용한 자연어 쿼리 인터페이스
+  • **Airflow → Report Generator**: 정기 성과 보고서 자동 생성 및 슬랙 채널 전송
 
 [디자인 톤앤매너]
   • AWS 공식 아이콘 팩 사용
@@ -357,7 +402,7 @@
 ## Slide 14 프롬프트
 
 ```
-[슬라이드 제목] "0%에서 91%로 — 4라운드 개선 스토리"
+[슬라이드 제목] "33%에서 80%로 — 4라운드 개선 스토리"
 
 [레이아웃] 상단 지표 설명 + 하단 막대 그래프 + 각 라운드 callout
 
@@ -368,14 +413,14 @@ Exec (Execution Accuracy): 생성 SQL의 실행 결과값이 정답과 일치하
 [메인 비주얼 — 막대 그래프 + 타임라인]
 X축: Round 1 / Round 2 / Round 3 / Round 4
 Y축: 0% ~ 100%
-막대 높이: 0% / 베이스라인(중간) / ~91% / 91%+
+막대 높이: 33.3% / 36.1% / 69.4% / 80.6%
 90% 목표선: 수평 점선 + "목표" 레이블
 
 각 막대 위 callout 말풍선:
-  Round 1: "DDL이 LLM에 전달 안 됨 (버그)"                          → 빨간색
-  Round 2: "DDL 버그 수정 + Reranker 다국어 모델 교체"                → 노란색
-  Round 3: "CoT + Negative Rules + 시딩 재설계 (55개 QA)"           → 파란색  ✅ 목표 달성
-  Round 4: "cosine 지표 + DDL 역추적(Metadata Backtracking) 안정화"  → 초록색  ✅
+  Round 1 (33.3%): "기반 공사: QA 시딩 편향성 해결(21개) + 날짜 동적 처리(Jinja2) 도입"  → 빨간색
+  Round 2 (36.1%): "사고 통제: CoT 6단계 프롬프트 + Negative Rules + 계산식 공식화"       → 노란색
+  Round 3 (69.4%): "검색 진화: 한국어 특화 임베딩(ko-sroberta) 도입 및 Reranker 제거"    → 파란색
+  Round 4 (80.6%): "구조 돌파: 테이블 오인식 한계 극복 (QA 메타데이터 기반 DDL 동적 주입)" → 초록색
 
 [하단 핵심 문구 — 크게]
 "단순 튜닝이 아니라, 매번 '왜 틀렸는가'를 파고들었습니다"
@@ -419,30 +464,27 @@ Y축: 0% ~ 100%
 ## Slide 16 프롬프트
 
 ```
-[슬라이드 제목] "일일/주간/월간 리포트 자동화 (Airflow K8s 기반)"
+[슬라이드 제목] "Airflow 오케스트레이션 — 데이터 집계 및 리포트 자동화"
 
-[레이아웃] 상단 배경 + 중앙 스케줄링 타임라인 + 하단 기술 포인트
+[레이아웃] 중앙 Airflow 로고를 중심으로 한 3방향 프로세스 맵 (Orchestration Hub 구조)
 
-[상단 — 도입 배경 배너]
-  AS-IS: "마케터가 매일 아침 전일 데이터를 엑셀로 수기 결산 (수시간 낭비)"
-  TO-BE: "Airflow가 자동으로 리포트 생성 + Slack 전송"
+[상단 — 데이터 요약 (Data Aggregation)] 🛠️ 톱니바퀴 아이콘
+  • **작업**: S3에 저장된 3가지 Raw 테이블(Imp/Click/Conv) 수합
+  • **결과**: Athena 'Summary 테이블' 상시 업데이트
+  • **효과**: 원본 대비 데이터 스캔량 90% 절감 → 대시보드 및 LLM 조회 속도 혁명적 개선
 
-[중앙 — 동적 스케줄링 타임라인]
-  📅 매일 08:00:
-    "월초부터 전날까지 누적 일간 데이터 결산 발송"
-  📅 월요일:
-    "부분 주차 고려 → 주간 섹션 자동 추가"
-  📅 매월 1일:
-    "지난달 1일~말일 총합 + 상위 카테고리/상점 월간 섹션 추가"
+[좌측 — 리포트 자동화 (Marketing Report)] 📝 문서 아이콘
+  • **스케줄**: 일간(08:00) / 주간(월요일) / 월간(1일)
+  • **동적 생성**: 기간별(전일/전주/전월) 성과 블록 자동 조립
+  • **전송**: Slack 채널별 맞춤형 리포트 자동 전달
 
-  [핵심 설명]
-    "단일 양식에 날짜별로 블록이 동적으로 달라붙는 구조"
+[우측 — 이상 탐지 트리거 (Anomaly Trigger)] 🔔 알림 아이콘
+  • **체크**: 5분 주기로 CloudWatch 지표 스트리밍 분석
+  • **액션**: 신뢰구간 이탈 시 Slack 즉시 알림 및 시각화 데이터 생성 연결
 
-[하단 — 기술 포인트 2개]
-  🐳 KubernetesPodOperator:
-    "각 보고서 생성 작업을 독립된 Pod로 실행 → 라이브러리 충돌 완전 차단"
-  🔗 Redash 딥링크 첨부:
-    "리포트 텍스트 하단 → 원클릭으로 상세 시각화 확인"
+[하단 기술 포인트]
+  🐳 **KubernetesPodOperator**: 각 태스크를 독립된 Pod로 실행하여 환경 격리 및 리소스 효율 극대화
+  🔗 **Redash 딥링크 연동**: 리포트에서 상세 대시보드로 즉시 이동 가능한 URL 동적 생성
 ```
 
 ---
@@ -476,9 +518,10 @@ Y축: 0% ~ 100%
   이상치 포인트 (빨간 점 + ⚠️ 마커)
 
 [하단 — 운영 디테일 + 결과물]
-  • Airflow 5분마다 자동 실행
-  • 26년 2월 실제 데이터 기반 학습 (배달앱 피크 패턴)
-  • 음수 예측값 방지 + CloudWatch 수집 지연(2분 버퍼) 대응
+  • **Airflow 5분 주기 체크**: CloudWatch에서 Kinesis 실시간 지표를 호출하여 분석
+  • **탐지 로직**: 최신 데이터가 모델이 예측한 신뢰구간(Confidence Interval)을 이탈할 경우 '이상치'로 판정
+  • **데이터 특징**: 26년 2월 실제 데이터 기반 학습 (배달앱 피크 패턴 반영)
+  • **안정성**: 음수 예측값 방지 + CloudWatch 수집 지연(2분 버퍼) 대응
   📤 결과물: Slack 즉시 알림 + 시계열 그래프(png) + 인터랙티브 차트(html) 자동 생성
 ```
 
