@@ -312,3 +312,37 @@ YAML
 
   depends_on = [kubectl_manifest.karpenter_node_class]
 }
+
+# ------------------------------------------------------------------------------
+# LimitRange - airflow 네임스페이스 기본 리소스 자동 주입
+# ------------------------------------------------------------------------------
+# KubernetesPodOperator로 실행되는 모든 Pod에 resources.requests/limits가
+# 명시되지 않았을 경우 자동으로 기본값을 삽입합니다.
+#
+# 이 설정이 없으면:
+#   - requests=None → Karpenter가 기존 노드에 바로 스케줄
+#   - 실제 메모리 사용 시 OOM(exit 137) 발생 → NodeNotReady
+#
+# 이 설정이 있으면:
+#   - requests 자동 주입 → 노드 용량 부족 시 Karpenter가 새 노드를 프로비저닝
+# ------------------------------------------------------------------------------
+resource "kubectl_manifest" "airflow_limitrange" {
+  yaml_body = <<-YAML
+    apiVersion: v1
+    kind: LimitRange
+    metadata:
+      name: airflow-default-limits
+      namespace: airflow
+    spec:
+      limits:
+        - type: Container
+          default:
+            cpu: "1000m"
+            memory: "2Gi"
+          defaultRequest:
+            cpu: "500m"
+            memory: "1Gi"
+  YAML
+
+  depends_on = [helm_release.karpenter]
+}
