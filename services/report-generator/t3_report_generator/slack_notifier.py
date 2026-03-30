@@ -54,17 +54,21 @@ def send_report_to_slack(pdf_path: str, report_date: str = None, report_type: st
             title = f"PDF - {label} ({report_date if report_date else ''})"
             comment = None
         elif report_date:
-            dashboard_url = os.getenv("FIXED_DASHBOARD_URL", "")
+            daily_url = os.getenv("DAILY_DASHBOARD_URL", "")
+            period_url = os.getenv("PERIOD_DASHBOARD_URL", "")
             title = f"CAPA 광고 성과 보고서 - [{label}] ({report_date})"
             comment = f"{emoji} [{label}] {report_date} 보고서 생성 완료"
-            if dashboard_url:
-                comment += f"\n🔗 *대시보드*: <{dashboard_url}|클릭하여이동>"
+            if daily_url or period_url:
+                if daily_url: comment += f"\n🔗 *일간 대시보드*: <{daily_url}|클릭하여이동>"
+                if period_url: comment += f"\n🔗 *기간 대시보드*: <{period_url}|클릭하여이동>"
         else:
-            dashboard_url = os.getenv("FIXED_DASHBOARD_URL", "")
+            daily_url = os.getenv("DAILY_DASHBOARD_URL", "")
+            period_url = os.getenv("PERIOD_DASHBOARD_URL", "")
             title = f"CAPA 광고 성과 보고서 - [{label}]"
             comment = f"{emoji} [{label}] 보고서 생성 완료"
-            if dashboard_url:
-                comment += f"\n🔗 *대시보드*: <{dashboard_url}|클릭하여이동>"
+            if daily_url or period_url:
+                if daily_url: comment += f"\n🔗 *일간 대시보드*: <{daily_url}|클릭하여이동>"
+                if period_url: comment += f"\n🔗 *기간 대시보드*: <{period_url}|클릭하여이동>"
 
         # PDF 파일 업로드
         slack_app.client.files_upload_v2(
@@ -92,7 +96,8 @@ def send_combined_notification(report_types: list[str], report_date: str) -> boo
         성공 여부
     """
     slack_channel_id = os.getenv("SLACK_CHANNEL_ID")
-    dashboard_url = os.getenv("FIXED_DASHBOARD_URL")
+    daily_url = os.getenv("DAILY_DASHBOARD_URL", "")
+    period_url = os.getenv("PERIOD_DASHBOARD_URL", "")
 
     if not slack_app or not slack_channel_id:
         return False
@@ -106,9 +111,13 @@ def send_combined_notification(report_types: list[str], report_date: str) -> boo
         labels = [type_to_label.get(t, t) for t in report_types]
         labels_str = ", ".join(labels)
 
+        dashboard_text = ""
+        if daily_url: dashboard_text += f"🔗 *일간 대시보드*: <{daily_url}|클릭하여이동>\n"
+        if period_url: dashboard_text += f"🔗 *기간 대시보드*: <{period_url}|클릭하여이동>\n"
+
         message = (
             f"🚀 *CAPA 광고 성과 보고서 생성 완료* ({report_date})\n\n"
-            f"🔗 *대시보드*: <{dashboard_url}|클릭하여이동>\n"
+            f"{dashboard_text}"
             f"✅ *포함된 보고서*: {labels_str}\n\n"
             f"_상단에 업로드된 PDF 파일들을 확인해 주세요._"
         )

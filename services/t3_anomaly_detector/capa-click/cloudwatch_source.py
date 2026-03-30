@@ -69,8 +69,8 @@ class CloudWatchSource:
                 timestamps = results[0]['Timestamps']
                 values = results[0]['Values']
                 
-                # 시상(Timestamp)을 키로 하는 딕셔너리 생성
-                data_dict = {ts.replace(tzinfo=None): val for ts, val in zip(timestamps, values)}
+                # 시상(Timestamp)을 키로 하는 딕셔너리 생성 (AWS UTC -> KST 변환 후 강제 tz제거)
+                data_dict = {ts.astimezone(kst).replace(tzinfo=None): val for ts, val in zip(timestamps, values)}
                 
                 # 시작 시각부터 종료 시각까지 5분 단위로 순회
                 current_ptr = start_time.replace(tzinfo=None)
@@ -144,7 +144,7 @@ class CloudWatchSource:
                 timestamps = results[0]['Timestamps']
                 values = results[0]['Values']
                 
-                data_dict = {ts.replace(tzinfo=None): val for ts, val in zip(timestamps, values)}
+                data_dict = {ts.astimezone(kst).replace(tzinfo=None): val for ts, val in zip(timestamps, values)}
                 
                 current_ptr = start_time.replace(tzinfo=None)
                 end_ptr = end_time.replace(tzinfo=None)
