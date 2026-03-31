@@ -64,15 +64,15 @@ def get_traffic_multiplier(timestamp: datetime) -> float:
     elif 1 <= hour < 2:
         hour_mult = random.uniform(0.8, 1.1) # <- 0.7, 1.0 하락
     elif 2 <= hour < 4:
-        hour_mult = random.uniform(0.5, 0.8) # <- 0.3, 0.4 최저
+        hour_mult = random.uniform(0.3, 0.4) # <- 0.3, 0.4 최저
     elif 4 <= hour < 6:
-        hour_mult = random.uniform(0.6, 1.0) # <- 0.4, 0.5 상승       
+        hour_mult = random.uniform(0.4, 0.5) # <- 0.4, 0.5 상승       
     elif 6 <= hour < 7:
         hour_mult = random.uniform(0.5, 0.7) # <- 0.2, 0.5 상승
     elif 7 <= hour < 9:
         hour_mult = random.uniform(0.6, 1.1) # <- 0.3, 0.6 미미
     elif 9 <= hour < 10:
-        hour_mult = random.uniform(1.0, 1.2) # <- 0.7, 1.0 상승
+        hour_mult = random.uniform(0.8, 1.2) # <- 0.7, 1.0 상승
     elif 10 <= hour < 12:
         hour_mult = random.uniform(1.5, 2.1) # <- 1.0, 1.6 상승
     elif 12 <= hour < 13:
@@ -82,20 +82,20 @@ def get_traffic_multiplier(timestamp: datetime) -> float:
     elif 14 <= hour < 16:
         hour_mult = random.uniform(0.9, 1.0) # <- 0.8, 0.9
     elif 16 <= hour < 17:
-        hour_mult = random.uniform(1.0, 1.5) # <- 완충지대 추가
+        hour_mult = random.uniform(0.5, 0.7) # <- 완충지대 추가
     elif 17 <= hour < 18:
-        hour_mult = random.uniform(1.8, 2.3) # <- 1.5, 2.0
+        hour_mult = random.uniform(1.2, 1.5) # <- 1.5, 2.0
     elif 18 <= hour < 21:
-        hour_mult = random.uniform(3.2, 3.5) # <- 2.5, 3.2
+        hour_mult = random.uniform(1.5, 1.8) # <- 2.5, 3.2
     elif 21 <= hour < 22:
-        hour_mult = random.uniform(2.0, 2.8) # <- 1.3, 2.2
+        hour_mult = random.uniform(1.3, 2.2) # <- 1.3, 2.2
     elif 22 <= hour < 23:
-        hour_mult = random.uniform(1.5, 2.0) # <- 1.0, 1.5
+        hour_mult = random.uniform(1.0, 1.5) # <- 1.0, 1.5
     else:
-        hour_mult = random.uniform(1.3, 1.5) # <- 1.0, 1.5
+        hour_mult = random.uniform(1.0, 1.2) # <- 1.0, 1.5
 
     if weekday < 4:      # 월~목
-        day_mult = random.uniform(1.2, 1.5) # <- 0.8, 1.0
+        day_mult = random.uniform(0.8, 1.0) # <- 0.8, 1.0
     elif weekday == 4:   # 금
         day_mult = random.uniform(1.7, 1.9) # <- 1.2, 1.5
     elif weekday == 5:   # 토
