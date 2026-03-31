@@ -558,9 +558,80 @@ Y축: 0% ~ 100%
 
 ---
 
+## Slide 19 프롬프트
+
+```
+[슬라이드 제목] "CAPA 핵심 기술 스택 (Technical Spec)"
+
+[레이아웃] 4개의 영역으로 분할된 기술 그리드 (Icon + Name)
+
+[기술 스택 상세 - 카테고리별]
+  1. 🧠 [AI & LLM]:
+     • LLM: Anthropic Claude Haiku
+     • Engine: Vanna AI / History: DynamoDB
+     • Vector DB: ChromaDB (Open-Source)
+  2. ⚡ [Data Pipeline]:
+     • Streaming: Kinesis Data Stream + Firehose
+     • Metadata: AWS Glue Catalog + Crawler
+     • Storage: Amazon S3 (Data Lake, Parquet)
+  3. ⚙️ [Processing & Ops]:
+     • Platform: Amazon EKS / Infra: Terraform
+     • Query: Amazon Athena (Serverless Presto)
+     • Scheduler: Apache Airflow (EKS Native)
+     • Scale: Karpenter (Node Auto-scaling)
+  4. 📊 [Interface & Monitoring]:
+     • UI: Slack (Socket Mode, Block Kit)
+     • BI: Redash (Query Persistence)
+     • ML Engine: FB Prophet & Isolation Forest
+     • Monitor: Amazon CloudWatch & Slack Bot
+
+[비주얼 포인트]
+  • 각 로고 아이콘을 중앙에 배치하고 하단에 간결한 텍스트
+  • "오직 안정성이 검증된 Stable/LTS 기술만 엄선하여 구축" 강조 문구
+```
+
+---
+
+## Slide 20 프롬프트
+
+```
+[슬라이드 제목] "왜 이 기술인가? — 유사 서비스 대비 채택 근거"
+
+[레이아웃] 3개 핵심 영역의 1:1 비교 테이블 (Comparison Table)
+
+[비교 테이블 1 - AI 지능화 및 데이터 파이프라인]
+| 카테고리 | 채택 기술 (CAPA) | 핵심 채택 사유 (도입 효과) |
+| :--- | :--- | :--- |
+| **LLM** | **Claude Haiku** | **채택 근거**: 타 모델 대비 우수한 코드 작성 능력 및 높은 가성비로 채택 |
+| **SQL 엔진** | **Vanna AI** | **RAG 파이프라인**: SQL 생성 파이프라인 추상화 및 학습 용이성, 파이썬 환경에 적합 |
+| **Vector DB** | **ChromaDB** | **정확도**: 한국어 특화 임베딩 모델(`ko-sroberta`)과의 검색 정합성 최적화,Vanna AI와 호환성 우수 |
+| **이상 탐지** | **Prophet + I-Forest** | **오탐 최소**: 광고 지표 특화 '계절성 + 통계' 앙상블 탐지 |
+| **Streaming** | **Kinesis + Firehose** | **데이터 흐름**: 서버리스 기반 실시간 적재 및 Parquet 자동 변환 |
+| **Metadata** | **Glue Catalog** | **스키마 자동화**: S3 데이터 변화 실시간 감지 및 자동 카탈로그화 |
+| **쿼리 엔진** | **Amazon Athena** | **분석 효율**: 서버 운영 없는 S3 데이터 즉시 쿼리 및 비용 절감 |
+| **Storage** | **Amazon S3** | **데이터 레이크**: 파티셔닝 기반 대용량 스토리지 통합 관리, 타 스토리지에 비해 비용 저렴, 광고로그 데이터 특성상 S3(데이터 레이크)가 적합 |
+
+[비교 테이블 2 - 클라우드 네이티브 및 운영 인프라]
+| 카테고리 | 채택 기술 (CAPA) | 핵심 채택 사유 (도입 효과) |
+| :--- | :--- | :--- |
+| **플랫폼 (EKS)** | **Amazon EKS** | **표준화**: Helm 기반 전 서비스 통합 및 세밀한 파드 권한 제어,파드 단위로 격리하여 안정성 확보, 서비스 확장 용이 |
+| **오토스케일러** | **Karpenter** | **초고속 오토스케일러**: 리소스 모니터링해서 노드&파드 탄력적 관리, 비용 절감 |
+| **IaC** | **Terraform** | **코드 통합**: 인프라/K8s/Helm 리소스 단일 코드베이스 관리 |
+| **History DB** | **DynamoDB** | **고속 조회**: 멀티턴 대화 이력 관리, 25GB까지 무료 |
+| **배치 관리** | **Apache Airflow** | **배치 처리**: 요약 테이블, 이상 탐지, 리포트 생성을 주기적으로 스케줄링 |
+| **BI 도구** | **Redash** | **대시보드**: REST API 연동을 통한 대시보드 무인 발행, 아테나와 연동 가능 |
+| **인터페이스** | **Slack** | **개발자 친화적 메신저**: 챗봇 지원, 구조화된 채널 및 스레드 기반 대화 |
+| **모니터링** | **CloudWatch** | **이상치 탐지**: kinesis 스트림 모니터링 가능 |
+
+[하단 강조 박스]
+  💡 **"CAPA는 운영 부담은 줄이고(Low Ops), 데이터 활용 가치는 극대화(High Value)했습니다."**
+```
+
+---
+
 ## 4. 결론 (Part 4)
 
-## Slide 19 프롬프트
+## Slide 21 프롬프트
 
 ```
 [슬라이드 제목] "AS-IS vs TO-BE — 도입 전후 비교"
@@ -591,7 +662,7 @@ Y축: 0% ~ 100%
 
 ---
 
-## Slide 20 프롬프트
+## Slide 22 프롬프트
 
 ```
 [슬라이드 제목] "시행착오 & 아쉬운 점 (Lessons Learned)"
@@ -623,7 +694,7 @@ Y축: 0% ~ 100%
 
 ---
 
-## Slide 21 프롬프트
+## Slide 23 프롬프트
 
 ```
 [슬라이드 제목] "발전방향"
@@ -651,7 +722,7 @@ Y축: 0% ~ 100%
 
 ---
 
-## Slide 22 프롬프트
+## Slide 24 프롬프트
 
 ```
 [슬라이드 제목] Q&A
@@ -700,7 +771,9 @@ Y축: 0% ~ 100%
 | 16 | 리포트 자동화 — Airflow | 프로세스 |
 | 17 | 실시간 이상 탐지 | 프로세스 |
 | 18 | 인프라 — Terraform + EKS + Karpenter | 프로세스 |
-| 19 | AS-IS vs TO-BE | 결론 |
-| 20 | 시행착오 & Lessons Learned | 결론 |
-| 21 | 발전방향 | 결론 |
-| 22 | Q&A | 마무리 |
+| 19 | CAPA 핵심 기술 스택 | 프로세스 |
+| 20 | 왜 이 기술인가? (채택 근거) | 프로세스 |
+| 21 | AS-IS vs TO-BE | 결론 |
+| 22 | 시행착오 & Lessons Learned | 결론 |
+| 23 | 발전방향 | 결론 |
+| 24 | Q&A | 마무리 |
