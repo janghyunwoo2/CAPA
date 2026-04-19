@@ -1,8 +1,8 @@
 <p align="center">
-  <h1 align="center">🚀 CAPA</h1>
+  <h1 align="center">🚀 온라인 광고 로그 처리 파이프라인 및 분석 플랫폼 CAPA</h1>
   <p align="center">
     <strong>Cloud-native AI Pipeline for Ad-logs</strong><br/>
-    온라인 광고 로그 실시간 처리 파이프라인 및 AI 분석 플랫폼
+    온라인 광고 로그 처리 파이프라인 및 분석 플랫폼
   </p>
 </p>
 
