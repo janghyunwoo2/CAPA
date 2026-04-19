@@ -98,7 +98,7 @@ ipython_config.py
 #   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
 #   commonly ignored for libraries.
-#uv.lock
+# uv.lock
 
 # poetry
 #   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
@@ -106,7 +106,7 @@ ipython_config.py
 #   commonly ignored for libraries.
 #   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
 #poetry.lock
-#poetry.toml
+# pyproject.toml
 
 # pdm
 #   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
@@ -136,6 +136,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
 .envrc
 .venv
 env/
@@ -198,6 +199,9 @@ cython_debug/
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
+
+# Terraform variable file containing secrets
+terraform.tfvars
 .cursorignore
 .cursorindexingignore
 
@@ -218,11 +222,13 @@ __marimo__/
 
 .vscode
 
-# Terraform 상태 파일 (로컬만)
+# Terraform 상태 파일 및 계획 파일 (로컬만)
 # 프로덕션에서는 S3 백엔드 사용 권장
 *.tfstate
 *.tfstate.backup
 *.tfstate.lock.hcl
+*.tfplan
+tfplan
 .terraform/
 .terraform.lock.hcl
 override.tf
@@ -231,3 +237,24 @@ override.tf.json
 *_override.tf.json
 
 # prompts는 팀 공유 시 주석 해제
+
+# uv 파일
+uv.lock
+# poetry 파일
+pyproject.toml
+**/logs/
+
+# Serena (AI Workspace)
+.serena/
+# Claude Code 설정 (토큰 포함)
+.claude/mcp.json
+.claude/settings.local.json
+
+# bkit 런타임/스냅샷/로컬 상태 (로컬 임시 파일)
+.bkit/runtime/
+.bkit/snapshots/
+.bkit/snapshots/*
+.bkit/state/memory.json
+.bkit/state/pdca-status.json
+# Serena (AI Workspace)
+.serena/

@@ -1,0 +1,32 @@
+fastapi==0.115.9
+uvicorn[standard]
+chromadb==1.0.10
+
+anthropic>=0.40.0
+boto3
+pydantic>=2.0
+pydantic-settings
+# pyarrow는 필요한 경우에만 설치 (Athena)
+pyarrow
+
+# Text-to-SQL 기능 추가
+sqlglot
+sqlparse
+httpx
+#respx
+vanna[anthropic]==0.7.9
+matplotlib
+pandas
+
+# Phase 2: 한국어 임베딩 모델 (ko-sroberta-multitask)
+# CPU 전용 torch — EKS GPU 없음, CUDA 불필요 (~400MB vs CUDA ~2.5GB)
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+sentence-transformers>=2.6.1
+#einops>=0.7.0
+transformers>=4.31.0,<4.44.0
+
+# FR-PE: 프롬프트 YAML 외부화
+pyyaml>=6.0
+jinja2>=3.1
+

@@ -1,0 +1,6 @@
+pandas
+numpy
+pyarrow
+matplotlib
+seaborn
+apache-airflow>=2.9.0

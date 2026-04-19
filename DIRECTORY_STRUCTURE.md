@@ -111,5 +111,5 @@ terraform apply -var-file="environments/prod/terraform.tfvars"
 ## 로컬 개발 (Docker)
 ```bash
 docker-compose up -d
-# Airflow UI: http://localhost:8080
+# Airflow UI: http://localhost:8081
 ```

@@ -1,0 +1,187 @@
+# ==============================================================================
+# CALI Infrastructure - EKS Cluster
+# ==============================================================================
+# Amazon EKS 클러스터 및 Node Group
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# VPC (기본 VPC 사용 또는 신규 생성)
+# ------------------------------------------------------------------------------
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
+}
+
+# ------------------------------------------------------------------------------
+# EKS Cluster
+# ------------------------------------------------------------------------------
+resource "aws_eks_cluster" "main" {
+  name     = "${var.project_name}-cluster"
+  role_arn = aws_iam_role.eks_cluster.arn
+  version  = "1.29"
+
+  vpc_config {
+    subnet_ids              = data.aws_subnets.default.ids
+    endpoint_private_access = true
+    endpoint_public_access  = true
+  }
+
+  access_config {
+    authentication_mode                         = "API_AND_CONFIG_MAP"
+    bootstrap_cluster_creator_admin_permissions = true
+  }
+
+  enabled_cluster_log_types = ["api", "audit", "authenticator"]
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_cluster_policy
+  ]
+
+  tags = {
+    Name = "${var.project_name}-cluster"
+  }
+}
+
+# ------------------------------------------------------------------------------
+# EKS Node Group
+# ------------------------------------------------------------------------------
+resource "aws_eks_node_group" "core" {
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = "${var.project_name}-core-node-group"
+  node_role_arn   = aws_iam_role.eks_node.arn
+
+  # 단일 가용영역(Single-AZ) 강제 할당: 비용 절감 및 EBS 충돌 방지
+  subnet_ids = [sort(data.aws_subnets.default.ids)[0]]
+
+  instance_types = ["t3a.large"]
+  capacity_type  = "ON_DEMAND"
+
+  scaling_config {
+    desired_size = 1 # Karpenter가 나머지 노드를 관리
+    min_size     = 1
+    max_size     = 1 # 코어 노드는 1대 고정
+  }
+
+  update_config {
+    max_unavailable = 1
+  }
+
+  labels = {
+    "node-type" = "core"
+  }
+
+
+  depends_on = [
+    aws_iam_role_policy_attachment.eks_worker_node_policy,
+    aws_iam_role_policy_attachment.eks_cni_policy,
+    aws_iam_role_policy_attachment.eks_container_registry
+  ]
+
+  tags = {
+    Name = "${var.project_name}-core-node-group"
+    # Karpenter가 이 클러스터의 노드를 검색할 수 있도록 태그 추가
+    "karpenter.sh/discovery" = aws_eks_cluster.main.name
+  }
+}
+
+# ------------------------------------------------------------------------------
+# EKS Access Entries (팀원 접근 권한)
+# ------------------------------------------------------------------------------
+# 변수(team_members_arns)에 등록된 팀원들에게 관리자(Admin) 권한 부여
+
+resource "aws_eks_access_entry" "team_members" {
+  for_each      = toset(var.team_members_arns)
+  cluster_name  = aws_eks_cluster.main.name
+  principal_arn = each.value
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "team_members_admin" {
+  for_each      = toset(var.team_members_arns)
+  cluster_name  = aws_eks_cluster.main.name
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+  principal_arn = each.value
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [
+    aws_eks_access_entry.team_members
+  ]
+}
+
+# ------------------------------------------------------------------------------
+# OIDC Provider (IRSA용)
+# ------------------------------------------------------------------------------
+data "tls_certificate" "eks" {
+  url = aws_eks_cluster.main.identity[0].oidc[0].issuer
+}
+
+resource "aws_iam_openid_connect_provider" "eks" {
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
+  url             = aws_eks_cluster.main.identity[0].oidc[0].issuer
+}
+
+# ------------------------------------------------------------------------------
+# EKS Addons - EBS CSI Driver
+# ------------------------------------------------------------------------------
+resource "aws_eks_addon" "ebs_csi" {
+  cluster_name  = aws_eks_cluster.main.name
+  addon_name    = "aws-ebs-csi-driver"
+  addon_version = "v1.31.0-eksbuild.1" # Safe version for 1.29
+
+  configuration_values = jsonencode({
+    controller = {
+      resources = {
+        requests = {
+          cpu    = "10m"
+          memory = "128Mi"
+        }
+        limits = {
+          cpu    = "100m"
+          memory = "256Mi"
+        }
+      }
+    }
+  })
+
+  depends_on = [
+    aws_eks_node_group.core,
+    aws_iam_role_policy_attachment.eks_ebs_csi_driver_policy
+  ]
+}
+
+# ------------------------------------------------------------------------------
+# Subnet Tagging for ALB Ingress Controller
+# ------------------------------------------------------------------------------
+# ALB 컨트롤러가 로드밸런서를 배치할 서브넷을 찾을 수 있도록 태그 추가
+resource "aws_ec2_tag" "subnet_elb_tag" {
+  for_each    = toset(data.aws_subnets.default.ids)
+  resource_id = each.value
+  key         = "kubernetes.io/role/elb"
+  value       = "1"
+}
+
+resource "aws_ec2_tag" "subnet_cluster_tag" {
+  for_each    = toset(data.aws_subnets.default.ids)
+  resource_id = each.value
+  key         = "kubernetes.io/cluster/${aws_eks_cluster.main.name}"
+  value       = "shared"
+}
+
+# Karpenter Discovery Tag for Security Group
+resource "aws_ec2_tag" "cluster_sg_karpenter_tag" {
+  resource_id = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+  key         = "karpenter.sh/discovery"
+  value       = aws_eks_cluster.main.name
+}
+
+

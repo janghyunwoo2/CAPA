@@ -1,0 +1,14 @@
+# replicaCount: 1
+# image:
+#   repository: <ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/capa-report-generator
+#   tag: "latest"
+
+# service:
+#   type: ClusterIP
+#   port: 8000
+
+# serviceAccount:
+#   create: true
+#   name: report-generator-sa
+#   annotations:
+#     eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/capa-report-role

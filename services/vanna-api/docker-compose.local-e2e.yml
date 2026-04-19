@@ -1,0 +1,372 @@
+services:
+  # ==============================================================================
+  # ChromaDB - 벡터 데이터베이스
+  # ==============================================================================
+  chromadb:
+    image: chromadb/chroma:1.0.10
+    container_name: capa-chromadb-e2e
+    ports:
+      - "8001:8000"
+    environment:
+      - ANONYMIZED_TELEMETRY=false
+    networks:
+      - capa-e2e-network
+
+  # ==============================================================================
+  # PostgreSQL - Redash 메타데이터 DB (Helm values 기준: postgres:11)
+  # ==============================================================================
+  postgres:
+    image: postgres:11-alpine
+    container_name: capa-postgres-e2e
+    environment:
+      - POSTGRES_USER=redash
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-redash-local-pass}
+      - POSTGRES_DB=redash
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - capa-e2e-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U redash"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==============================================================================
+  # Redis - Redash 작업 큐 (Helm values 기준: redis:6.0.9, auth disabled)
+  # ==============================================================================
+  redis:
+    image: redis:6.0.9-alpine
+    container_name: capa-redis-e2e
+    networks:
+      - capa-e2e-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==============================================================================
+  # Redash Server - 웹서버 (포트 5000)
+  # REDASH_GUNICORN_TIMEOUT=120: Athena Connection Test 대기시간 확보
+  # ==============================================================================
+  redash-server:
+    image: redash/redash:10.1.0.b50633
+    container_name: capa-redash-server-e2e
+    command: server
+    ports:
+      - "5000:5000"
+    environment:
+      - REDASH_DATABASE_URL=postgresql://redash:${POSTGRES_PASSWORD}@postgres:5432/redash
+      - REDASH_REDIS_URL=redis://redis:6379/0
+      - REDASH_SECRET_KEY=${REDASH_SECRET_KEY}
+      - REDASH_COOKIE_SECRET=${REDASH_COOKIE_SECRET}
+      - REDASH_GUNICORN_TIMEOUT=120
+      - REDASH_LOG_LEVEL=INFO
+      # Athena 연결용 AWS 자격증명 (worker에서 쿼리 실행 시 사용)
+      - AWS_DEFAULT_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - capa-e2e-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  # ==============================================================================
+  # Redash Worker - adhoc 쿼리 실행 워커 (Athena 쿼리 직접 실행)
+  # ==============================================================================
+  redash-worker:
+    image: redash/redash:10.1.0.b50633
+    container_name: capa-redash-worker-e2e
+    command: worker
+    environment:
+      - REDASH_DATABASE_URL=postgresql://redash:${POSTGRES_PASSWORD}@postgres:5432/redash
+      - REDASH_REDIS_URL=redis://redis:6379/0
+      - REDASH_SECRET_KEY=${REDASH_SECRET_KEY}
+      - REDASH_COOKIE_SECRET=${REDASH_COOKIE_SECRET}
+      - QUEUES=queries,scheduled_queries,celery,schemas
+      - WORKERS_COUNT=2
+      - AWS_DEFAULT_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - capa-e2e-network
+
+  # ==============================================================================
+  # Redash Scheduler - 스케줄 워커
+  # ==============================================================================
+  redash-scheduler:
+    image: redash/redash:10.1.0.b50633
+    container_name: capa-redash-scheduler-e2e
+    command: scheduler
+    environment:
+      - REDASH_DATABASE_URL=postgresql://redash:${POSTGRES_PASSWORD}@postgres:5432/redash
+      - REDASH_REDIS_URL=redis://redis:6379/0
+      - REDASH_SECRET_KEY=${REDASH_SECRET_KEY}
+      - REDASH_COOKIE_SECRET=${REDASH_COOKIE_SECRET}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - capa-e2e-network
+
+  # ==============================================================================
+  # vanna-api - AI Text-to-SQL API 서버
+  # docker-compose.test.yml 대비 변경점:
+  #   - REDASH_ENABLED=true
+  #   - 실제 AWS 자격증명 (Athena 직접 접근)
+  # 주의: REDASH_API_KEY는 Redash 초기화 후 .env.local-e2e에 반영 → vanna-api 재시작
+  # ==============================================================================
+  vanna-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: capa-vanna-api-e2e
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    env_file:
+      - .env.local-e2e
+    ports:
+      - "8000:8000"
+    environment:
+      # Anthropic LLM
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+
+      # 내부 인증
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN:-test-token}
+
+      # ChromaDB
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+
+      # AWS 실제 자격증명
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - ATHENA_DATABASE=${ATHENA_DATABASE:-capa_db}
+      - ATHENA_WORKGROUP=${ATHENA_WORKGROUP:-primary}
+      - S3_STAGING_DIR=${ATHENA_OUTPUT_LOCATION:-s3://capa-dev-athena-results/}
+
+      # Redash 활성화 (main.py 환경변수명 기준)
+      - REDASH_ENABLED=true
+      - REDASH_BASE_URL=http://redash-server:5000
+      - REDASH_API_KEY=${REDASH_API_KEY:-}          # Redash 초기화 후 발급하여 설정
+      - REDASH_DATA_SOURCE_ID=${REDASH_DATA_SOURCE_ID:-1}
+      - REDASH_PUBLIC_URL=http://localhost:5000
+
+      # 타임아웃 제어 (기본값: LLM 60초, Redash 쿼리 300초)
+      - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-60}
+      - REDASH_QUERY_TIMEOUT_SEC=${REDASH_QUERY_TIMEOUT_SEC:-300}
+
+      # Phase 2 RAG 파이프라인
+      - PHASE2_RAG_ENABLED=true        # true: 3단계 RAG(ChromaDB→Reranker→LLM필터) 사용 / false: Vanna 기본 검색
+      - RERANKER_ENABLED=false         # true: jina-reranker-v2 cross-encoder 재평가(CPU 57초) / false: ChromaDB 유사도 순서 그대로
+      - LLM_FILTER_ENABLED=false       # true: RAG 후보를 LLM이 한번 더 선별(추가 API 호출) / false: 후보 그대로 SQL 생성에 전달
+
+      # 멀티턴 대화
+      - MULTI_TURN_ENABLED=true        # true: 이전 대화 이력 참조하여 맥락 유지 / false: 매 질문 독립 처리
+
+      # SchemaMapper 제거 (Dynamic DDL Injection으로 대체 — Design §3.2)
+      # SCHEMA_MAPPER_ENABLED 환경변수 제거됨
+
+      # Self-Correction — SQL 검증 실패 시 에러 피드백 재주입 후 재생성
+      - SELF_CORRECTION_ENABLED=true   # true: 검증 실패 SQL을 LLM에 재주입하여 재생성 / false: 1회 생성 후 종료
+      - MAX_CORRECTION_ATTEMPTS=3      # Self-Correction 최대 재시도 횟수
+
+      # 비동기 쿼리 처리
+      - ASYNC_QUERY_ENABLED=true       # true: 긴 쿼리를 백그라운드 처리 후 폴링 / false: 동기 대기
+
+      # 피드백 수집
+      - PHASE2_FEEDBACK_ENABLED=true   # true: SQL 결과에 좋아요/싫어요 피드백 수집 / false: 피드백 비활성
+
+      # DynamoDB 테이블 설정
+      - DYNAMODB_ENABLED=true
+      - DYNAMODB_HISTORY_TABLE=capa-dev-query-history      # 대화 이력 저장 테이블
+      - DYNAMODB_FEEDBACK_TABLE=capa-dev-pending-feedbacks # 피드백 임시 저장 테이블
+      - DYNAMODB_ASYNC_TABLE=capa-dev-async-tasks          # 비동기 작업 상태 테이블
+
+      - PYTHONUNBUFFERED=1
+      - DEBUG=true
+
+    volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./prompts:/app/prompts
+      - ./evaluation:/app/evaluation  # ⚠️ 로컬 평가 전용 — 배포 시 제거 필요
+
+    depends_on:
+      chromadb:
+        condition: service_started
+      redash-server:
+        condition: service_healthy
+    networks:
+      - capa-e2e-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ==============================================================================
+  # Slack Bot - 로컬 테스트 전용 앱 토큰 사용
+  # ==============================================================================
+  slack-bot:
+    build:
+      context: ../slack-bot
+      dockerfile: Dockerfile
+    container_name: capa-slack-bot-e2e
+    command: watchmedo auto-restart --patterns="*.py" --recursive -- python app.py
+    environment:
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - SLACK_APP_TOKEN=${SLACK_APP_TOKEN}
+      - VANNA_API_URL=http://vanna-api:8000
+      - REPORT_API_URL=http://localhost:9999
+      - INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN:-test-token}
+      - ASYNC_QUERY_ENABLED=true
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ../slack-bot/app.py:/app/app.py
+    ports:
+      - "3000:3000"
+    depends_on:
+      vanna-api:
+        condition: service_healthy
+    networks:
+      - capa-e2e-network
+
+  # ==============================================================================
+  # Postgres (Airflow Metadata) - 인프라 설정(helm-values/airflow.yaml) 반영
+  # ==============================================================================
+  postgres-airflow:
+    image: postgres:11-alpine
+    container_name: capa-postgres-airflow-e2e
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - postgres-airflow-data:/var/lib/postgresql/data
+    networks:
+      - capa-e2e-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  # ==============================================================================
+  # Airflow Init (Initialize Database and Create User)
+  # 참고: helm-values/airflow.yaml의 설정 반영 (LocalExecutor, secret, admin/admin)
+  # ==============================================================================
+  airflow-init:
+    image: apache/airflow:2.9.2
+    container_name: capa-airflow-init-e2e
+    command: version
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__WEBSERVER__SECRET_KEY=capa_airflow_secret_key_2026_fixed
+      - _AIRFLOW_DB_UPGRADE=true
+      - _AIRFLOW_WWW_USER_CREATE=true
+      - _AIRFLOW_WWW_USER_USERNAME=admin
+      - _AIRFLOW_WWW_USER_PASSWORD=admin
+      - _AIRFLOW_WWW_USER_EMAIL=admin@example.com
+      - _AIRFLOW_WWW_USER_ROLE=Admin
+    depends_on:
+      postgres-airflow:
+        condition: service_healthy
+    networks:
+      - capa-e2e-network
+
+  # ==============================================================================
+  # Airflow Webserver (UI)
+  # ==============================================================================
+  airflow-webserver:
+    image: apache/airflow:2.9.2
+    container_name: capa-airflow-webserver-e2e
+    command: webserver
+    ports:
+      - "8080:8080"
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__WEBSERVER__SECRET_KEY=capa_airflow_secret_key_2026_fixed
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+      - AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT=300
+      - AIRFLOW__WEBSERVER__WEB_SERVER_WORKER_TIMEOUT=300
+      - AIRFLOW__WEBSERVER__ENABLE_PROXY_FIX=True
+    volumes:
+      - ../airflow-dags:/opt/airflow/dags
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres-airflow:
+        condition: service_healthy
+    networks:
+      - capa-e2e-network
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ==============================================================================
+  # Airflow Scheduler
+  # ==============================================================================
+  airflow-scheduler:
+    image: apache/airflow:2.9.2
+    container_name: capa-airflow-scheduler-e2e
+    command: scheduler
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres-airflow/airflow
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__WEBSERVER__SECRET_KEY=capa_airflow_secret_key_2026_fixed
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      # Airflow DAG Phase 2 환경변수 (capa_chromadb_refresh DAG용)
+      - DYNAMODB_FEEDBACK_TABLE=capa-dev-pending-feedbacks
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - ATHENA_DATABASE=${ATHENA_DATABASE:-capa_ad_logs}
+      - ATHENA_WORKGROUP=${ATHENA_WORKGROUP:-capa-text2sql-wg}
+      - S3_STAGING_DIR=${ATHENA_OUTPUT_LOCATION:-s3://capa-data-lake-827913617635/athena-results/}
+    volumes:
+      - ../airflow-dags:/opt/airflow/dags
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres-airflow:
+        condition: service_healthy
+    networks:
+      - capa-e2e-network
+
+volumes:
+  postgres-data:
+    driver: local
+  postgres-airflow-data:
+    driver: local
+
+networks:
+  capa-e2e-network:
+    driver: bridge
